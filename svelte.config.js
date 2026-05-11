@@ -12,6 +12,12 @@ const config = {
     adapter: adapter({
       fallback: "index.html",
     }),
+    files: {
+      lib: "ui/lib",
+      routes: "ui/routes",
+      appTemplate: "ui/app.html",
+      assets: "static",
+    },
   },
 };
 
