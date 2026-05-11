@@ -1,0 +1,151 @@
+# Translation Engine Plan
+
+## Objective
+
+Evolve the Translation Engine from a functional MVP (DeepSeek-only, single-client, no cancellation) into a robust, **provider-agnostic** streaming translation service. The current implementation exclusively targets the DeepSeek API (`deepseek-v4-flash` / `deepseek-v4-pro`). The end state is a stateful Tauri service layer that pools HTTP connections, supports in-flight cancellation, retries transient failures transparently, and can route requests to **any OpenAI-compatible backend** — including self-hosted open-source models (e.g., Ollama + Mistral, or a local NLLB inference server) — for users who require full privacy and offline capability. None of these evolutions may change the frontend event contract.
+
+## Design Principles
+
+- **Event contract is stable.** The `translation-chunk`, `translation-done`, and `translation-error` Tauri events are the public API. Their payloads and semantics must not change across phases; only new events may be added.
+- **All network I/O is async.** No blocking calls on the Tokio thread pool. All timeouts and retries must use `tokio::time` primitives.
+- **Config drives behavior, not code.** API endpoint, model list, temperature, and retry policy must be readable from `AppConfig` rather than hardcoded.
+- **Cancellation is cooperative.** Stream cancellation must be signaled via a channel, not via process-level signals or panics, so state can be cleaned up cleanly.
+- **Provider abstraction is additive.** Adding a new provider must not require changing the streaming core — only a new variant in a provider enum and a URL/auth mapping.
+- **No silent data mutation.** Failed saves, parse errors, or dropped tokens must always surface via `translation-error`; never swallow and continue.
+
+---
+
+## Phase 1: MVP Stabilization — DONE
+
+Status: **Done**
+
+Goals:
+
+- Ship a working end-to-end streaming translation flow from clipboard to UI.
+
+Completed work:
+
+- Implemented `translate_text` Tauri command in `src-tauri/src/translate.rs`.
+- Integrated `reqwest` + `futures_util` SSE byte-stream parsing with a rolling line buffer.
+- Defined `StreamChunk` / `StreamChoice` / `StreamDelta` deserialization structs.
+- Wired `translation-chunk`, `translation-done`, `translation-error` event protocol.
+- Connected auto-detect prompt branch (`source_lang == "auto"`).
+- Registered command in `lib.rs` via `tauri::generate_handler!`.
+
+---
+
+## Phase 2: Connection Pool & Request Lifecycle — NOT STARTED
+
+Status: **Not Started**
+
+Goals:
+
+- Eliminate per-request `Client` construction overhead.
+- Enable in-flight cancellation when the user dismisses the popup.
+
+Remaining features:
+
+- Create a `reqwest::Client` once at app startup and store it in `tauri::State<reqwest::Client>`.
+- Inject the shared client into `translate_text` via `tauri::State` parameter instead of `Client::new()`.
+- Add a `CancellationRegistry` (a `HashMap<u64, tokio::sync::oneshot::Sender<()>>` keyed by a request ID) stored in `tauri::State`.
+- Accept an optional `request_id: u64` parameter in `translate_text`; store the sender before the HTTP call.
+- Listen for a `cancel-translate` Tauri event in `lib.rs`; look up the request ID and send the cancellation signal.
+- Wrap the stream loop in a `tokio::select!` that races the SSE `next()` against the cancellation receiver.
+- Emit `translation-done` (not `translation-error`) on clean cancellation so the UI transitions to the `result` state with whatever text has already arrived.
+
+### Cancellation Flow Design
+
+```
+Frontend: invoke('cancel_translate', { request_id })
+  → Rust: CancellationRegistry.remove(id).send(())
+  → translate_text loop: tokio::select! { cancel => break }
+  → emit('translation-done')
+```
+
+---
+
+## Phase 3: Retry & Resilience — NOT STARTED
+
+Status: **Not Started**
+
+Goals:
+
+- Recover from transient network errors without surfacing them to the user.
+
+Remaining features:
+
+- Implement exponential back-off retry for connection-level errors (not HTTP errors): 3 attempts, delays of 200 ms, 600 ms, 1800 ms using `tokio::time::sleep`.
+- Do not retry on HTTP 4xx errors (auth failure, bad request) — surface immediately.
+- Do retry on HTTP 5xx errors and `reqwest::Error::is_connect()` / `is_timeout()`.
+- Expose `max_retries: u8` and `base_retry_ms: u64` fields in `AppConfig` with defaults of `3` and `200`.
+- Emit a `translation-retry { attempt: u8 }` event before each retry so the UI can show a "retrying…" indicator.
+
+---
+
+## Phase 4: Provider Abstraction & Self-Hosted Support — NOT STARTED
+
+Status: **Not Started**
+
+Goals:
+
+- Support any OpenAI-compatible chat completions endpoint without code changes, enabling both cloud providers (DeepSeek, OpenRouter) and self-hosted open-source models (Ollama, llama.cpp, NLLB-serving) for fully offline, privacy-preserving translation.
+
+Remaining features:
+
+- Add `api_base_url: String` field to `AppConfig`, defaulting to `"https://api.deepseek.com"`.
+- Add `provider: String` field (e.g., `"deepseek"`, `"openrouter"`, `"ollama"`) for auth header format selection.
+- Construct the full URL as `format!("{}/chat/completions", config.api_base_url)`.
+- Add a `ProviderAuth` enum: `Bearer(String)` | `ApiKey(String)` to select the correct header.
+- Expose `api_base_url` and `provider` in the Settings UI.
+- Add an `available_models: Vec<String>` field to `AppConfig` to replace the hardcoded `<option>` list in `SettingsPanel.svelte`.
+
+---
+
+## Phase 5: Observability & Cost Tracking — NOT STARTED
+
+Status: **Not Started**
+
+Goals:
+
+- Surface token usage and session statistics to the user.
+
+Remaining features:
+
+- Parse the final SSE chunk's `usage` field (`prompt_tokens`, `completion_tokens`, `total_tokens`) from the DeepSeek response.
+- Define a `TranslationUsage { prompt_tokens, completion_tokens, model, duration_ms }` struct and emit it as a `translation-usage` Tauri event after `translation-done`.
+- Store the last 50 `TranslationUsage` records in a rotating in-memory `VecDeque` in `tauri::State`.
+- Add a `get_usage_history` Tauri command that returns the history to the frontend.
+- Display a subtle cost indicator in the `TranslationPopup` footer (e.g., `~$0.0002 · 312 tokens`).
+
+---
+
+## Phase 6: Testing Strategy — NOT STARTED
+
+Status: **Not Started**
+
+Goals:
+
+- Establish regression coverage for the SSE parsing and provider routing logic.
+
+Remaining features:
+
+- Add unit tests for the SSE line-buffer parsing logic (valid JSON, `[DONE]`, malformed lines, `\r\n` endings, multi-line payloads split across chunks).
+- Add integration tests using `wiremock-rs` to stub the DeepSeek endpoint and verify event sequences.
+- Add a test for cancellation: verify that cancelling mid-stream results in `translation-done` and not `translation-error`.
+- Add a test for the retry logic: verify that 3 connection failures followed by success produces exactly 2 `translation-retry` events and 1 `translation-done`.
+
+---
+
+## Implementation Rules
+
+- Do not create a new `reqwest::Client` per invocation — always use the shared state client (after Phase 2).
+- Do not swallow parse errors in the SSE buffer — emit `translation-error` and return `Err`.
+- Do not retry HTTP 4xx errors; they indicate a user-configuration problem that retry cannot solve.
+- Do not change the payload type of `translation-chunk` (must remain `String`), `translation-done` (must remain `()`), or `translation-error` (must remain `String`).
+- Do not block the Tauri main thread — all I/O must remain inside `async` commands.
+
+## Open Questions
+
+- **Should cancellation preserve partial text?** The current plan emits `translation-done` on cancel so the UI shows whatever arrived. An alternative is a new `translation-cancelled` event so the UI can render a distinct "cancelled" state. Decide before Phase 2.
+- **`\r\n` normalization scope:** Should the buffer normalize before splitting (replace all `\r\n` → `\n`), or handle `\r` as a trim character per line? The latter is cheaper but may miss edge cases. Decide before Phase 6 test authoring.
+- **Token cost display:** Should cost estimation use a hardcoded per-token price table per model, or should the user configure the price? A configurable table is more maintainable but adds UI surface. Decide before Phase 5.
