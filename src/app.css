@@ -1,0 +1,94 @@
+/* ── Google Fonts — must come before @import "tailwindcss" ────────── */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,400&display=swap');
+
+@import "tailwindcss";
+
+/* ── Aura Design Tokens ──────────────────────────────────────────── */
+@theme {
+  --color-aura-bg: rgba(12, 12, 20, 0.78);
+  --color-aura-glass: rgba(255, 255, 255, 0.05);
+  --color-aura-glass-hover: rgba(255, 255, 255, 0.08);
+  --color-aura-border: rgba(255, 255, 255, 0.07);
+  --color-aura-border-accent: rgba(124, 106, 239, 0.25);
+  --color-aura-accent: #7c6aef;
+  --color-aura-accent-soft: rgba(124, 106, 239, 0.15);
+  --color-aura-accent-glow: rgba(124, 106, 239, 0.35);
+  --color-aura-text: #e8e6f0;
+  --color-aura-text-dim: #8b87a0;
+  --color-aura-text-muted: #5a566e;
+  --color-aura-success: #4ade80;
+  --color-aura-error: #f87171;
+  --font-display: 'Outfit', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+}
+
+/* ── Global Reset ────────────────────────────────────────────────── */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  background: transparent;
+  font-family: var(--font-body);
+  color: var(--color-aura-text);
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar Styling ───────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+/* ── Skeleton Shimmer Animation ──────────────────────────────────── */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.skeleton-bar {
+  background: linear-gradient(
+    90deg,
+    rgba(124, 106, 239, 0.06) 25%,
+    rgba(124, 106, 239, 0.14) 50%,
+    rgba(124, 106, 239, 0.06) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite, pulse-glow 2.4s ease-in-out infinite;
+  border-radius: 6px;
+}
