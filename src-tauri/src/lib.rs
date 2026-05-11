@@ -2,11 +2,15 @@ mod config;
 mod translate;
 
 use config::AppConfig;
+use std::collections::HashMap;
+use std::sync::Arc;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
     Emitter, Manager,
 };
+use tokio::sync::Mutex;
+use translate::CancellationRegistry;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
@@ -25,7 +29,14 @@ fn save_config(config: AppConfig) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Shared HTTP client — reuses connection pool across all translation requests
+    let http_client = reqwest::Client::new();
+    // Cancellation registry — allows in-flight translations to be cancelled
+    let cancel_registry: CancellationRegistry = Arc::new(Mutex::new(HashMap::new()));
+
     let mut builder = tauri::Builder::default()
+        .manage(http_client)
+        .manage(cancel_registry)
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init());
 
@@ -82,7 +93,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             save_config,
-            translate::translate_text
+            translate::translate_text,
+            translate::cancel_translate
         ])
         .setup(|app| {
             // ── System Tray ──────────────────────────────────────────
