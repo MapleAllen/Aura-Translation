@@ -34,32 +34,33 @@ Completed work:
 
 ---
 
-## Phase 2: Connection Pool & Request Lifecycle — NOT STARTED
+## Phase 2: Connection Pool & Request Lifecycle — DONE
 
-Status: **Not Started**
+Status: **Done**
 
 Goals:
 
 - Eliminate per-request `Client` construction overhead.
 - Enable in-flight cancellation when the user dismisses the popup.
 
-Remaining features:
+Completed work:
 
-- Create a `reqwest::Client` once at app startup and store it in `tauri::State<reqwest::Client>`.
-- Inject the shared client into `translate_text` via `tauri::State` parameter instead of `Client::new()`.
-- Add a `CancellationRegistry` (a `HashMap<u64, tokio::sync::oneshot::Sender<()>>` keyed by a request ID) stored in `tauri::State`.
-- Accept an optional `request_id: u64` parameter in `translate_text`; store the sender before the HTTP call.
-- Listen for a `cancel-translate` Tauri event in `lib.rs`; look up the request ID and send the cancellation signal.
-- Wrap the stream loop in a `tokio::select!` that races the SSE `next()` against the cancellation receiver.
-- Emit `translation-done` (not `translation-error`) on clean cancellation so the UI transitions to the `result` state with whatever text has already arrived.
+- Created a shared `reqwest::Client` at app startup and stored it in `tauri::State<reqwest::Client>` in `lib.rs`.
+- Injected the shared client into `translate_text` via `tauri::State` parameter; removed per-call `Client::new()`.
+- Added a `CancellationRegistry` (`Arc<Mutex<HashMap<u64, tokio::sync::oneshot::Sender<()>>>>`) stored in `tauri::State`.
+- Added a required `request_id: u64` parameter to `translate_text`; the frontend generates a monotonically incrementing ID per translation.
+- Extracted `translate_stream()` as a separate internal function for clean registry cleanup.
+- Wrapped the stream loop in a `tokio::select!` that races `stream.next()` against the cancellation `oneshot::Receiver`.
+- On cancellation: emits `translation-done` (not `translation-error`) so the UI transitions to `result` state with partial text preserved.
+- Added `cancel_translate(request_id)` Tauri command that looks up the sender in the registry and signals cancellation.
+- Registered both `translate_text` and `cancel_translate` in `generate_handler!` in `lib.rs`.
 
-### Cancellation Flow Design
+### Cancellation Flow (Implemented)
 
 ```
-Frontend: invoke('cancel_translate', { request_id })
+Frontend: invoke('cancel_translate', { requestId })
   → Rust: CancellationRegistry.remove(id).send(())
-  → translate_text loop: tokio::select! { cancel => break }
-  → emit('translation-done')
+  → translate_stream loop: tokio::select! { cancel => emit('translation-done'), break }
 ```
 
 ---
@@ -146,6 +147,9 @@ Remaining features:
 
 ## Open Questions
 
-- **Should cancellation preserve partial text?** The current plan emits `translation-done` on cancel so the UI shows whatever arrived. An alternative is a new `translation-cancelled` event so the UI can render a distinct "cancelled" state. Decide before Phase 2.
 - **`\r\n` normalization scope:** Should the buffer normalize before splitting (replace all `\r\n` → `\n`), or handle `\r` as a trim character per line? The latter is cheaper but may miss edge cases. Decide before Phase 6 test authoring.
 - **Token cost display:** Should cost estimation use a hardcoded per-token price table per model, or should the user configure the price? A configurable table is more maintainable but adds UI surface. Decide before Phase 5.
+
+## Resolved Questions
+
+- **Should cancellation preserve partial text?** Resolved in Phase 2: Yes. `translation-done` is emitted on cancel so the UI shows whatever text arrived before cancellation. The frontend transitions to `result` state if partial text exists, or `idle` if no text arrived.
