@@ -16,7 +16,7 @@ The core non-functional targets this module must preserve:
 
 ## Current Implementation
 
-The entry point is `src-tauri/src/lib.rs`'s `pub fn run()`, called from `main.rs`. The Tauri application builder registers four plugins at construction time: `tauri_plugin_clipboard_manager`, `tauri_plugin_opener`, and (on desktop targets) `tauri_plugin_global_shortcut`. The global shortcut handler is registered as a builder-level closure rather than in `setup`, which is required by Tauri 2's plugin initialization order.
+The entry point is `src-tauri/src/lib.rs`'s `pub fn run()`, called from `main.rs`. Before constructing the Tauri builder, the function creates two shared resources: a `reqwest::Client` for HTTP connection pooling across all translation requests, and a `CancellationRegistry` (`Arc<Mutex<HashMap<u64, oneshot::Sender<()>>>>`) for tracking in-flight translation requests that can be cancelled. Both are registered via `.manage()` on the builder. The Tauri application builder then registers four plugins at construction time: `tauri_plugin_clipboard_manager`, `tauri_plugin_opener`, and (on desktop targets) `tauri_plugin_global_shortcut`. The global shortcut handler is registered as a builder-level closure rather than in `setup`, which is required by Tauri 2's plugin initialization order.
 
 On `Ctrl+T` press, the handler reads the clipboard via `ClipboardExt::read_text()`, bails silently if the text is empty, then positions the `"main"` webview window at a calculated bottom-right offset (440×360 px, 16 px right margin, 60 px above the taskbar). The window is shown, focused, and a `trigger-translate` event carrying the raw clipboard text is emitted to all listeners.
 
@@ -56,17 +56,25 @@ Config persistence is handled by `config.rs`. `AppConfig` serializes to JSON and
 **Tauri commands exposed**
 - `get_config() -> AppConfig`: loads and returns the current config
 - `save_config(config: AppConfig) -> Result<(), String>`: serializes and writes the config to disk
+- `translate_text(…)`: delegated to `translate::translate_text`; registered in `generate_handler!`
+- `cancel_translate(request_id)`: delegated to `translate::cancel_translate`; cancels an in-flight translation by request ID
+
+**Managed state**
+- `reqwest::Client`: shared HTTP client created once at startup; reuses connection pools across all translation requests
+- `CancellationRegistry`: `Arc<Mutex<HashMap<u64, oneshot::Sender<()>>>>` tracking in-flight translation requests that can be cancelled via `cancel_translate`
 
 ## Architecture
 
-Single-file Tauri application bootstrap with a companion config module. No MVVM or service-layer abstraction — all Rust logic is flat within the builder and setup closures. Tauri wraps the SvelteKit frontend in the host OS's native WebView (WebView2 on Windows, WebKit on macOS/Linux), avoiding the ~150 MB Chromium overhead of Electron and keeping the installed binary under 10 MB.
+Single-file Tauri application bootstrap with a companion config module and a translation service module. The builder creates two managed `tauri::State` resources (`reqwest::Client` for connection pooling and `CancellationRegistry` for request cancellation), registers four Tauri commands, and delegates all translation logic to `translate.rs`. Tauri wraps the SvelteKit frontend in the host OS's native WebView (WebView2 on Windows, WebKit on macOS/Linux), avoiding the ~150 MB Chromium overhead of Electron and keeping the installed binary under 10 MB.
 
 ### Rust Backend (`src-tauri/src/`)
 
 - `lib.rs`
-  - `run()`: builds and runs the Tauri application; registers plugins, commands, tray, hotkey, and window events.
+  - `run()`: creates shared `reqwest::Client` and `CancellationRegistry`, registers them via `.manage()`, builds and runs the Tauri application; registers plugins, commands, tray, hotkey, and window events.
   - `get_config()`: Tauri command; delegates to `AppConfig::load()`.
   - `save_config(config)`: Tauri command; delegates to `config.save()`.
+  - `translate::translate_text`: Tauri command; delegated to the translation module.
+  - `translate::cancel_translate`: Tauri command; delegated to the translation module.
   - Global shortcut handler (closure): reads clipboard → positions window → shows window → emits `trigger-translate`.
   - Tray menu handler (closure): matches `"settings"` or `"quit"` event IDs.
   - Window event handler (closure): re-emits `window-blur` on `Focused(false)`.

@@ -35,6 +35,8 @@ Completed work:
 - Implemented `window-blur` forwarding from `WindowEvent::Focused(false)`.
 - Implemented `AppConfig` in `config.rs` with `load()` / `save()` and defaults.
 - Exposed `get_config` and `save_config` Tauri commands.
+- Added shared `reqwest::Client` and `CancellationRegistry` as managed `tauri::State` resources (required by Translation Engine Phase 2).
+- Registered `translate::translate_text` and `translate::cancel_translate` in `generate_handler!`.
 
 ---
 
