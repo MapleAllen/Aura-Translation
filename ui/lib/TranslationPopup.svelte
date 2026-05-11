@@ -16,6 +16,7 @@
     sourceLang: string;
     targetLang: string;
     onLanguageChange: (source: string, target: string) => void;
+    oncancel?: () => void;
   };
 
   let {
@@ -26,6 +27,7 @@
     sourceLang,
     targetLang,
     onLanguageChange,
+    oncancel,
   }: Props = $props();
 
   // Copy button spring animation
@@ -76,13 +78,28 @@
       </span>
     </div>
 
-    <!-- Status indicator -->
+    <!-- Status indicator + Cancel button -->
     {#if viewState === 'loading' || viewState === 'streaming'}
-      <div class="flex items-center gap-1.5">
-        <div class="w-1.5 h-1.5 rounded-full bg-aura-accent animate-pulse"></div>
-        <span class="text-[10px] text-aura-text-muted font-display">
-          {viewState === 'loading' ? 'connecting...' : 'translating...'}
-        </span>
+      <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5">
+          <div class="w-1.5 h-1.5 rounded-full bg-aura-accent animate-pulse"></div>
+          <span class="text-[10px] text-aura-text-muted font-display">
+            {viewState === 'loading' ? 'connecting...' : 'translating...'}
+          </span>
+        </div>
+        <button
+          id="cancel-translate-btn"
+          class="flex items-center justify-center w-5 h-5 rounded-full
+                 text-aura-text-muted hover:text-aura-error
+                 bg-transparent hover:bg-aura-error/10
+                 transition-all duration-200 cursor-pointer"
+          onclick={() => oncancel?.()}
+          aria-label="Cancel translation"
+        >
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
     {/if}
   </div>

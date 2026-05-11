@@ -29,6 +29,10 @@
   let sourceLang = $state('auto');
   let targetLang = $state('Chinese');
 
+  // Request lifecycle — monotonically incrementing ID for cancellation
+  let currentRequestId = $state(0);
+  let loadingTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
   // ── Spring Animations ─────────────────────────────────────────
   // Haptic popup: overshoot past 1.0 then settle
   const popupScale = new Spring(0.92, { stiffness: 0.14, damping: 0.68 });
@@ -62,16 +66,95 @@
     }
   }
 
+  // ── Loading Timeout ────────────────────────────────────────────
+  function startLoadingTimeout() {
+    clearLoadingTimeout();
+    loadingTimeoutId = setTimeout(() => {
+      if (appState === 'loading') {
+        appState = 'error';
+        errorMessage = 'No response from API (timeout)';
+      }
+    }, 20_000);
+  }
+
+  function clearLoadingTimeout() {
+    if (loadingTimeoutId !== null) {
+      clearTimeout(loadingTimeoutId);
+      loadingTimeoutId = null;
+    }
+  }
+
+  // ── Cancellation ──────────────────────────────────────────────
+  async function cancelCurrentTranslation() {
+    if (currentRequestId > 0) {
+      try {
+        await invoke('cancel_translate', { requestId: currentRequestId });
+      } catch (e) {
+        console.error('Failed to cancel translation:', e);
+      }
+    }
+    clearLoadingTimeout();
+  }
+
+  /** Start a new translation with the current sourceText and language pair. */
+  async function startTranslation() {
+    if (!config.api_key) {
+      appState = 'error';
+      errorMessage = 'No API key configured. Right-click the tray icon → Settings.';
+      return;
+    }
+
+    currentRequestId++;
+    const requestId = currentRequestId;
+    translatedText = '';
+    errorMessage = '';
+    appState = 'loading';
+
+    startLoadingTimeout();
+
+    try {
+      await invoke('translate_text', {
+        text: sourceText,
+        sourceLang: sourceLang,
+        targetLang: targetLang,
+        apiKey: config.api_key,
+        model: config.model,
+        requestId: requestId,
+      });
+    } catch (e) {
+      // appState may have been changed to 'error' by a translation-error event
+      // during the await — avoid overwriting with a less specific message
+      if ((appState as string) !== 'error') {
+        appState = 'error';
+        errorMessage = String(e);
+      }
+    }
+  }
+
   // ── Event Handlers ────────────────────────────────────────────
-  function handleLanguageChange(source: string, target: string) {
+  async function handleLanguageChange(source: string, target: string) {
     sourceLang = source;
     targetLang = target;
+
+    // Mid-stream language switch: cancel current and retranslate immediately
+    if ((appState === 'loading' || appState === 'streaming') && sourceText) {
+      await cancelCurrentTranslation();
+      await startTranslation();
+    }
+  }
+
+  async function handleCancel() {
+    await cancelCurrentTranslation();
+    // Transition to result state — partial text is preserved
+    appState = translatedText ? 'result' : 'idle';
   }
 
   async function dismiss() {
     // Animate out
     popupScale.target = 0.92;
     popupOpacity.target = 0;
+
+    clearLoadingTimeout();
 
     // Wait for animation, then hide window
     setTimeout(async () => {
@@ -108,11 +191,11 @@
       const text = event.payload;
       if (!text || !text.trim()) return;
 
+      // Cancel any in-flight translation
+      await cancelCurrentTranslation();
+
       // Reset state
       sourceText = text;
-      translatedText = '';
-      errorMessage = '';
-      appState = 'loading';
       showSettings = false;
 
       // Spring popup in (haptic overshoot effect)
@@ -122,44 +205,32 @@
       // Reload config to get latest API key
       await loadConfig();
 
-      if (!config.api_key) {
-        appState = 'error';
-        errorMessage = 'No API key configured. Right-click the tray icon → Settings.';
-        return;
-      }
-
       // Start streaming translation
-      try {
-        await invoke('translate_text', {
-          text,
-          sourceLang: sourceLang,
-          targetLang: targetLang,
-          apiKey: config.api_key,
-          model: config.model,
-        });
-      } catch (e) {
-        if (appState !== 'error') {
-          appState = 'error';
-          errorMessage = String(e);
-        }
-      }
+      await startTranslation();
     });
 
     // Listen for streaming chunks
     listen<string>('translation-chunk', (event) => {
       if (appState === 'loading') {
         appState = 'streaming';
+        clearLoadingTimeout(); // First token arrived — no longer at risk of timeout
       }
-      translatedText += event.payload;
+      if (appState === 'streaming') {
+        translatedText += event.payload;
+      }
     });
 
     // Listen for stream completion
     listen('translation-done', () => {
-      appState = 'result';
+      clearLoadingTimeout();
+      if (appState === 'loading' || appState === 'streaming') {
+        appState = 'result';
+      }
     });
 
     // Listen for errors
     listen<string>('translation-error', (event) => {
+      clearLoadingTimeout();
       appState = 'error';
       errorMessage = event.payload;
     });
@@ -197,6 +268,7 @@
       {sourceLang}
       {targetLang}
       onLanguageChange={handleLanguageChange}
+      oncancel={handleCancel}
     />
 
     <SettingsPanel
@@ -205,3 +277,4 @@
     />
   </div>
 </div>
+
