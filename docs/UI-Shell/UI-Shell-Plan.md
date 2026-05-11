@@ -38,22 +38,26 @@ Completed work:
 
 ---
 
-## Phase 2: Cancellation & Mid-Stream Controls — NOT STARTED
+## Phase 2: Cancellation & Mid-Stream Controls — DONE
 
-Status: **Not Started**
+Status: **Done**
 
 Goals:
 
 - Allow the user to cancel an in-progress translation and start a new one.
 
-Remaining features:
+Completed work:
 
-- Add a cancel button visible in `loading` and `streaming` states in the `TranslationPopup` header area.
-- On cancel click: invoke `cancel_translate({ requestId })` (Rust Phase 2), then transition `appState` to `idle` and reset `translatedText`.
-- Generate a monotonically incrementing `requestId` in the orchestrator on each new translation; pass it to `invoke('translate_text', …)` and store it for the cancel call.
-- Add a 20-second loading timeout in `+page.svelte`: if `appState === 'loading'` after 20 s with no `translation-chunk` event, set `appState = 'error'` and `errorMessage = 'No response from API (timeout)'`.
-- Add a `translation-retry` listener that sets `appState = 'loading'` and shows a "retrying…" badge in the status indicator area.
-- On language change while `streaming`: invoke `cancel_translate`, reset state, then invoke `translate_text` immediately with the new language pair.
+- Added a cancel button (× icon) in the `TranslationPopup` header area, visible in `loading` and `streaming` states; styled with `hover:text-aura-error` transition.
+- Added `oncancel` callback prop to `TranslationPopup`; wired to `handleCancel()` in the orchestrator.
+- On cancel click: invokes `cancel_translate({ requestId })` (Rust Phase 2), then transitions `appState` to `result` if partial text exists, or `idle` if no text arrived.
+- Added a monotonically incrementing `currentRequestId` counter in the orchestrator; passed to `invoke('translate_text', …)` on every new translation.
+- Added a 20-second loading timeout in `+page.svelte`: if `appState === 'loading'` after 20 s with no `translation-chunk` event, sets `appState = 'error'` and `errorMessage = 'No response from API (timeout)'`.
+- Timeout is cleared on first chunk, on `translation-done`, on `translation-error`, and on dismiss.
+- On language change while `loading` or `streaming`: invokes `cancelCurrentTranslation()`, resets state, then calls `startTranslation()` immediately with the new language pair.
+- Extracted `startTranslation()` as a reusable function for both trigger and mid-stream language switch flows.
+- Guarded `translation-chunk` listener to only append text when `appState === 'streaming'` (prevents stale events from cancelled requests from corrupting the display).
+- New triggers cancel any in-flight translation before starting a new one.
 
 ---
 
@@ -143,7 +147,11 @@ Remaining features:
 
 ## Open Questions
 
-- **Cancel UX:** Should cancelling a translation clear `translatedText` (so the popup shows idle), or leave the partial text visible with a "cancelled" badge? Decide before Phase 2.
 - **History persistence:** Should translation history survive a window hide/show cycle (in-memory) or also survive a process restart (disk)? In-memory is simpler; disk requires a new Tauri command. Decide before Phase 4.
 - **RTL font:** Arabic script renders poorly with DM Sans at small sizes. Should a separate Arabic-optimized font (e.g., Noto Sans Arabic) be loaded conditionally? Decide before Phase 5.
 - **Settings remount cost:** Does the `{#if visible}` teardown + `get_config` round-trip cause a perceptible flash when opening Settings on slow machines? Measure before deciding to change to `display: none` in Phase 5.
+
+## Resolved Questions
+
+- **Cancel UX:** Resolved in Phase 2: cancelling preserves partial translated text and transitions to `result` state; if no text has arrived, transitions to `idle`.
+- **Mid-stream language switch:** Resolved in Phase 2: changing language while streaming cancels the current request and immediately starts a new translation with the updated language pair.

@@ -20,7 +20,7 @@ The shell implements a five-stage lifecycle:
 
 The shell is a SvelteKit application with a single route (`ui/routes/+page.svelte`) that acts as the lifecycle orchestrator. On mount, it loads config from the Rust backend, registers five Tauri event listeners, and binds keyboard events for `Esc`. Two `Spring` instances (`popupScale` starting at `0.92`, `popupOpacity` starting at `0`) drive the enter/exit animation: on trigger the targets jump to `1`; on dismiss they return to `0.92` / `0`. A 220 ms delay after the spring settles hides the Tauri window.
 
-The orchestrator maintains an `appState` union (`idle | loading | streaming | result | error`) that is driven by incoming Tauri events. The `TranslationPopup` component renders different content for each state. `SettingsPanel` is layered absolutely above the popup and toggled via a `showSettings` boolean.
+The orchestrator maintains an `appState` union (`idle | loading | streaming | result | error`) that is driven by incoming Tauri events. Each translation is assigned a monotonically incrementing `currentRequestId` (used for cancellation targeting). A `startTranslation()` function encapsulates the API call setup — incrementing the request ID, clearing previous text, setting `appState = 'loading'`, starting a 20-second loading timeout, and invoking `translate_text` with the current source text, language pair, and request ID. The `TranslationPopup` component renders different content for each state and exposes a cancel button (× icon) during `loading` and `streaming` states. `SettingsPanel` is layered absolutely above the popup and toggled via a `showSettings` boolean.
 
 The design system is defined in `ui/app.css` as Tailwind CSS v4 `@theme` tokens under the `aura-` namespace (accent color `#7c6aef`, glassmorphic background `rgba(12, 12, 20, 0.78)`, two font families: Outfit and DM Sans).
 
@@ -34,15 +34,16 @@ The design system is defined in `ui/app.css` as Tailwind CSS v4 `@theme` tokens 
 
 **Translation states**
 - `idle`: shows placeholder hint text "Copy text and press Ctrl+T"
-- `loading`: renders `SkeletonLoader` (4 shimmer bars with staggered 120 ms animation delays: widths 100%, 88%, 72%, 55%)
-- `streaming`: renders translated text with an animated blinking cursor appended
+- `loading`: renders `SkeletonLoader` (4 shimmer bars with staggered 120 ms animation delays: widths 100%, 88%, 72%, 55%); starts a 20-second loading timeout
+- `streaming`: renders translated text with an animated blinking cursor appended; chunks are only appended when `appState === 'streaming'` (guarded against stale events)
 - `result`: same as streaming but cursor removed; copy button appears in footer
-- `error`: error icon + message text (e.g., "No API key configured…")
+- `error`: error icon + message text (e.g., "No API key configured…", "No response from API (timeout)")
 
 **Language selector**
 - 11 language options including `auto` (source only): Chinese, English, Japanese, Korean, French, German, Spanish, Russian, Arabic, Portuguese
 - Animated swap button (`Spring { stiffness: 0.3, damping: 0.65 }`, continuous rotation accumulation) — disabled when source is `auto`
-- Language changes propagate up to the orchestrator via `onLanguageChange(source, target)`; they are used on the next translate invocation only (not mid-stream)
+- Language changes propagate up to the orchestrator via `onLanguageChange(source, target)`
+- **Mid-stream language switch:** if a language change occurs while `appState === 'loading'` or `'streaming'`, the orchestrator cancels the current translation (via `cancel_translate`) and immediately starts a new one with the updated language pair
 
 **Copy result**
 - Available in `streaming` and `result` states when `translatedText` is non-empty
@@ -54,6 +55,17 @@ The design system is defined in `ui/app.css` as Tailwind CSS v4 `@theme` tokens 
 - Fields: DeepSeek API Key (password input with show/hide toggle), Model (dropdown: `deepseek-v4-flash` / `deepseek-v4-pro`), Hotkey (read-only display of `Ctrl + T`)
 - Save button with spring bounce animation; shows "Saved!" for 1200 ms on success
 - Panel opened via tray `show-settings` event or programmatically; closed by `Esc` or the close button
+
+**Request cancellation**
+- Cancel button (× icon, 20×20 px) appears in the `TranslationPopup` header next to the status indicator during `loading` and `streaming` states
+- Styled with `hover:text-aura-error` and `hover:bg-aura-error/10` transitions for visual feedback
+- On click: invokes `cancel_translate` with the current request ID; transitions to `result` (if partial text exists) or `idle` (if no text arrived)
+- New translations also cancel any in-flight request before starting
+
+**Loading timeout**
+- A 20-second `setTimeout` starts when `appState` enters `'loading'`
+- If no `translation-chunk` event arrives within 20 seconds, `appState` transitions to `'error'` with message "No response from API (timeout)"
+- The timeout is cleared when the first chunk arrives, when `translation-done` fires, when `translation-error` fires, or on dismiss
 
 **Design system**
 - Color tokens: `aura-accent (#7c6aef)`, `aura-glass (rgba(255,255,255,0.05))`, `aura-border (rgba(255,255,255,0.07))`, `aura-text (#e8e6f0)`, `aura-error (#f87171)`, `aura-success (#4ade80)`
@@ -69,20 +81,25 @@ Single-route SvelteKit application using Svelte 5 runes API (`$state`, `$props`,
 ### Orchestrator (`ui/routes/`)
 
 - `+page.svelte`
-  - Owns all `$state` variables: `appState`, `sourceText`, `translatedText`, `errorMessage`, `showSettings`, `sourceLang`, `targetLang`, `config`.
+  - Owns all `$state` variables: `appState`, `sourceText`, `translatedText`, `errorMessage`, `showSettings`, `sourceLang`, `targetLang`, `config`, `currentRequestId`, `loadingTimeoutId`.
   - Owns the two `Spring` instances for popup animation.
   - `loadConfig()`: invokes `get_config` and syncs `config`, `sourceLang`, `targetLang`.
-  - `dismiss()`: springs out → 220 ms timeout → resets state → `appWindow.hide()`.
+  - `startTranslation()`: increments `currentRequestId`, resets text/error state, sets `appState = 'loading'`, starts loading timeout, invokes `translate_text` with all six arguments including `requestId`.
+  - `cancelCurrentTranslation()`: invokes `cancel_translate` with the current request ID and clears the loading timeout.
+  - `handleCancel()`: calls `cancelCurrentTranslation()`, then transitions to `result` (if partial text) or `idle`.
+  - `dismiss()`: clears loading timeout, springs out → 220 ms timeout → resets state → `appWindow.hide()`.
   - `handleKeydown(e)`: routes `Esc` to close Settings or dismiss.
-  - `handleLanguageChange(source, target)`: updates state; does not re-invoke translation.
+  - `handleLanguageChange(source, target)`: updates state; if currently loading or streaming, cancels and retranslates immediately.
   - Registers Tauri event listeners in `onMount`: `trigger-translate`, `translation-chunk`, `translation-done`, `translation-error`, `window-blur`, `show-settings`.
+  - `translation-chunk` listener: only appends to `translatedText` when `appState === 'streaming'` (guards against stale events from cancelled requests).
 
 ### Components (`ui/lib/`)
 
 - `TranslationPopup.svelte`
-  - Props: `viewState`, `sourceText`, `translatedText`, `errorMessage`, `sourceLang`, `targetLang`, `onLanguageChange`.
+  - Props: `viewState`, `sourceText`, `translatedText`, `errorMessage`, `sourceLang`, `targetLang`, `onLanguageChange`, `oncancel`.
   - Renders the glassmorphic card with backdrop blur (`28px`), box-shadow stack, and drag region.
   - Delegates loading state to `SkeletonLoader` and language UI to `LanguageSelector`.
+  - Renders a cancel button (× icon) in the header bar during `loading` and `streaming` states; fires `oncancel` on click.
   - `copyResult()`: calls `writeText(translatedText)` from `@tauri-apps/plugin-clipboard-manager`; spring-bounces the copy button.
 
 - `LanguageSelector.svelte`
@@ -109,7 +126,8 @@ Single-route SvelteKit application using Svelte 5 runes API (`$state`, `$props`,
 - `ui/routes/+page.svelte`
   - `invoke('get_config') -> AppConfig`: called in `loadConfig()`.
   - `invoke('save_config', { config })`: called in `SettingsPanel.saveConfig()` via the orchestrator.
-  - `invoke('translate_text', { text, sourceLang, targetLang, apiKey, model })`: called after config load on every `trigger-translate` event.
+  - `invoke('translate_text', { text, sourceLang, targetLang, apiKey, model, requestId })`: called in `startTranslation()` on every `trigger-translate` event and on mid-stream language switch.
+  - `invoke('cancel_translate', { requestId })`: called in `cancelCurrentTranslation()` on user cancel, language switch mid-stream, or new trigger while streaming.
   - `listen('trigger-translate')`, `listen('translation-chunk')`, `listen('translation-done')`, `listen('translation-error')`, `listen('window-blur')`, `listen('show-settings')`: all registered in `onMount`.
   - `getCurrentWindow().hide()`: called in the dismiss timeout.
 
@@ -118,25 +136,21 @@ Single-route SvelteKit application using Svelte 5 runes API (`$state`, `$props`,
 
 ## Current Limitations
 
-- **Language change is not mid-stream** — changing the language pair while `streaming` is in progress has no effect until the next translation; there is no cancel-and-retranslate flow.
-- **No mid-stream cancellation UI** — there is no button to cancel an in-progress translation; the user must wait for the full response or dismiss the window (which does not cancel the Rust task).
 - **Hotkey display is hardcoded** — the Settings panel shows `Ctrl + T` as static `<kbd>` elements; it does not reflect `config.hotkey` and cannot be interactively reconfigured.
 - **Model list is hardcoded** — two `<option>` elements in `SettingsPanel.svelte` (`deepseek-v4-flash`, `deepseek-v4-pro`); adding a new model requires a frontend code change.
 - **No translation history** — each trigger replaces the previous result; there is no session-level history panel.
-- **No loading timeout** — if the DeepSeek API takes more than ~30 s to return the first token, the UI stays in the `loading` state indefinitely with no timeout or error recovery.
 - **`appWindow.hide()` can fail silently** — the `catch` block in `dismiss()` only logs to `console.error`; a failed hide is not surfaced to the user.
 - **Settings panel is DOM-destroyed on close** — using `{#if visible}` means every open/close cycle re-mounts and re-loads config; a `visibility: hidden` approach would avoid the config round-trip.
 - **`window-blur` dismiss is suppressed only via `showSettings`** — rapid state transitions (e.g., blur event arriving during the dismiss animation) can cause double-dismiss attempts.
+- **Dismiss does not cancel the Rust task** — dismissing the popup via `Esc` or focus loss hides the window but does not invoke `cancel_translate`; the in-flight Rust stream continues until the SSE response completes naturally.
 
 ## Future Directions
 
-- Add a cancel button visible during `loading` and `streaming` states that triggers request cancellation.
-- Support live language-change mid-stream by cancelling the current request and starting a new one.
 - Replace the hardcoded hotkey `<kbd>` display with a live binding capture widget that reads and writes `config.hotkey`.
 - Replace the hardcoded model `<option>` list with a dynamic list sourced from `AppConfig.available_models`.
 - Add a collapsible translation history panel showing the last N source/result pairs within a session.
-- Add a loading timeout (e.g., 20 s) that emits a `translation-error` if no `translation-chunk` event arrives.
 - Add a `translation-retry` listener to show a "retrying…" indicator badge in the status bar.
 - Replace `{#if visible}` in `SettingsPanel` with `display: none` to preserve the mounted component across open/close cycles.
 - Add keyboard navigation shortcuts within the popup (e.g., `Tab` to cycle focus, `Enter` to copy).
 - Support right-to-left layout for Arabic and Hebrew target languages.
+- Wire `cancel_translate` into the dismiss flow so hiding the popup also cancels the in-flight Rust task.
