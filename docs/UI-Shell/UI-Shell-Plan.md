@@ -7,9 +7,9 @@ Evolve the UI Shell from a single-state popup into a polished, production-grade 
 ## Design Principles
 
 - **State machine is the source of truth.** `appState` drives all conditional rendering; no component may alter its own visibility based on internal flags that conflict with `appState`.
-- **Spring physics only.** All structural animated transitions must use `svelte/motion.Spring`; CSS `transition` is permitted only for hover micro-interactions (color, border). No `ease-in-out` or `linear` for structural animations. The popup entry spring must always use damping low enough to allow a brief overshoot past `scale(1.0)` — this haptic "pop" is a core product requirement, not an aesthetic preference.
+- **Spring physics preferred.** Prefer `svelte/motion.Spring` for the popup entry/exit so the damping can be tuned low enough to allow a brief overshoot past `scale(1.0)` — this haptic "pop" is a core product requirement, not an aesthetic preference. CSS `transition` is acceptable for structural animations where overshoot is not needed (springs run JS per frame and are not inherently lighter than GPU-composited CSS transitions); CSS `transition` is the correct choice for hover micro-interactions (color, border).
 - **Props flow down, events flow up.** Components receive state as props and emit changes via callback props (`onLanguageChange`, `onclose`); no component imports or writes to global state.
-- **Config round-trips are minimized.** `get_config` must not be called more than once per translation trigger; the Settings panel must load config exactly once per open.
+- **Config round-trips are avoided where obvious.** Cache `get_config` results in orchestrator state for the duration of a trigger cycle; do not call it in a loop. Re-reads for post-save verification are acceptable — a single IPC call to a local JSON file costs < 1 ms and is not a bottleneck.
 - **Text selectability is intentional.** Only source text and result text carry `select-text`; the rest of the UI is `user-select: none`.
 - **Errors are never silent.** Every `catch` block that handles a Tauri API call must either surface an `errorMessage` state or emit a `console.error` with a structured context object.
 - **RTL-safe layout from Phase 3.** All flex layouts must use `gap` + `align-items` rather than margin hacks so that RTL language support can be added without layout surgery.
@@ -135,10 +135,10 @@ Remaining features:
 
 ## Implementation Rules
 
-- Do not render `{#if viewState === 'streaming'}` and `{#if viewState === 'result'}` as separate branches — they share the same template and must be merged (currently `streaming || result` in a single branch).
+- Prefer merging `{#if viewState === 'streaming'}` and `{#if viewState === 'result'}` into a single `{#if streaming || result}` branch to avoid template duplication — the compiled Svelte output is identical either way, so this is a code-style preference, not a performance constraint.
 - Do not add CSS `transition` to elements that also use a `Spring` — double animation causes visual jitter.
 - Do not call `invoke('get_config')` more than once per translation trigger — cache in orchestrator state.
-- Do not add `console.log` calls in production paths — use `console.error` with structured objects only for genuine error conditions.
+- Do not leave verbose debug logging in production paths. Use `console.warn` / `console.error` for meaningful diagnostics. Guard development-only `console.log` calls behind a `DEV` flag or remove them before merging — `console.log` and `console.error` have identical runtime cost; the concern is noisy output, not resource usage.
 - Do not mutate `translatedText` directly from multiple event handlers without guarding `appState` — check `appState !== 'error'` before appending chunks.
 
 ## Open Questions

@@ -4,17 +4,17 @@
 
 Evolve the Daemon Core from a hardcoded, single-hotkey, cleartext-config MVP into a fully configurable, secure, and multi-monitor-aware system service. The end state is a daemon that reads its hotkey binding from config at startup, stores secrets in the OS keychain, detects hotkey conflicts gracefully, anchors the popup to the active monitor and tray edge, and exposes a robust surface for future plugin-style feature extension — all without disrupting the existing frontend event contract.
 
-Throughout every phase, two non-negotiable constraints must hold: (1) the application must remain deployable from a single Rust/Svelte codebase to **Windows, macOS, and Linux** without platform-specific forks, and (2) idle resource consumption must stay within **≤20 MB RAM / <10 MB installed binary** so the daemon imposes no background tax on the user's machine.
+Throughout every phase, two non-negotiable constraints must hold: (1) the application must remain deployable from a single Rust/Svelte codebase to **Windows, macOS, and Linux** without platform-specific forks, and (2) **production release** idle resource consumption must stay within **≤20 MB RAM / <10 MB installed binary** so the daemon imposes no background tax on the user's machine. Development-only `[dev-dependencies]` (e.g., `wiremock-rs`, `tracing-subscriber`) are stripped from release builds and are exempt from this budget.
 
 ## Design Principles
 
 - **Hotkey registration must be driven by config.** The `AppConfig.hotkey` field must be the single source of truth; no key combination may be hardcoded in `lib.rs` after Phase 2.
-- **Secrets must never touch the filesystem in cleartext.** The API key must be read from and written to the OS keychain; `config.json` may store everything else.
+- **Secrets should prefer the OS keychain.** Where available, read and write the API key via the OS keychain rather than plaintext `config.json`. However, keychain integration libraries bring native cross-platform dependencies (DPAPI, Security.framework, libsecret) that can push the binary above the 10 MB target; weigh this cost before adding the dependency. If the keychain is unavailable (headless CI, sandboxed environment, or binary-size constraints), fall back to plaintext storage with a one-time UI warning.
 - **User-visible errors must be emitted as Tauri events.** Daemon failures (hotkey conflict, keychain error, tray build failure) must reach the frontend as named events, not silent `eprintln!` calls or Rust panics.
 - **Window positioning logic is owned by Rust.** The frontend must not calculate its own position; it receives a pre-computed `LogicalPosition` from the daemon.
 - **Config save must be atomic.** Write to a `.tmp` file and rename-into-place to prevent corruption on crash.
 - **The event contract is stable.** `trigger-translate`, `window-blur`, and `show-settings` event names and payload types must not change.
-- **Resource budget is an invariant.** No phase may introduce a dependency that raises idle RSS above 20 MB or pushes the installed binary above 10 MB. Prefer native OS APIs and avoid bundling additional runtimes.
+- **Resource budget is a production invariant.** No phase may introduce a `[dependencies]` entry that raises **release-build** idle RSS above 20 MB or pushes the installed binary above 10 MB. Prefer native OS APIs and avoid bundling additional runtimes. `[dev-dependencies]` used only in tests or build tooling are exempt from this constraint.
 
 ---
 
@@ -136,10 +136,10 @@ Remaining features:
 ## Implementation Rules
 
 - Do not hardcode any key combination in `lib.rs` after Phase 2 — all hotkey data must come from `AppConfig`.
-- Do not store `api_key` in `config.json` after Phase 3 — only keychain storage is permitted.
-- Do not use `eprintln!` for user-facing errors — emit a named Tauri event instead.
+- After Phase 3, prefer keychain storage for `api_key` over plaintext `config.json`. If adding keychain dependencies would push the release binary above the 10 MB target, retain plaintext storage with a clearly documented warning in the Settings UI.
+- After Phase 5 (error surface) is complete, all daemon errors that affect the user must be emitted as named Tauri events (`daemon-error`), not `eprintln!`. Before Phase 5, `eprintln!` with a `// TODO: emit daemon-error` comment is an acceptable placeholder — do not build the full event infrastructure prematurely.
 - Do not use `?` in the `setup` closure for non-fatal errors — emit `daemon-error` and return `Ok(())` to prevent a startup panic.
-- Do not position the window using `primary_monitor()` after Phase 4 — always use the cursor-detected monitor.
+- After Phase 4, prefer cursor-detected monitor positioning (`cursor_position()` + `available_monitors()`). Fall back to `primary_monitor()` when cursor position is unavailable (Wayland without pointer permissions, or single-monitor setups where they are equivalent). Do not remove the fallback path.
 
 ## Open Questions
 
