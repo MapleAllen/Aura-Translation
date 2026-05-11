@@ -1,10 +1,22 @@
-.DS_Store
-node_modules
+# Dependencies
+node_modules/
+
+# SvelteKit build output
 /build
 /.svelte-kit
 /package
-.env
-.env.*
-!.env.example
+
+# Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# User configuration (contains plaintext API key — never commit)
+aura-config.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
