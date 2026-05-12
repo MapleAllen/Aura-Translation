@@ -1,3 +1,4 @@
+use crate::config::Provider;
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde::Deserialize;
@@ -44,7 +45,7 @@ pub async fn translate_text(
     model: String,
     request_id: u64,
     api_base_url: String,
-    provider: String,
+    provider: Provider,
 ) -> Result<(), String> {
     // Set up cancellation channel for this request
     let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
@@ -87,7 +88,7 @@ async fn translate_stream(
     api_key: &str,
     model: &str,
     api_base_url: &str,
-    provider: &str,
+    provider: &Provider,
 ) -> Result<(), String> {
     let system_prompt = if source_lang == "auto" {
         format!(
@@ -120,6 +121,7 @@ async fn translate_stream(
     let base_retry_ms = 200u64;
 
     let response = {
+        #[allow(unused_assignments)]
         let mut last_err = String::new();
         let mut attempt = 0;
         loop {
@@ -129,19 +131,28 @@ async fn translate_stream(
                 .json(&body);
 
             match provider {
-                "ollama" => {}
-                "openrouter" => {
+                Provider::Ollama => {}
+                Provider::OpenRouter => {
                     request = request
                         .header("Authorization", format!("Bearer {}", api_key))
                         .header("HTTP-Referer", "https://github.com/MapleAllen/Aura-Translation")
                         .header("X-Title", "Aura Translation");
                 }
-                _ => {
+                Provider::DeepSeek => {
                     request = request.header("Authorization", format!("Bearer {}", api_key));
                 }
             }
 
-            match request.send().await {
+            // Check cancellation while waiting for the HTTP response
+            let outcome = tokio::select! {
+                _ = &mut cancel_rx => {
+                    let _ = app.emit("translation-done", ());
+                    return Ok(());
+                }
+                result = request.send() => result,
+            };
+
+            match outcome {
                 Ok(resp) => {
                     if resp.status().is_success() {
                         break Ok(resp);
@@ -170,7 +181,16 @@ async fn translate_stream(
             }
             let delay = base_retry_ms * 3u64.pow(attempt as u32);
             let _ = app.emit("translation-retry", serde_json::json!({ "attempt": attempt + 1 }));
-            tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
+
+            // Check cancellation during the backoff delay
+            tokio::select! {
+                _ = &mut cancel_rx => {
+                    let _ = app.emit("translation-done", ());
+                    return Ok(());
+                }
+                _ = tokio::time::sleep(tokio::time::Duration::from_millis(delay)) => {}
+            }
+
             attempt += 1;
         }
     }?;

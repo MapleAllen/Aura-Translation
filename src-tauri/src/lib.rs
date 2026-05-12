@@ -2,43 +2,72 @@ mod config;
 mod hotkey;
 mod translate;
 
-use config::AppConfig;
+use config::{AppConfig, Provider};
+use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager,
+    AppHandle, Emitter, Manager, State,
 };
 use tokio::sync::Mutex;
 use translate::CancellationRegistry;
 
+/// Managed config — the single source of truth, shared between commands.
+type ConfigState = Arc<RwLock<AppConfig>>;
+
+#[derive(Serialize)]
+struct ProviderDefaults {
+    base_url: String,
+    models: Vec<String>,
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
-/// Tauri command: get current config for the frontend.
+/// Tauri command: get current config from managed state (no disk I/O).
 #[tauri::command]
-fn get_config() -> AppConfig {
-    AppConfig::load()
+fn get_config(state: State<'_, ConfigState>) -> AppConfig {
+    state.read().unwrap().clone()
+}
+
+/// Tauri command: get default base URL and model list for a provider.
+/// Used by the frontend so provider defaults only live in Rust.
+#[tauri::command]
+fn get_provider_defaults(provider: Provider) -> ProviderDefaults {
+    ProviderDefaults {
+        base_url: provider.default_base_url().to_string(),
+        models: provider.default_models(),
+    }
 }
 
 /// Tauri command: save config from the frontend and re-register the hotkey.
 ///
 /// On hotkey re-registration failure, emits a `hotkey-conflict` event and
-/// keeps the previously registered shortcut active (does NOT return an error
-/// to the frontend — a conflict is a user-fixable warning, not a fatal failure).
+/// re-registers the previously-working hotkey. Falls back to `CmdOrCtrl+T`
+/// only if the old hotkey also fails to re-register (extreme edge case).
+/// Does NOT return an error to the frontend — a conflict is a user-fixable
+/// warning, not a fatal failure.
 #[tauri::command]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn save_config(app: AppHandle, config: AppConfig) -> Result<(), String> {
+fn save_config(app: AppHandle, state: State<'_, ConfigState>, config: AppConfig) -> Result<(), String> {
+    // Capture old hotkey from managed state before overwriting
+    let old_hotkey = state.read().unwrap().hotkey.clone();
     config.save()?;
 
-    // Re-register the global shortcut to reflect any hotkey change
+    // Update in-memory state
+    *state.write().unwrap() = config.clone();
+
+    // Hotkey unchanged — skip re-registration entirely
+    if old_hotkey == config.hotkey {
+        return Ok(());
+    }
+
     match hotkey::parse_hotkey(&config.hotkey) {
         Ok(new_shortcut) => {
-            // Unregister all previously registered shortcuts first
             if let Err(e) = app.global_shortcut().unregister_all() {
                 eprintln!("Failed to unregister shortcuts during re-registration: {}", e);
-                // TODO: emit daemon-error when Phase 5 error surface is implemented
             }
             match app.global_shortcut().register(new_shortcut) {
                 Ok(_) => {
@@ -52,15 +81,22 @@ fn save_config(app: AppHandle, config: AppConfig) -> Result<(), String> {
                             "error": e.to_string()
                         }),
                     );
-                    // Note: the shortcut was unregistered above but failed to re-register.
-                    // Re-register the default as a safe fallback.
-                    if let Ok(fallback) = hotkey::parse_hotkey("CmdOrCtrl+T") {
-                        let _ = app.global_shortcut().register(fallback);
+                    // Re-register the old (previously-working) hotkey
+                    let re_registered = hotkey::parse_hotkey(&old_hotkey)
+                        .map(|old| app.global_shortcut().register(old).is_ok())
+                        .unwrap_or(false);
+                    // Last-resort fallback if even the old hotkey fails
+                    if !re_registered {
+                        if let Ok(fallback) = hotkey::parse_hotkey("CmdOrCtrl+T") {
+                            let _ = app.global_shortcut().register(fallback);
+                        }
                     }
                 }
             }
         }
         Err(parse_err) => {
+            // New hotkey string is malformed — old shortcut is still registered
+            // (we never called unregister_all), so no fallback needed.
             let _ = app.emit(
                 "hotkey-conflict",
                 serde_json::json!({
@@ -87,10 +123,13 @@ pub fn run() {
     let http_client = reqwest::Client::new();
     // Cancellation registry — allows in-flight translations to be cancelled
     let cancel_registry: CancellationRegistry = Arc::new(Mutex::new(HashMap::new()));
+    // Config loaded once at startup, kept in managed state for all commands
+    let config_state: ConfigState = Arc::new(RwLock::new(AppConfig::load()));
 
     let mut builder = tauri::Builder::default()
         .manage(http_client)
         .manage(cancel_registry)
+        .manage(config_state.clone())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init());
 
@@ -146,6 +185,7 @@ pub fn run() {
     builder
         .invoke_handler(tauri::generate_handler![
             get_config,
+            get_provider_defaults,
             save_config,
             translate::translate_text,
             translate::cancel_translate
@@ -192,11 +232,11 @@ pub fn run() {
             }
 
             // ── Register Global Shortcut from Config ─────────────────
-            // Reads AppConfig.hotkey at startup so the binding is always
-            // in sync with user preferences — no hardcoded key combination.
+            // Reads the hotkey from managed config state (loaded once at startup).
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
-                let config = AppConfig::load();
+                let state = app.state::<ConfigState>();
+                let config = state.read().unwrap();
                 match hotkey::parse_hotkey(&config.hotkey) {
                     Ok(shortcut) => {
                         if let Err(e) = app.global_shortcut().register(shortcut) {
