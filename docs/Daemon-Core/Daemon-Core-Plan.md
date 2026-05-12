@@ -40,27 +40,27 @@ Completed work:
 
 ---
 
-## Phase 2: Dynamic Hotkey Registration — NOT STARTED
+## Phase 2: Dynamic Hotkey Registration — DONE
 
-Status: **Not Started**
+Status: **Done**
 
 Goals:
 
 - Make the registered hotkey reflect the `AppConfig.hotkey` field, not a hardcoded key combination.
 
-Remaining features:
+Completed work:
 
-- Parse `AppConfig.hotkey` string (format: `"CmdOrCtrl+T"`) into a `Shortcut` struct at startup and on config save.
-- Implement a `parse_hotkey(s: &str) -> Result<Shortcut, String>` utility function covering `Ctrl`, `Alt`, `Shift`, `CmdOrCtrl` modifiers and all alpha/digit key codes.
-- On startup: unregister any previously registered shortcut, then register the parsed shortcut.
-- On `save_config`: re-register the new hotkey immediately without requiring a restart.
-- Emit a `hotkey-registered { hotkey: String }` event on success.
-- Emit a `hotkey-conflict { hotkey: String, error: String }` event on registration failure; keep the previous hotkey active.
-- Update the Settings UI (`SettingsPanel.svelte`) to show the configurable hotkey input field as a live binding capture widget (listen for keydown, display modifier+key, store as `AppConfig.hotkey`).
+- Implemented `parse_hotkey(s: &str) -> Result<Shortcut, String>` in `src-tauri/src/hotkey.rs` covering `Ctrl`, `Alt`, `Shift`, `CmdOrCtrl` modifiers and all alpha/digit key codes.
+- On startup (`setup` closure): loads `AppConfig.hotkey`, parses it, and registers the shortcut; falls back to `CmdOrCtrl+T` on parse or registration failure.
+- On `save_config` command: unregisters all shortcuts, parses the new `config.hotkey`, and registers it immediately without requiring a restart.
+- Emits `hotkey-registered` event on success.
+- Emits `hotkey-conflict` event on registration failure; falls back to `CmdOrCtrl+T` if re-registration fails.
+- Settings UI (`SettingsPanel.svelte`) includes a live hotkey capture widget (`<input>` with `keydown` listener that formats `CmdOrCtrl+T`-style strings).
+- Unit-test coverage for `parse_hotkey` added: valid combos, unknown modifiers, unsupported keys, empty input.
 
 ### Hotkey String Format
 
-Use Electron-compatible accelerator strings: `"CmdOrCtrl+T"`, `"Alt+Shift+T"`, etc. The `parse_hotkey` function must map these to `tauri_plugin_global_shortcut::Modifiers` and `Code` values.
+Use Electron-compatible accelerator strings: `"CmdOrCtrl+T"`, `"Alt+Shift+T"`, etc. The `parse_hotkey` function maps these to `tauri_plugin_global_shortcut::Modifiers` and `Code` values.
 
 ---
 
@@ -101,17 +101,20 @@ Remaining features:
 
 ---
 
-## Phase 5: Atomic Config Save & Error Surface — NOT STARTED
+## Phase 5: Atomic Config Save & Error Surface — PARTIAL
 
-Status: **Not Started**
+Status: **Partial (atomic save done; error surface still pending)**
 
 Goals:
 
 - Harden config persistence and make daemon errors visible to the user.
 
+Completed work:
+
+- Replaced `fs::write` in `AppConfig::save` with write-to-`.tmp`-then-`fs::rename` for crash-safe atomicity.
+
 Remaining features:
 
-- Replace `fs::write` in `AppConfig::save` with a write-to-`.tmp`-then-rename pattern for crash-safe atomicity.
 - Wrap all Tauri setup errors (tray build, shortcut registration) in a `DaemonError { code: String, message: String }` enum and emit as `daemon-error` events instead of using `?` (which panics on failure).
 - Add a frontend listener for `daemon-error` in `+page.svelte` that surfaces the message as an error overlay.
 - Log all daemon lifecycle events (startup, hotkey registration, config load/save, tray creation) to a rotating `aura-translation.log` file in the app data directory using the `tracing` crate.

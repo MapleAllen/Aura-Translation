@@ -24,12 +24,15 @@ In the `setup` closure, three tray menu items are built: **Settings**, a separat
 
 A `window.on_window_event` listener watches for `WindowEvent::Focused(false)` and re-emits it as a `window-blur` event to the frontend, which triggers the dismiss animation.
 
+A dedicated `hotkey.rs` module parses the `AppConfig.hotkey` string (e.g. `"CmdOrCtrl+T"`) into a Tauri `Shortcut` at startup and whenever the config is saved. If registration fails, a `hotkey-conflict` event is emitted to the frontend instead of silently failing.
+
 Config persistence is handled by `config.rs`. `AppConfig` serializes to JSON and lives at `{config_dir}/aura-translation/config.json` (resolved via the `dirs` crate). `AppConfig::load()` deserializes on startup; if the file is absent it writes defaults. `AppConfig::save()` serializes with pretty-printing. Two Tauri commands (`get_config`, `save_config`) expose these methods to the frontend.
 
 ### Capabilities
 
 **Global hotkey**
-- Registers `Ctrl+T` (with `CONTROL` modifier and `Code::KeyT`) as a global shortcut on all desktop targets
+- Reads `AppConfig.hotkey` at startup and registers the parsed shortcut dynamically via `hotkey::parse_hotkey`
+- On `save_config`, unregisters the old shortcut and registers the new one; emits `hotkey-registered` on success or `hotkey-conflict` on failure
 - Reads the system clipboard via `tauri_plugin_clipboard_manager` on each trigger
 - Silently ignores hotkey events when the clipboard is empty or whitespace-only
 
@@ -48,9 +51,10 @@ Config persistence is handled by `config.rs`. `AppConfig` serializes to JSON and
 - Enables the frontend to trigger the dismiss animation and hide the window on focus loss
 
 **Config persistence**
-- `AppConfig` struct with fields: `api_key: String`, `model: String`, `source_lang: String`, `target_lang: String`, `hotkey: String`
-- Default values: `model = "deepseek-v4-flash"`, `source_lang = "auto"`, `target_lang = "Chinese"`, `hotkey = "CmdOrCtrl+T"`
+- `AppConfig` struct with fields: `api_key: String`, `model: String`, `source_lang: String`, `target_lang: String`, `hotkey: String`, `provider: Provider`, `api_base_url: String`, `available_models: Vec<String>`
+- Default values: `model = "deepseek-chat"`, `source_lang = "auto"`, `target_lang = "Chinese"`, `hotkey = "CmdOrCtrl+T"`, `provider = DeepSeek`
 - Config file: `{OS config dir}/aura-translation/config.json` (e.g., `%APPDATA%\aura-translation\config.json` on Windows)
+- Save is atomic (write to `.tmp` then `fs::rename` into place) to prevent corruption on crash
 - Automatically creates missing directories on first write
 
 **Tauri commands exposed**
@@ -83,7 +87,11 @@ Single-file Tauri application bootstrap with a companion config module and a tra
   - `AppConfig`: serializable struct holding all user preferences.
   - `AppConfig::config_path() -> PathBuf`: resolves `{config_dir}/aura-translation/config.json`; creates missing directories.
   - `AppConfig::load() -> Self`: reads and deserializes the config file, or writes and returns defaults.
-  - `AppConfig::save(&self) -> Result<(), String>`: serializes to pretty JSON and writes atomically via `fs::write`.
+  - `AppConfig::save(&self) -> Result<(), String>`: serializes to pretty JSON, writes to `.tmp`, then atomically renames into place.
+
+- `hotkey.rs`
+  - `parse_hotkey(s: &str) -> Result<Shortcut, String>`: parses Electron-style accelerator strings into Tauri `Shortcut` values.
+  - Unit-test coverage for valid combos, unknown modifiers, unsupported keys, and empty input.
 
 - `main.rs`
   - Calls `aura_translation_lib::run()` — no logic of its own.
@@ -117,22 +125,19 @@ Single-file Tauri application bootstrap with a companion config module and a tra
 
 ## Current Limitations
 
-- **Hotkey is hardcoded** — `Ctrl+T` is registered in code (`Code::KeyT` with `Modifiers::CONTROL`). The `hotkey` field in `AppConfig` is stored and displayed in the UI but is **not** actually used to register the shortcut; changing it in Settings has no effect.
-- **No hotkey conflict detection** — if `Ctrl+T` is already claimed by another application, registration silently fails with only an `eprintln!` log; no user-visible error is shown.
+- **No hotkey conflict detection UI** — the Rust backend emits a `hotkey-conflict` event with the error details, but the frontend currently only logs it to `console.error`. A user-visible overlay is still pending.
 - **Position is static** — window is always placed at the bottom-right corner; there is no detection of whether the system tray is on a different edge (left, top).
 - **Single monitor support** — uses `primary_monitor()` only; on multi-monitor setups the window always opens on the primary screen regardless of where the tray icon is.
-- **Config written as plaintext JSON** — the API key is stored in cleartext in `config.json`; no OS keychain integration.
+- **API key stored in plaintext JSON** — the API key is stored in cleartext in `config.json`; no OS keychain integration. The config save itself is now atomic (write-then-rename).
 - **No graceful error surface for tray build failures** — tray icon construction errors propagate as Rust panics (`?` in setup closure).
 - **Focus-loss on Settings** — the `window-blur` handler in the frontend suppresses dismiss when `showSettings` is true, but the Rust side does not know the settings state; a race condition exists if blur fires during a settings transition.
 - **`tauri_plugin_opener` registered but unused** — the opener plugin is initialized but no shell command or URL opening is currently performed from Rust.
 
 ## Future Directions
 
-- Replace hardcoded `Code::KeyT` hotkey registration with a dynamic registration derived from the `AppConfig.hotkey` field.
-- Add a hotkey conflict detection path that emits a user-visible `hotkey-conflict` error event if `register()` fails.
+- Add a user-visible frontend overlay for `hotkey-conflict` events so the user knows registration failed and can change the binding.
 - Support system tray edge detection to anchor the popup window to the correct screen corner.
 - Add multi-monitor support by finding the monitor containing the cursor rather than using `primary_monitor()`.
 - Integrate OS keychain (Windows Credential Manager, macOS Keychain) for secure API key storage via `tauri-plugin-stronghold` or `keyring-rs`.
-- Replace `fs::write` with an atomic rename-into-place pattern to prevent config corruption on crash during save.
 - Add a `tray-left-click` handler to show/hide the popup as an alternative to the hotkey.
 - Support user-configurable window offset (right margin, bottom margin) in `AppConfig`.
