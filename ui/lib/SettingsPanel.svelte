@@ -15,20 +15,9 @@
     { value: 'ollama',      label: 'Ollama (local, no auth)' },
   ];
 
-  const PROVIDER_BASE_URLS: Record<Provider, string> = {
-    deepseek:   'https://api.deepseek.com',
-    openrouter: 'https://openrouter.ai/api',
-    ollama:     'http://localhost:11434',
-  };
-
-  const PROVIDER_DEFAULT_MODELS: Record<Provider, string[]> = {
-    deepseek:   ['deepseek-chat', 'deepseek-reasoner'],
-    openrouter: [
-      'mistralai/mistral-7b-instruct',
-      'google/gemma-3-27b-it',
-      'meta-llama/llama-3.3-70b-instruct',
-    ],
-    ollama:     ['mistral', 'llama3', 'qwen2.5'],
+  type ProviderDefaults = {
+    base_url: string;
+    models: string[];
   };
 
   // ── Types ────────────────────────────────────────────────────────────────
@@ -85,20 +74,23 @@
     }
   }
 
-  // ── Provider change: auto-populate base URL and model list ───────────────
-  function handleProviderChange(newProvider: Provider) {
+  // ── Provider change: fetch defaults from backend, auto-populate fields ──
+  async function handleProviderChange(newProvider: Provider) {
     config.provider = newProvider;
-    config.api_base_url = PROVIDER_BASE_URLS[newProvider];
-    // Reset model to the first option for the new provider
-    const models = PROVIDER_DEFAULT_MODELS[newProvider];
-    config.available_models = models;
-    if (!models.includes(config.model)) {
-      config.model = models[0];
+    try {
+      const defaults = await invoke<ProviderDefaults>('get_provider_defaults', { provider: newProvider });
+      config.api_base_url = defaults.base_url;
+      config.available_models = defaults.models;
+      if (!defaults.models.includes(config.model)) {
+        config.model = defaults.models[0];
+      }
+    } catch (e) {
+      console.error('Failed to fetch provider defaults:', e);
     }
   }
 
   // ── Hotkey capture ────────────────────────────────────────────────────────
-  function handleHotkeykeydown(e: KeyboardEvent) {
+  function handleHotkeyKeydown(e: KeyboardEvent) {
     // Suppress all other listeners (prevents global Esc dismiss, etc.)
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -262,7 +254,7 @@
             readonly
             onfocus={() => isCapturingHotkey = true}
             onblur={() => isCapturingHotkey = false}
-            onkeydown={handleHotkeykeydown}
+            onkeydown={handleHotkeyKeydown}
             class="w-full bg-aura-glass border rounded-lg px-3 py-2
                    text-sm text-aura-text font-body font-medium
                    cursor-pointer select-none caret-transparent

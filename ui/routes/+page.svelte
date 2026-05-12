@@ -104,7 +104,7 @@
 
   /** Start a new translation with the current sourceText and language pair. */
   async function startTranslation() {
-    if (!config.api_key) {
+    if (config.provider !== 'ollama' && !config.api_key) {
       appState = 'error';
       errorMessage = 'No API key configured. Right-click the tray icon → Settings.';
       return;
@@ -158,8 +158,8 @@
   }
 
   async function dismiss() {
-    // Cancel any in-flight translation before hiding the window
-    await cancelCurrentTranslation();
+    // Fire cancel without waiting — animate out immediately
+    cancelCurrentTranslation();
 
     // Animate out
     popupScale.target = 0.92;
@@ -169,6 +169,8 @@
 
     // Wait for animation, then hide window
     setTimeout(async () => {
+      // Safety net: ensure cancellation completed before resetting state
+      await cancelCurrentTranslation();
       appState = 'idle';
       sourceText = '';
       translatedText = '';
