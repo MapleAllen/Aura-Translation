@@ -9,7 +9,8 @@ use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 /// # Modifier tokens
 /// | Token | Mapped to |
 /// |---|---|
-/// | `Ctrl` / `CmdOrCtrl` | `Modifiers::CONTROL` |
+/// | `Ctrl` | `Modifiers::CONTROL` |
+/// | `CmdOrCtrl` | `Modifiers::CONTROL` (Windows/Linux), `Modifiers::SUPER` (macOS) |
 /// | `Alt` | `Modifiers::ALT` |
 /// | `Shift` | `Modifiers::SHIFT` |
 /// | `Meta` / `Super` / `Cmd` | `Modifiers::META` |
@@ -41,7 +42,13 @@ pub fn parse_hotkey(s: &str) -> Result<Shortcut, String> {
     for token in modifier_tokens {
         let token = token.trim();
         match token {
-            "Ctrl" | "CmdOrCtrl" => modifiers |= Modifiers::CONTROL,
+            "Ctrl" => modifiers |= Modifiers::CONTROL,
+            "CmdOrCtrl" => {
+                #[cfg(target_os = "macos")]
+                { modifiers |= Modifiers::SUPER; }
+                #[cfg(not(target_os = "macos"))]
+                { modifiers |= Modifiers::CONTROL; }
+            }
             "Alt" => modifiers |= Modifiers::ALT,
             "Shift" => modifiers |= Modifiers::SHIFT,
             "Meta" | "Super" | "Cmd" => modifiers |= Modifiers::SUPER,
@@ -113,6 +120,9 @@ mod tests {
     #[test]
     fn ctrl_t_parses() {
         let s = parse_hotkey("CmdOrCtrl+T").expect("should parse");
+        #[cfg(target_os = "macos")]
+        assert_eq!(s.mods, Modifiers::SUPER);
+        #[cfg(not(target_os = "macos"))]
         assert_eq!(s.mods, Modifiers::CONTROL);
         assert_eq!(s.key, Code::KeyT);
     }

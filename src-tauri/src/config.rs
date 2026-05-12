@@ -50,7 +50,7 @@ impl Default for Provider {
 }
 
 /// Application configuration stored as plaintext JSON.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AppConfig {
     pub api_key: String,
     pub model: String,
@@ -58,24 +58,78 @@ pub struct AppConfig {
     pub target_lang: String,
     pub hotkey: String,
     /// The active translation provider.
-    #[serde(default)]
     pub provider: Provider,
     /// The API base URL for the active provider.
     /// Defaults to the provider's canonical URL but can be overridden (e.g. for custom Ollama ports).
-    #[serde(default = "default_api_base_url")]
     pub api_base_url: String,
     /// The ordered list of model identifiers shown in the Settings dropdown.
     /// Populated from the provider's defaults on first load.
-    #[serde(default = "default_available_models")]
     pub available_models: Vec<String>,
 }
 
-fn default_api_base_url() -> String {
-    Provider::default().default_base_url().to_string()
-}
+// Custom Deserialize so `api_base_url` and `available_models` default to the
+// *actual* provider's values, not a static Provider::default().
+impl<'de> Deserialize<'de> for AppConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Helper {
+            #[serde(default)]
+            api_key: String,
+            #[serde(default)]
+            model: String,
+            #[serde(default = "default_source_lang")]
+            source_lang: String,
+            #[serde(default = "default_target_lang")]
+            target_lang: String,
+            #[serde(default = "default_hotkey")]
+            hotkey: String,
+            #[serde(default)]
+            provider: Provider,
+            api_base_url: Option<String>,
+            available_models: Option<Vec<String>>,
+        }
 
-fn default_available_models() -> Vec<String> {
-    Provider::default().default_models()
+        fn default_source_lang() -> String {
+            "auto".to_string()
+        }
+        fn default_target_lang() -> String {
+            "Chinese".to_string()
+        }
+        fn default_hotkey() -> String {
+            "CmdOrCtrl+T".to_string()
+        }
+
+        let helper = Helper::deserialize(deserializer)?;
+        let provider = helper.provider;
+        let api_base_url = helper
+            .api_base_url
+            .unwrap_or_else(|| provider.default_base_url().to_string());
+        let available_models = helper
+            .available_models
+            .unwrap_or_else(|| provider.default_models());
+        let model = if helper.model.is_empty() {
+            available_models
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "deepseek-chat".to_string())
+        } else {
+            helper.model
+        };
+
+        Ok(AppConfig {
+            api_key: helper.api_key,
+            model,
+            source_lang: helper.source_lang,
+            target_lang: helper.target_lang,
+            hotkey: helper.hotkey,
+            provider,
+            api_base_url,
+            available_models,
+        })
+    }
 }
 
 impl Default for AppConfig {
@@ -106,12 +160,32 @@ impl AppConfig {
         config_dir.join("config.json")
     }
 
-    /// Load config from disk, or return defaults if not found or malformed.
+    /// Load config from disk, or return defaults if not found.
+    /// Logs parse/read errors before falling back to defaults.
     pub fn load() -> Self {
         let path = Self::config_path();
         if path.exists() {
-            let content = fs::read_to_string(&path).unwrap_or_default();
-            serde_json::from_str(&content).unwrap_or_default()
+            match fs::read_to_string(&path) {
+                Ok(content) => match serde_json::from_str(&content) {
+                    Ok(config) => config,
+                    Err(e) => {
+                        eprintln!(
+                            "Failed to parse config at {}: {}. Using defaults.",
+                            path.display(),
+                            e
+                        );
+                        Self::default()
+                    }
+                },
+                Err(e) => {
+                    eprintln!(
+                        "Failed to read config at {}: {}. Using defaults.",
+                        path.display(),
+                        e
+                    );
+                    Self::default()
+                }
+            }
         } else {
             let config = Self::default();
             config.save().ok();
