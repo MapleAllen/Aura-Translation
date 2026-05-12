@@ -6,7 +6,7 @@ UI Shell
 
 ## Purpose
 
-The UI Shell is the visual layer of Aura Translation. It renders a 440×360 px glassmorphic floating popup that animates into view when the hotkey fires and dismisses on `Esc` or focus loss. The core UX goal is for the widget to feel like a **natural extension of the operating system** rather than a browser tab: physically-based spring animations create a haptic "pop-up" effect — the popup briefly overshoots past 100% scale before settling — giving every interaction a tangible, alive quality. The shell handles the complete translation lifecycle from the user's perspective: displaying the source text, pulsating while waiting for the first token, streaming translated text token-by-token, surfacing error states, and letting the user copy the result or change the language pair. A settings overlay is also embedded in the shell for API key and model configuration.
+The UI Shell is the visual layer of Aura Translation. It renders a 440×360 px glassmorphic floating popup that animates into view when the hotkey fires and dismisses on `Esc` or focus loss. The core UX goal is for the widget to feel like a **natural extension of the operating system** rather than a browser tab: physically-based spring animations create a haptic "pop-up" effect — the popup briefly overshoots past 100% scale before settling — giving every interaction a tangible, alive quality. The shell handles the complete translation lifecycle from the user's perspective: displaying the source text, pulsating while waiting for the first token, streaming translated text token-by-token, surfacing error states, and letting the user copy the result or change the language pair. A settings overlay is also embedded in the shell for API key, provider, model, and hotkey configuration. The model dropdown is populated dynamically from `config.available_models`, and the hotkey field is a live capture widget that reads and writes `config.hotkey`.
 
 ## Current Implementation
 
@@ -52,7 +52,7 @@ The design system is defined in `ui/app.css` as Tailwind CSS v4 `@theme` tokens 
 
 **Settings panel**
 - Glassmorphic overlay rendered absolutely over the popup (`z-50`)
-- Fields: DeepSeek API Key (password input with show/hide toggle), Model (dropdown: `deepseek-v4-flash` / `deepseek-v4-pro`), Hotkey (read-only display of `Ctrl + T`)
+- Fields: Provider (dropdown: DeepSeek / OpenRouter / Ollama), API Key (password input with show/hide toggle, hidden for Ollama), Model (dropdown populated from `config.available_models`), Hotkey (live capture widget — listens to `keydown`, formats `CmdOrCtrl+T`-style string)
 - Save button with spring bounce animation; shows "Saved!" for 1200 ms on success
 - Panel opened via tray `show-settings` event or programmatically; closed by `Esc` or the close button
 
@@ -126,7 +126,7 @@ Single-route SvelteKit application using Svelte 5 runes API (`$state`, `$props`,
 - `ui/routes/+page.svelte`
   - `invoke('get_config') -> AppConfig`: called in `loadConfig()`.
   - `invoke('save_config', { config })`: called in `SettingsPanel.saveConfig()` via the orchestrator.
-  - `invoke('translate_text', { text, sourceLang, targetLang, apiKey, model, requestId })`: called in `startTranslation()` on every `trigger-translate` event and on mid-stream language switch.
+  - `invoke('translate_text', { text, sourceLang, targetLang, apiKey, model, requestId, apiBaseUrl, provider })`: called in `startTranslation()` on every `trigger-translate` event and on mid-stream language switch.
   - `invoke('cancel_translate', { requestId })`: called in `cancelCurrentTranslation()` on user cancel, language switch mid-stream, or new trigger while streaming.
   - `listen('trigger-translate')`, `listen('translation-chunk')`, `listen('translation-done')`, `listen('translation-error')`, `listen('window-blur')`, `listen('show-settings')`: all registered in `onMount`.
   - `getCurrentWindow().hide()`: called in the dismiss timeout.
@@ -136,21 +136,15 @@ Single-route SvelteKit application using Svelte 5 runes API (`$state`, `$props`,
 
 ## Current Limitations
 
-- **Hotkey display is hardcoded** — the Settings panel shows `Ctrl + T` as static `<kbd>` elements; it does not reflect `config.hotkey` and cannot be interactively reconfigured.
-- **Model list is hardcoded** — two `<option>` elements in `SettingsPanel.svelte` (`deepseek-v4-flash`, `deepseek-v4-pro`); adding a new model requires a frontend code change.
 - **No translation history** — each trigger replaces the previous result; there is no session-level history panel.
 - **`appWindow.hide()` can fail silently** — the `catch` block in `dismiss()` only logs to `console.error`; a failed hide is not surfaced to the user.
 - **Settings panel is DOM-destroyed on close** — using `{#if visible}` means every open/close cycle re-mounts and re-loads config; a `visibility: hidden` approach would avoid the config round-trip.
-- **`window-blur` dismiss is suppressed only via `showSettings`** — rapid state transitions (e.g., blur event arriving during the dismiss animation) can cause double-dismiss attempts.
-- **Dismiss does not cancel the Rust task** — dismissing the popup via `Esc` or focus loss hides the window but does not invoke `cancel_translate`; the in-flight Rust stream continues until the SSE response completes naturally.
+- **`window-blur` dismiss race** — rapid state transitions (e.g., blur event arriving during the dismiss animation) can cause double-dismiss attempts.
 
 ## Future Directions
 
-- Replace the hardcoded hotkey `<kbd>` display with a live binding capture widget that reads and writes `config.hotkey`.
-- Replace the hardcoded model `<option>` list with a dynamic list sourced from `AppConfig.available_models`.
+- Replace `{#if visible}` in `SettingsPanel` with `display: none` to preserve the mounted component across open/close cycles.
 - Add a collapsible translation history panel showing the last N source/result pairs within a session.
 - Add a `translation-retry` listener to show a "retrying…" indicator badge in the status bar.
-- Replace `{#if visible}` in `SettingsPanel` with `display: none` to preserve the mounted component across open/close cycles.
 - Add keyboard navigation shortcuts within the popup (e.g., `Tab` to cycle focus, `Enter` to copy).
 - Support right-to-left layout for Arabic and Hebrew target languages.
-- Wire `cancel_translate` into the dismiss flow so hiding the popup also cancels the in-flight Rust task.

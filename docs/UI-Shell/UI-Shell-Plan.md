@@ -61,23 +61,20 @@ Completed work:
 
 ---
 
-## Phase 3: Dynamic Config & Model List — NOT STARTED
+## Phase 3: Dynamic Config & Model List — DONE
 
-Status: **Not Started**
+Status: **Done**
 
 Goals:
 
 - Remove all hardcoded strings from the Settings panel and replace them with data from `AppConfig`.
 
-Remaining features:
+Completed work:
 
-- Replace the hardcoded `<option>` elements in `SettingsPanel.svelte` with a loop over `config.available_models: string[]` (added to `AppConfig` in Rust Phase 4).
-- Replace the static `<kbd>Ctrl</kbd><kbd>T</kbd>` hotkey display with a live binding capture widget:
-  - An `<input>` that listens to `keydown`, suppresses the default event, and formats `modifiers + key` into a `CmdOrCtrl+T`-style string.
-  - Writes the captured string to `config.hotkey` on blur.
-  - Prevents the global `Ctrl+T` listener from firing while the input is focused (use `e.stopImmediatePropagation()` on the `keydown` event at the hotkey-capture input).
-- Display the API base URL field (from `config.api_base_url`, added in Rust Phase 4) in Settings.
-- Add a `Provider` dropdown mapped to `config.provider`.
+- Replaced hardcoded `<option>` elements in `SettingsPanel.svelte` with a `{#each config.available_models}` loop.
+- Replaced the static hotkey `<kbd>` display with a live binding capture widget (`<input>` with `keydown` listener that formats modifier+key into `CmdOrCtrl+T`-style string; uses `e.preventDefault()` + `e.stopImmediatePropagation()` to prevent global shortcuts while focused).
+- Added a `Provider` dropdown that auto-populates `api_base_url` and `available_models` on change, using local frontend constants (`PROVIDER_BASE_URLS`, `PROVIDER_DEFAULT_MODELS`).
+- API base URL is configurable via `config.api_base_url` (defaults populated from provider selection).
 
 ---
 
