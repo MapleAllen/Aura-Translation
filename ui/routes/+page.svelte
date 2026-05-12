@@ -45,14 +45,20 @@
     source_lang: string;
     target_lang: string;
     hotkey: string;
+    provider: 'deepseek' | 'openrouter' | 'ollama';
+    api_base_url: string;
+    available_models: string[];
   };
 
   let config: AppConfig = $state({
     api_key: '',
-    model: 'deepseek-v4-flash',
+    model: 'deepseek-chat',
     source_lang: 'auto',
     target_lang: 'Chinese',
     hotkey: 'CmdOrCtrl+T',
+    provider: 'deepseek',
+    api_base_url: 'https://api.deepseek.com',
+    available_models: ['deepseek-chat', 'deepseek-reasoner'],
   });
 
   async function loadConfig() {
@@ -120,6 +126,8 @@
         apiKey: config.api_key,
         model: config.model,
         requestId: requestId,
+        apiBaseUrl: config.api_base_url,
+        provider: config.provider,
       });
     } catch (e) {
       // appState may have been changed to 'error' by a translation-error event
@@ -150,6 +158,9 @@
   }
 
   async function dismiss() {
+    // Cancel any in-flight translation before hiding the window
+    await cancelCurrentTranslation();
+
     // Animate out
     popupScale.target = 0.92;
     popupOpacity.target = 0;
@@ -247,6 +258,15 @@
       showSettings = true;
       popupScale.target = 1;
       popupOpacity.target = 1;
+    });
+
+    // Listen for hotkey conflict notification from daemon
+    listen<{ hotkey: string; error: string }>('hotkey-conflict', (event) => {
+      console.error('Hotkey conflict:', {
+        hotkey: event.payload.hotkey,
+        error: event.payload.error,
+      });
+      // TODO: surface as a user-visible warning overlay in Daemon-Core Phase 5
     });
   });
 </script>

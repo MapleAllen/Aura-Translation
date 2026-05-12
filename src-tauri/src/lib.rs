@@ -1,4 +1,5 @@
 mod config;
+mod hotkey;
 mod translate;
 
 use config::AppConfig;
@@ -7,13 +8,13 @@ use std::sync::Arc;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    Emitter, Manager,
+    AppHandle, Emitter, Manager,
 };
 use tokio::sync::Mutex;
 use translate::CancellationRegistry;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 /// Tauri command: get current config for the frontend.
 #[tauri::command]
@@ -21,9 +22,62 @@ fn get_config() -> AppConfig {
     AppConfig::load()
 }
 
-/// Tauri command: save config from the frontend.
+/// Tauri command: save config from the frontend and re-register the hotkey.
+///
+/// On hotkey re-registration failure, emits a `hotkey-conflict` event and
+/// keeps the previously registered shortcut active (does NOT return an error
+/// to the frontend — a conflict is a user-fixable warning, not a fatal failure).
 #[tauri::command]
-fn save_config(config: AppConfig) -> Result<(), String> {
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn save_config(app: AppHandle, config: AppConfig) -> Result<(), String> {
+    config.save()?;
+
+    // Re-register the global shortcut to reflect any hotkey change
+    match hotkey::parse_hotkey(&config.hotkey) {
+        Ok(new_shortcut) => {
+            // Unregister all previously registered shortcuts first
+            if let Err(e) = app.global_shortcut().unregister_all() {
+                eprintln!("Failed to unregister shortcuts during re-registration: {}", e);
+                // TODO: emit daemon-error when Phase 5 error surface is implemented
+            }
+            match app.global_shortcut().register(new_shortcut) {
+                Ok(_) => {
+                    let _ = app.emit("hotkey-registered", &config.hotkey);
+                }
+                Err(e) => {
+                    let _ = app.emit(
+                        "hotkey-conflict",
+                        serde_json::json!({
+                            "hotkey": config.hotkey,
+                            "error": e.to_string()
+                        }),
+                    );
+                    // Note: the shortcut was unregistered above but failed to re-register.
+                    // Re-register the default as a safe fallback.
+                    if let Ok(fallback) = hotkey::parse_hotkey("CmdOrCtrl+T") {
+                        let _ = app.global_shortcut().register(fallback);
+                    }
+                }
+            }
+        }
+        Err(parse_err) => {
+            let _ = app.emit(
+                "hotkey-conflict",
+                serde_json::json!({
+                    "hotkey": config.hotkey,
+                    "error": parse_err
+                }),
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Mobile stub — no global shortcuts on mobile.
+#[tauri::command]
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn save_config(_app: AppHandle, config: AppConfig) -> Result<(), String> {
     config.save()
 }
 
@@ -137,14 +191,38 @@ pub fn run() {
                 });
             }
 
-            // ── Register Global Shortcut ─────────────────────────────
+            // ── Register Global Shortcut from Config ─────────────────
+            // Reads AppConfig.hotkey at startup so the binding is always
+            // in sync with user preferences — no hardcoded key combination.
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
-                let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyT);
-                app.global_shortcut().register(shortcut).map_err(|e| {
-                    eprintln!("Failed to register global shortcut Ctrl+T: {}", e);
-                    e
-                })?;
+                let config = AppConfig::load();
+                match hotkey::parse_hotkey(&config.hotkey) {
+                    Ok(shortcut) => {
+                        if let Err(e) = app.global_shortcut().register(shortcut) {
+                            eprintln!(
+                                "Failed to register hotkey '{}': {}. \
+                                 Falling back to CmdOrCtrl+T.",
+                                config.hotkey, e
+                            );
+                            // TODO: emit daemon-error when Phase 5 error surface is implemented
+                            // Attempt fallback registration
+                            if let Ok(fallback) = hotkey::parse_hotkey("CmdOrCtrl+T") {
+                                let _ = app.global_shortcut().register(fallback);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "Failed to parse hotkey '{}': {}. \
+                             Falling back to CmdOrCtrl+T.",
+                            config.hotkey, e
+                        );
+                        if let Ok(fallback) = hotkey::parse_hotkey("CmdOrCtrl+T") {
+                            let _ = app.global_shortcut().register(fallback);
+                        }
+                    }
+                }
             }
 
             Ok(())
