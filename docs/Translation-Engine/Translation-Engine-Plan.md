@@ -65,40 +65,40 @@ Frontend: invoke('cancel_translate', { requestId })
 
 ---
 
-## Phase 3: Retry & Resilience — NOT STARTED
+## Phase 3: Retry & Resilience — DONE
 
-Status: **Not Started**
+Status: **Done**
 
 Goals:
 
 - Recover from transient network errors without surfacing them to the user.
 
-Remaining features:
+Completed work:
 
-- Implement exponential back-off retry for connection-level errors (not HTTP errors): 3 attempts, delays of 200 ms, 600 ms, 1800 ms using `tokio::time::sleep`.
-- Do not retry on HTTP 4xx errors (auth failure, bad request) — surface immediately.
-- Do retry on HTTP 5xx errors and `reqwest::Error::is_connect()` / `is_timeout()`.
-- Expose `max_retries: u8` and `base_retry_ms: u64` fields in `AppConfig` with defaults of `3` and `200`.
-- Emit a `translation-retry { attempt: u8 }` event before each retry so the UI can show a "retrying…" indicator.
+- Implemented exponential back-off retry loop in `translate_stream` with 3 attempts, delays of 200 ms, 600 ms, 1800 ms using `tokio::time::sleep`.
+- HTTP 4xx errors (auth failure, bad request) are surfaced immediately without retry.
+- HTTP 5xx errors and `reqwest::Error::is_connect()` / `is_timeout()` are retried.
+- Emits a `translation-retry { attempt: u8 }` event before each retry so the UI can show a "retrying…" indicator.
+- `max_retries` and `base_retry_ms` are currently hardcoded to `3` and `200`; exposing them in `AppConfig` is deferred to a future config-expansion pass.
 
 ---
 
-## Phase 4: Provider Abstraction & Self-Hosted Support — NOT STARTED
+## Phase 4: Provider Abstraction & Self-Hosted Support — DONE
 
-Status: **Not Started**
+Status: **Done**
 
 Goals:
 
 - Support any OpenAI-compatible chat completions endpoint without code changes, enabling both cloud providers (DeepSeek, OpenRouter) and self-hosted open-source models (Ollama, llama.cpp, NLLB-serving) for fully offline, privacy-preserving translation.
 
-Remaining features:
+Completed work:
 
-- Add `api_base_url: String` field to `AppConfig`, defaulting to `"https://api.deepseek.com"`.
-- Add `provider: String` field (e.g., `"deepseek"`, `"openrouter"`, `"ollama"`) for auth header format selection.
-- Construct the full URL as `format!("{}/chat/completions", config.api_base_url)`.
-- Add a `ProviderAuth` enum: `Bearer(String)` | `ApiKey(String)` to select the correct header.
-- Expose `api_base_url` and `provider` in the Settings UI.
-- Add an `available_models: Vec<String>` field to `AppConfig` to replace the hardcoded `<option>` list in `SettingsPanel.svelte`.
+- Added `Provider` enum (`DeepSeek`, `OpenRouter`, `Ollama`) to `config.rs` with `default_base_url()` and `default_models()`.
+- Added `api_base_url: String` and `provider: Provider` fields to `AppConfig` with serde defaults for backward compatibility.
+- `translate.rs` constructs the full URL as `format!("{}/chat/completions", api_base_url)`.
+- Auth header format is provider-specific: `Bearer` for DeepSeek, `Bearer` + referer headers for OpenRouter, no auth for Ollama.
+- Settings UI (`SettingsPanel.svelte`) exposes a provider dropdown and auto-populates `api_base_url` and `available_models` on provider change.
+- `available_models: Vec<String>` is stored in `AppConfig` and drives the Settings model dropdown dynamically.
 
 ---
 
