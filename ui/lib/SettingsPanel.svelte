@@ -152,6 +152,7 @@
         class="flex items-center justify-center w-6 h-6 rounded-md
                hover:bg-aura-glass-hover transition-colors duration-150"
         onclick={onclose}
+        aria-label="Close settings"
       >
         <svg class="w-4 h-4 text-aura-text-dim" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -206,6 +207,7 @@
                      hover:bg-aura-glass-hover transition-colors"
               onclick={() => showApiKey = !showApiKey}
               type="button"
+              aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
             >
               <svg class="w-4 h-4 text-aura-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 {#if showApiKey}
