@@ -51,7 +51,11 @@ fn get_provider_defaults(provider: Provider) -> ProviderDefaults {
 /// warning, not a fatal failure.
 #[tauri::command]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn save_config(app: AppHandle, state: State<'_, ConfigState>, config: AppConfig) -> Result<(), String> {
+fn save_config(
+    app: AppHandle,
+    state: State<'_, ConfigState>,
+    config: AppConfig,
+) -> Result<(), String> {
     // Capture old hotkey from managed state before overwriting
     let old_hotkey = state.read().unwrap().hotkey.clone();
     config.save()?;
@@ -67,7 +71,10 @@ fn save_config(app: AppHandle, state: State<'_, ConfigState>, config: AppConfig)
     match hotkey::parse_hotkey(&config.hotkey) {
         Ok(new_shortcut) => {
             if let Err(e) = app.global_shortcut().unregister_all() {
-                eprintln!("Failed to unregister shortcuts during re-registration: {}", e);
+                eprintln!(
+                    "Failed to unregister shortcuts during re-registration: {}",
+                    e
+                );
             }
             match app.global_shortcut().register(new_shortcut) {
                 Ok(_) => {
@@ -142,10 +149,7 @@ pub fn run() {
                     if event.state == ShortcutState::Pressed {
                         // Read clipboard via Tauri command
                         use tauri_plugin_clipboard_manager::ClipboardExt;
-                        let clipboard_text = app
-                            .clipboard()
-                            .read_text()
-                            .unwrap_or_default();
+                        let clipboard_text = app.clipboard().read_text().unwrap_or_default();
 
                         if clipboard_text.trim().is_empty() {
                             return;
@@ -166,8 +170,7 @@ pub fn run() {
                                 let x = screen_w - win_w - 16.0;
                                 let y = screen_h - win_h - 60.0;
 
-                                let _ =
-                                    window.set_position(tauri::LogicalPosition::new(x, y));
+                                let _ = window.set_position(tauri::LogicalPosition::new(x, y));
                             }
 
                             let _ = window.show();
@@ -192,8 +195,7 @@ pub fn run() {
         ])
         .setup(|app| {
             // ── System Tray ──────────────────────────────────────────
-            let settings_item =
-                MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
+            let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
             let separator = PredefinedMenuItem::separator(app)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
@@ -203,20 +205,18 @@ pub fn run() {
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .tooltip("Aura Translation")
-                .on_menu_event(move |app, event| {
-                    match event.id.as_ref() {
-                        "settings" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = app.emit("show-settings", ());
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
+                .on_menu_event(move |app, event| match event.id.as_ref() {
+                    "settings" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = app.emit("show-settings", ());
+                            let _ = window.show();
+                            let _ = window.set_focus();
                         }
-                        "quit" => {
-                            app.exit(0);
-                        }
-                        _ => {}
                     }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
                 })
                 .build(app)?;
 

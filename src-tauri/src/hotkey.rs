@@ -45,9 +45,13 @@ pub fn parse_hotkey(s: &str) -> Result<Shortcut, String> {
             "Ctrl" => modifiers |= Modifiers::CONTROL,
             "CmdOrCtrl" => {
                 #[cfg(target_os = "macos")]
-                { modifiers |= Modifiers::SUPER; }
+                {
+                    modifiers |= Modifiers::SUPER;
+                }
                 #[cfg(not(target_os = "macos"))]
-                { modifiers |= Modifiers::CONTROL; }
+                {
+                    modifiers |= Modifiers::CONTROL;
+                }
             }
             "Alt" => modifiers |= Modifiers::ALT,
             "Shift" => modifiers |= Modifiers::SHIFT,
@@ -66,47 +70,45 @@ fn parse_key_code(token: &str) -> Result<Code, String> {
     // Single character: alpha or digit
     let mut chars = token.chars();
     match (chars.next(), chars.next()) {
-        (Some(c), None) => {
-            match c.to_ascii_uppercase() {
-                'A' => Ok(Code::KeyA),
-                'B' => Ok(Code::KeyB),
-                'C' => Ok(Code::KeyC),
-                'D' => Ok(Code::KeyD),
-                'E' => Ok(Code::KeyE),
-                'F' => Ok(Code::KeyF),
-                'G' => Ok(Code::KeyG),
-                'H' => Ok(Code::KeyH),
-                'I' => Ok(Code::KeyI),
-                'J' => Ok(Code::KeyJ),
-                'K' => Ok(Code::KeyK),
-                'L' => Ok(Code::KeyL),
-                'M' => Ok(Code::KeyM),
-                'N' => Ok(Code::KeyN),
-                'O' => Ok(Code::KeyO),
-                'P' => Ok(Code::KeyP),
-                'Q' => Ok(Code::KeyQ),
-                'R' => Ok(Code::KeyR),
-                'S' => Ok(Code::KeyS),
-                'T' => Ok(Code::KeyT),
-                'U' => Ok(Code::KeyU),
-                'V' => Ok(Code::KeyV),
-                'W' => Ok(Code::KeyW),
-                'X' => Ok(Code::KeyX),
-                'Y' => Ok(Code::KeyY),
-                'Z' => Ok(Code::KeyZ),
-                '0' => Ok(Code::Digit0),
-                '1' => Ok(Code::Digit1),
-                '2' => Ok(Code::Digit2),
-                '3' => Ok(Code::Digit3),
-                '4' => Ok(Code::Digit4),
-                '5' => Ok(Code::Digit5),
-                '6' => Ok(Code::Digit6),
-                '7' => Ok(Code::Digit7),
-                '8' => Ok(Code::Digit8),
-                '9' => Ok(Code::Digit9),
-                other => Err(format!("Unsupported key code: '{}'", other)),
-            }
-        }
+        (Some(c), None) => match c.to_ascii_uppercase() {
+            'A' => Ok(Code::KeyA),
+            'B' => Ok(Code::KeyB),
+            'C' => Ok(Code::KeyC),
+            'D' => Ok(Code::KeyD),
+            'E' => Ok(Code::KeyE),
+            'F' => Ok(Code::KeyF),
+            'G' => Ok(Code::KeyG),
+            'H' => Ok(Code::KeyH),
+            'I' => Ok(Code::KeyI),
+            'J' => Ok(Code::KeyJ),
+            'K' => Ok(Code::KeyK),
+            'L' => Ok(Code::KeyL),
+            'M' => Ok(Code::KeyM),
+            'N' => Ok(Code::KeyN),
+            'O' => Ok(Code::KeyO),
+            'P' => Ok(Code::KeyP),
+            'Q' => Ok(Code::KeyQ),
+            'R' => Ok(Code::KeyR),
+            'S' => Ok(Code::KeyS),
+            'T' => Ok(Code::KeyT),
+            'U' => Ok(Code::KeyU),
+            'V' => Ok(Code::KeyV),
+            'W' => Ok(Code::KeyW),
+            'X' => Ok(Code::KeyX),
+            'Y' => Ok(Code::KeyY),
+            'Z' => Ok(Code::KeyZ),
+            '0' => Ok(Code::Digit0),
+            '1' => Ok(Code::Digit1),
+            '2' => Ok(Code::Digit2),
+            '3' => Ok(Code::Digit3),
+            '4' => Ok(Code::Digit4),
+            '5' => Ok(Code::Digit5),
+            '6' => Ok(Code::Digit6),
+            '7' => Ok(Code::Digit7),
+            '8' => Ok(Code::Digit8),
+            '9' => Ok(Code::Digit9),
+            other => Err(format!("Unsupported key code: '{}'", other)),
+        },
         _ => Err(format!("Unsupported key token: '{}'", token)),
     }
 }

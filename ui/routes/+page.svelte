@@ -50,6 +50,25 @@
     available_models: string[];
   };
 
+  type TranslationChunkPayload = {
+    request_id: number;
+    content: string;
+  };
+
+  type TranslationDonePayload = {
+    request_id: number;
+  };
+
+  type TranslationErrorPayload = {
+    request_id: number;
+    message: string;
+  };
+
+  type TranslationRetryPayload = {
+    request_id: number;
+    attempt: number;
+  };
+
   let config: AppConfig = $state({
     api_key: '',
     model: 'deepseek-chat',
@@ -88,6 +107,10 @@
       clearTimeout(loadingTimeoutId);
       loadingTimeoutId = null;
     }
+  }
+
+  function isCurrentRequest(requestId: number) {
+    return requestId === currentRequestId;
   }
 
   // ── Cancellation ──────────────────────────────────────────────
@@ -132,7 +155,7 @@
     } catch (e) {
       // appState may have been changed to 'error' by a translation-error event
       // during the await — avoid overwriting with a less specific message
-      if ((appState as string) !== 'error') {
+      if (isCurrentRequest(requestId) && (appState as string) !== 'error') {
         appState = 'error';
         errorMessage = String(e);
       }
@@ -147,12 +170,14 @@
     // Mid-stream language switch: cancel current and retranslate immediately
     if ((appState === 'loading' || appState === 'streaming') && sourceText) {
       await cancelCurrentTranslation();
+      currentRequestId++;
       await startTranslation();
     }
   }
 
   async function handleCancel() {
     await cancelCurrentTranslation();
+    currentRequestId++;
     // Transition to result state — partial text is preserved
     appState = translatedText ? 'result' : 'idle';
   }
@@ -160,6 +185,7 @@
   async function dismiss() {
     // Fire cancel without waiting — animate out immediately
     cancelCurrentTranslation();
+    currentRequestId++;
 
     // Animate out
     popupScale.target = 0.92;
@@ -171,6 +197,7 @@
     setTimeout(async () => {
       // Safety net: ensure cancellation completed before resetting state
       await cancelCurrentTranslation();
+      currentRequestId++;
       appState = 'idle';
       sourceText = '';
       translatedText = '';
@@ -206,6 +233,7 @@
 
       // Cancel any in-flight translation
       await cancelCurrentTranslation();
+      currentRequestId++;
 
       // Reset state
       sourceText = text;
@@ -223,18 +251,22 @@
     });
 
     // Listen for streaming chunks
-    listen<string>('translation-chunk', (event) => {
+    listen<TranslationChunkPayload>('translation-chunk', (event) => {
+      if (!isCurrentRequest(event.payload.request_id)) return;
+
       if (appState === 'loading') {
         appState = 'streaming';
         clearLoadingTimeout(); // First token arrived — no longer at risk of timeout
       }
       if (appState === 'streaming') {
-        translatedText += event.payload;
+        translatedText += event.payload.content;
       }
     });
 
     // Listen for stream completion
-    listen('translation-done', () => {
+    listen<TranslationDonePayload>('translation-done', (event) => {
+      if (!isCurrentRequest(event.payload.request_id)) return;
+
       clearLoadingTimeout();
       if (appState === 'loading' || appState === 'streaming') {
         appState = 'result';
@@ -242,10 +274,17 @@
     });
 
     // Listen for errors
-    listen<string>('translation-error', (event) => {
+    listen<TranslationErrorPayload>('translation-error', (event) => {
+      if (!isCurrentRequest(event.payload.request_id)) return;
+
       clearLoadingTimeout();
       appState = 'error';
-      errorMessage = event.payload;
+      errorMessage = event.payload.message;
+    });
+
+    // Listen for retry notifications; stale retries are ignored.
+    listen<TranslationRetryPayload>('translation-retry', (event) => {
+      if (!isCurrentRequest(event.payload.request_id)) return;
     });
 
     // Listen for window blur (focus loss) → dismiss
@@ -299,4 +338,3 @@
     />
   </div>
 </div>
-

@@ -1,7 +1,7 @@
 use crate::config::Provider;
 use futures_util::StreamExt;
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
@@ -27,12 +27,42 @@ struct StreamChunk {
     choices: Vec<StreamChoice>,
 }
 
+#[derive(Clone, Serialize)]
+struct TranslationChunkPayload {
+    request_id: u64,
+    content: String,
+}
+
+#[derive(Clone, Serialize)]
+struct TranslationDonePayload {
+    request_id: u64,
+}
+
+#[derive(Clone, Serialize)]
+struct TranslationErrorPayload {
+    request_id: u64,
+    message: String,
+}
+
+#[derive(Clone, Serialize)]
+struct TranslationRetryPayload {
+    request_id: u64,
+    attempt: u8,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum SseLine {
+    Ignore,
+    Done,
+    Chunks(Vec<String>),
+}
+
 /// Translate text using a streaming chat completions endpoint.
 /// Supports any OpenAI-compatible provider (DeepSeek, OpenRouter, Ollama).
 ///
-/// Emits `translation-chunk` events to the frontend for each token.
-/// Emits `translation-done` when the stream is complete (including on cancellation).
-/// Emits `translation-error` on failure.
+/// Emits request-scoped `translation-chunk` events to the frontend for each token.
+/// Emits request-scoped `translation-done` when the stream is complete (including on cancellation).
+/// Emits request-scoped `translation-error` on failure.
 #[tauri::command]
 pub async fn translate_text(
     app: AppHandle,
@@ -65,6 +95,7 @@ pub async fn translate_text(
         &model,
         &api_base_url,
         &provider,
+        request_id,
     )
     .await;
 
@@ -89,6 +120,7 @@ async fn translate_stream(
     model: &str,
     api_base_url: &str,
     provider: &Provider,
+    request_id: u64,
 ) -> Result<(), String> {
     let system_prompt = if source_lang == "auto" {
         format!(
@@ -117,7 +149,7 @@ async fn translate_stream(
     });
 
     let url = format!("{}/chat/completions", api_base_url.trim_end_matches('/'));
-    let max_retries = 3u8;
+    let max_retries = 3u8; // Initial request + up to 3 retries.
     let base_retry_ms = 200u64;
 
     let response = {
@@ -135,7 +167,10 @@ async fn translate_stream(
                 Provider::OpenRouter => {
                     request = request
                         .header("Authorization", format!("Bearer {}", api_key))
-                        .header("HTTP-Referer", "https://github.com/MapleAllen/Aura-Translation")
+                        .header(
+                            "HTTP-Referer",
+                            "https://github.com/MapleAllen/Aura-Translation",
+                        )
                         .header("X-Title", "Aura Translation");
                 }
                 Provider::DeepSeek => {
@@ -146,7 +181,7 @@ async fn translate_stream(
             // Check cancellation while waiting for the HTTP response
             let outcome = tokio::select! {
                 _ = &mut cancel_rx => {
-                    let _ = app.emit("translation-done", ());
+                    emit_done(app, request_id);
                     return Ok(());
                 }
                 result = request.send() => result,
@@ -161,7 +196,7 @@ async fn translate_stream(
                     let error_body = resp.text().await.unwrap_or_default();
                     let msg = format!("API error ({}): {}", status, error_body);
                     if status.is_client_error() {
-                        let _ = app.emit("translation-error", &msg);
+                        emit_error(app, request_id, &msg);
                         return Err(msg);
                     }
                     last_err = msg;
@@ -169,7 +204,7 @@ async fn translate_stream(
                 Err(e) => {
                     let msg = format!("Network error: {}", e);
                     if !e.is_connect() && !e.is_timeout() {
-                        let _ = app.emit("translation-error", &msg);
+                        emit_error(app, request_id, &msg);
                         return Err(msg);
                     }
                     last_err = msg;
@@ -177,15 +212,16 @@ async fn translate_stream(
             }
 
             if attempt >= max_retries {
+                emit_error(app, request_id, &last_err);
                 break Err(last_err);
             }
             let delay = base_retry_ms * 3u64.pow(attempt as u32);
-            let _ = app.emit("translation-retry", serde_json::json!({ "attempt": attempt + 1 }));
+            emit_retry(app, request_id, attempt + 1);
 
             // Check cancellation during the backoff delay
             tokio::select! {
                 _ = &mut cancel_rx => {
-                    let _ = app.emit("translation-done", ());
+                    emit_done(app, request_id);
                     return Ok(());
                 }
                 _ = tokio::time::sleep(tokio::time::Duration::from_millis(delay)) => {}
@@ -203,7 +239,7 @@ async fn translate_stream(
             // Check for cancellation signal
             _ = &mut cancel_rx => {
                 // Cancelled by user — emit translation-done to preserve partial text
-                let _ = app.emit("translation-done", ());
+                emit_done(app, request_id);
                 return Ok(());
             }
             // Process next SSE chunk
@@ -212,7 +248,7 @@ async fn translate_stream(
                     Some(chunk_result) => {
                         let chunk = chunk_result.map_err(|e| {
                             let msg = format!("Stream error: {}", e);
-                            let _ = app.emit("translation-error", &msg);
+                            emit_error(app, request_id, &msg);
                             msg
                         })?;
 
@@ -229,33 +265,93 @@ async fn translate_stream(
                                 continue;
                             }
 
-                            if line == "data: [DONE]" {
-                                let _ = app.emit("translation-done", ());
-                                return Ok(());
-                            }
-
-                            if let Some(json_str) = line.strip_prefix("data: ") {
-                                if let Ok(parsed) = serde_json::from_str::<StreamChunk>(json_str) {
-                                    for choice in &parsed.choices {
-                                        if let Some(content) = &choice.delta.content {
-                                            if !content.is_empty() {
-                                                let _ = app.emit("translation-chunk", content.clone());
-                                            }
-                                        }
+                            match parse_sse_line(&line) {
+                                Ok(SseLine::Ignore) => {}
+                                Ok(SseLine::Done) => {
+                                    emit_done(app, request_id);
+                                    return Ok(());
+                                }
+                                Ok(SseLine::Chunks(contents)) => {
+                                    for content in contents {
+                                        emit_chunk(app, request_id, content);
                                     }
+                                }
+                                Err(msg) => {
+                                    emit_error(app, request_id, &msg);
+                                    return Err(msg);
                                 }
                             }
                         }
                     }
                     None => {
                         // Stream ended without [DONE] sentinel
-                        let _ = app.emit("translation-done", ());
+                        emit_done(app, request_id);
                         return Ok(());
                     }
                 }
             }
         }
     }
+}
+
+fn parse_sse_line(line: &str) -> Result<SseLine, String> {
+    if line.is_empty() {
+        return Ok(SseLine::Ignore);
+    }
+
+    if line == "data: [DONE]" {
+        return Ok(SseLine::Done);
+    }
+
+    let Some(json_str) = line.strip_prefix("data: ") else {
+        return Ok(SseLine::Ignore);
+    };
+
+    let parsed = serde_json::from_str::<StreamChunk>(json_str)
+        .map_err(|e| format!("Malformed SSE data: {}", e))?;
+
+    let contents = parsed
+        .choices
+        .into_iter()
+        .filter_map(|choice| choice.delta.content)
+        .filter(|content| !content.is_empty())
+        .collect();
+
+    Ok(SseLine::Chunks(contents))
+}
+
+fn emit_chunk(app: &AppHandle, request_id: u64, content: String) {
+    let _ = app.emit(
+        "translation-chunk",
+        TranslationChunkPayload {
+            request_id,
+            content,
+        },
+    );
+}
+
+fn emit_done(app: &AppHandle, request_id: u64) {
+    let _ = app.emit("translation-done", TranslationDonePayload { request_id });
+}
+
+fn emit_error(app: &AppHandle, request_id: u64, message: &str) {
+    let _ = app.emit(
+        "translation-error",
+        TranslationErrorPayload {
+            request_id,
+            message: message.to_string(),
+        },
+    );
+}
+
+fn emit_retry(app: &AppHandle, request_id: u64, attempt: u8) {
+    let _ = app.emit(
+        "translation-retry",
+        TranslationRetryPayload {
+            request_id,
+            attempt,
+        },
+    );
 }
 
 /// Cancel an in-flight translation request by its ID.
@@ -273,4 +369,52 @@ pub async fn cancel_translate(
         let _ = sender.send(());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_valid_sse_chunk() {
+        let line = r#"data: {"choices":[{"delta":{"content":"hello"}}]}"#;
+        let parsed = parse_sse_line(line).expect("valid SSE should parse");
+        assert_eq!(parsed, SseLine::Chunks(vec!["hello".to_string()]));
+    }
+
+    #[test]
+    fn parses_done_sentinel() {
+        let parsed = parse_sse_line("data: [DONE]").expect("DONE should parse");
+        assert_eq!(parsed, SseLine::Done);
+    }
+
+    #[test]
+    fn ignores_empty_content_and_non_data_lines() {
+        let empty = r#"data: {"choices":[{"delta":{"content":""}}]}"#;
+        assert_eq!(
+            parse_sse_line(empty).expect("empty content JSON is valid"),
+            SseLine::Chunks(Vec::new())
+        );
+        assert_eq!(
+            parse_sse_line(": keep-alive").expect("comments are ignored"),
+            SseLine::Ignore
+        );
+    }
+
+    #[test]
+    fn rejects_malformed_data_json() {
+        let err = parse_sse_line(r#"data: {"choices":["#).expect_err("malformed JSON should fail");
+        assert!(err.starts_with("Malformed SSE data:"));
+    }
+
+    #[test]
+    fn parses_crlf_normalized_line() {
+        let raw = "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\r\n";
+        let line = raw.replace('\r', "");
+        let line = line.trim();
+        assert_eq!(
+            parse_sse_line(line).expect("CRLF-normalized line should parse"),
+            SseLine::Chunks(vec!["ok".to_string()])
+        );
+    }
 }

@@ -25,10 +25,9 @@ impl Provider {
     /// Returns the default model list for this provider.
     pub fn default_models(&self) -> Vec<String> {
         match self {
-            Provider::DeepSeek => vec![
-                "deepseek-chat".to_string(),
-                "deepseek-reasoner".to_string(),
-            ],
+            Provider::DeepSeek => {
+                vec!["deepseek-chat".to_string(), "deepseek-reasoner".to_string()]
+            }
             Provider::OpenRouter => vec![
                 "mistralai/mistral-7b-instruct".to_string(),
                 "google/gemma-3-27b-it".to_string(),
@@ -256,8 +255,17 @@ mod tests {
 
     #[test]
     fn provider_default_base_urls_are_correct() {
-        assert_eq!(Provider::DeepSeek.default_base_url(), "https://api.deepseek.com");
-        assert_eq!(Provider::OpenRouter.default_base_url(), "https://openrouter.ai/api");
-        assert_eq!(Provider::Ollama.default_base_url(), "http://localhost:11434");
+        assert_eq!(
+            Provider::DeepSeek.default_base_url(),
+            "https://api.deepseek.com"
+        );
+        assert_eq!(
+            Provider::OpenRouter.default_base_url(),
+            "https://openrouter.ai/api"
+        );
+        assert_eq!(
+            Provider::Ollama.default_base_url(),
+            "http://localhost:11434"
+        );
     }
 }
