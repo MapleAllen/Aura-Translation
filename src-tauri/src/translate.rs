@@ -1,6 +1,9 @@
 use crate::config::Provider;
 use futures_util::StreamExt;
-use reqwest::Client;
+use reqwest::{
+    header::{HeaderName, HeaderValue},
+    Client, StatusCode,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -57,6 +60,80 @@ enum SseLine {
     Chunks(Vec<String>),
 }
 
+#[derive(Clone, Copy)]
+struct RetryConfig {
+    max_retries: u8,
+    base_retry_ms: u64,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            base_retry_ms: 200,
+        }
+    }
+}
+
+struct TranslationRequest<'a> {
+    text: &'a str,
+    source_lang: &'a str,
+    target_lang: &'a str,
+    api_key: &'a str,
+    model: &'a str,
+    api_base_url: &'a str,
+    provider: &'a Provider,
+}
+
+trait TranslationEventSink {
+    fn emit_chunk(&mut self, request_id: u64, content: String);
+    fn emit_done(&mut self, request_id: u64);
+    fn emit_error(&mut self, request_id: u64, message: String);
+    fn emit_retry(&mut self, request_id: u64, attempt: u8);
+}
+
+struct TauriEventSink<'a> {
+    app: &'a AppHandle,
+}
+
+impl TranslationEventSink for TauriEventSink<'_> {
+    fn emit_chunk(&mut self, request_id: u64, content: String) {
+        let _ = self.app.emit(
+            "translation-chunk",
+            TranslationChunkPayload {
+                request_id,
+                content,
+            },
+        );
+    }
+
+    fn emit_done(&mut self, request_id: u64) {
+        let _ = self
+            .app
+            .emit("translation-done", TranslationDonePayload { request_id });
+    }
+
+    fn emit_error(&mut self, request_id: u64, message: String) {
+        let _ = self.app.emit(
+            "translation-error",
+            TranslationErrorPayload {
+                request_id,
+                message,
+            },
+        );
+    }
+
+    fn emit_retry(&mut self, request_id: u64, attempt: u8) {
+        let _ = self.app.emit(
+            "translation-retry",
+            TranslationRetryPayload {
+                request_id,
+                attempt,
+            },
+        );
+    }
+}
+
 /// Translate text using a streaming chat completions endpoint.
 /// Supports any OpenAI-compatible provider (DeepSeek, OpenRouter, Ollama).
 ///
@@ -84,18 +161,24 @@ pub async fn translate_text(
         reg.insert(request_id, cancel_tx);
     }
 
-    let result = translate_stream(
-        &app,
+    let request = TranslationRequest {
+        text: &text,
+        source_lang: &source_lang,
+        target_lang: &target_lang,
+        api_key: &api_key,
+        model: &model,
+        api_base_url: &api_base_url,
+        provider: &provider,
+    };
+
+    let mut sink = TauriEventSink { app: &app };
+    let result = translate_stream_with_sink(
+        &mut sink,
         &client,
         cancel_rx,
-        &text,
-        &source_lang,
-        &target_lang,
-        &api_key,
-        &model,
-        &api_base_url,
-        &provider,
+        request,
         request_id,
+        RetryConfig::default(),
     )
     .await;
 
@@ -109,85 +192,44 @@ pub async fn translate_text(
 }
 
 /// Internal streaming logic, separated to cleanly handle cancellation cleanup.
-async fn translate_stream(
-    app: &AppHandle,
+async fn translate_stream_with_sink<S: TranslationEventSink>(
+    sink: &mut S,
     client: &Client,
     mut cancel_rx: oneshot::Receiver<()>,
-    text: &str,
-    source_lang: &str,
-    target_lang: &str,
-    api_key: &str,
-    model: &str,
-    api_base_url: &str,
-    provider: &Provider,
+    request: TranslationRequest<'_>,
     request_id: u64,
+    retry_config: RetryConfig,
 ) -> Result<(), String> {
-    let system_prompt = if source_lang == "auto" {
-        format!(
-            "You are a professional translator. Auto-detect the source language of the following text \
-             and translate it into {}. Output ONLY the translated text, nothing else. \
-             Do not add any explanations, notes, or quotation marks.",
-            target_lang
-        )
-    } else {
-        format!(
-            "You are a professional translator. Translate the following text from {} to {}. \
-             Output ONLY the translated text, nothing else. \
-             Do not add any explanations, notes, or quotation marks.",
-            source_lang, target_lang
-        )
-    };
-
-    let body = serde_json::json!({
-        "model": model,
-        "messages": [
-            { "role": "system", "content": system_prompt },
-            { "role": "user", "content": text }
-        ],
-        "temperature": 0.3,
-        "stream": true
-    });
-
-    let url = format!("{}/chat/completions", api_base_url.trim_end_matches('/'));
-    let max_retries = 3u8; // Initial request + up to 3 retries.
-    let base_retry_ms = 200u64;
+    let body = build_chat_request_body(&request);
+    let url = build_chat_completions_url(request.api_base_url);
 
     let response = {
-        #[allow(unused_assignments)]
-        let mut last_err = String::new();
         let mut attempt = 0;
         loop {
-            let mut request = client
-                .post(&url)
-                .header("Content-Type", "application/json")
-                .json(&body);
+            let headers = match provider_headers(request.provider, request.api_key) {
+                Ok(headers) => headers,
+                Err(err) => {
+                    sink.emit_error(request_id, err.clone());
+                    return Err(err);
+                }
+            };
 
-            match provider {
-                Provider::Ollama => {}
-                Provider::OpenRouter => {
-                    request = request
-                        .header("Authorization", format!("Bearer {}", api_key))
-                        .header(
-                            "HTTP-Referer",
-                            "https://github.com/MapleAllen/Aura-Translation",
-                        )
-                        .header("X-Title", "Aura Translation");
-                }
-                Provider::DeepSeek => {
-                    request = request.header("Authorization", format!("Bearer {}", api_key));
-                }
+            let mut http_request = client.post(&url).header("Content-Type", "application/json");
+            for (name, value) in headers {
+                http_request = http_request.header(name, value);
             }
+            http_request = http_request.json(&body);
 
             // Check cancellation while waiting for the HTTP response
             let outcome = tokio::select! {
                 _ = &mut cancel_rx => {
-                    emit_done(app, request_id);
+                    sink.emit_done(request_id);
                     return Ok(());
                 }
-                result = request.send() => result,
+                result = http_request.send() => result,
             };
 
-            match outcome {
+            let failure = match outcome {
                 Ok(resp) => {
                     if resp.status().is_success() {
                         break Ok(resp);
@@ -195,33 +237,34 @@ async fn translate_stream(
                     let status = resp.status();
                     let error_body = resp.text().await.unwrap_or_default();
                     let msg = format!("API error ({}): {}", status, error_body);
-                    if status.is_client_error() {
-                        emit_error(app, request_id, &msg);
+                    if !is_retryable_status(status) {
+                        sink.emit_error(request_id, msg.clone());
                         return Err(msg);
                     }
-                    last_err = msg;
+                    msg
                 }
-                Err(e) => {
-                    let msg = format!("Network error: {}", e);
-                    if !e.is_connect() && !e.is_timeout() {
-                        emit_error(app, request_id, &msg);
+                Err(err) => {
+                    let msg = format!("Network error: {}", err);
+                    if !is_retryable_transport_error(&err) {
+                        sink.emit_error(request_id, msg.clone());
                         return Err(msg);
                     }
-                    last_err = msg;
+                    msg
                 }
+            };
+
+            if attempt >= retry_config.max_retries {
+                sink.emit_error(request_id, failure.clone());
+                break Err(failure);
             }
 
-            if attempt >= max_retries {
-                emit_error(app, request_id, &last_err);
-                break Err(last_err);
-            }
-            let delay = base_retry_ms * 3u64.pow(attempt as u32);
-            emit_retry(app, request_id, attempt + 1);
+            let delay = retry_config.base_retry_ms * 3u64.pow(attempt as u32);
+            sink.emit_retry(request_id, attempt + 1);
 
             // Check cancellation during the backoff delay
             tokio::select! {
                 _ = &mut cancel_rx => {
-                    emit_done(app, request_id);
+                    sink.emit_done(request_id);
                     return Ok(());
                 }
                 _ = tokio::time::sleep(tokio::time::Duration::from_millis(delay)) => {}
@@ -238,17 +281,16 @@ async fn translate_stream(
         tokio::select! {
             // Check for cancellation signal
             _ = &mut cancel_rx => {
-                // Cancelled by user — emit translation-done to preserve partial text
-                emit_done(app, request_id);
+                sink.emit_done(request_id);
                 return Ok(());
             }
             // Process next SSE chunk
             chunk_opt = stream.next() => {
                 match chunk_opt {
                     Some(chunk_result) => {
-                        let chunk = chunk_result.map_err(|e| {
-                            let msg = format!("Stream error: {}", e);
-                            emit_error(app, request_id, &msg);
+                        let chunk = chunk_result.map_err(|err| {
+                            let msg = format!("Stream error: {}", err);
+                            sink.emit_error(request_id, msg.clone());
                             msg
                         })?;
 
@@ -268,16 +310,16 @@ async fn translate_stream(
                             match parse_sse_line(&line) {
                                 Ok(SseLine::Ignore) => {}
                                 Ok(SseLine::Done) => {
-                                    emit_done(app, request_id);
+                                    sink.emit_done(request_id);
                                     return Ok(());
                                 }
                                 Ok(SseLine::Chunks(contents)) => {
                                     for content in contents {
-                                        emit_chunk(app, request_id, content);
+                                        sink.emit_chunk(request_id, content);
                                     }
                                 }
                                 Err(msg) => {
-                                    emit_error(app, request_id, &msg);
+                                    sink.emit_error(request_id, msg.clone());
                                     return Err(msg);
                                 }
                             }
@@ -285,13 +327,83 @@ async fn translate_stream(
                     }
                     None => {
                         // Stream ended without [DONE] sentinel
-                        emit_done(app, request_id);
+                        sink.emit_done(request_id);
                         return Ok(());
                     }
                 }
             }
         }
     }
+}
+
+fn build_chat_request_body(request: &TranslationRequest<'_>) -> serde_json::Value {
+    let system_prompt = build_system_prompt(request.source_lang, request.target_lang);
+    serde_json::json!({
+        "model": request.model,
+        "messages": [
+            { "role": "system", "content": system_prompt },
+            { "role": "user", "content": request.text }
+        ],
+        "temperature": 0.3,
+        "stream": true
+    })
+}
+
+fn build_system_prompt(source_lang: &str, target_lang: &str) -> String {
+    if source_lang == "auto" {
+        format!(
+            "You are a professional translator. Auto-detect the source language of the following text \
+             and translate it into {}. Output ONLY the translated text, nothing else. \
+             Do not add any explanations, notes, or quotation marks.",
+            target_lang
+        )
+    } else {
+        format!(
+            "You are a professional translator. Translate the following text from {} to {}. \
+             Output ONLY the translated text, nothing else. \
+             Do not add any explanations, notes, or quotation marks.",
+            source_lang, target_lang
+        )
+    }
+}
+
+fn build_chat_completions_url(api_base_url: &str) -> String {
+    format!("{}/chat/completions", api_base_url.trim_end_matches('/'))
+}
+
+fn provider_headers(
+    provider: &Provider,
+    api_key: &str,
+) -> Result<Vec<(HeaderName, HeaderValue)>, String> {
+    match provider {
+        Provider::Ollama => Ok(Vec::new()),
+        Provider::DeepSeek => Ok(vec![authorization_header(api_key)?]),
+        Provider::OpenRouter => Ok(vec![
+            authorization_header(api_key)?,
+            (
+                HeaderName::from_static("http-referer"),
+                HeaderValue::from_static("https://github.com/MapleAllen/Aura-Translation"),
+            ),
+            (
+                HeaderName::from_static("x-title"),
+                HeaderValue::from_static("Aura Translation"),
+            ),
+        ]),
+    }
+}
+
+fn authorization_header(api_key: &str) -> Result<(HeaderName, HeaderValue), String> {
+    let value = HeaderValue::from_str(&format!("Bearer {}", api_key))
+        .map_err(|err| format!("Invalid API key header: {}", err))?;
+    Ok((HeaderName::from_static("authorization"), value))
+}
+
+fn is_retryable_status(status: StatusCode) -> bool {
+    status.is_server_error()
+}
+
+fn is_retryable_transport_error(err: &reqwest::Error) -> bool {
+    err.is_connect() || err.is_timeout()
 }
 
 fn parse_sse_line(line: &str) -> Result<SseLine, String> {
@@ -320,40 +432,6 @@ fn parse_sse_line(line: &str) -> Result<SseLine, String> {
     Ok(SseLine::Chunks(contents))
 }
 
-fn emit_chunk(app: &AppHandle, request_id: u64, content: String) {
-    let _ = app.emit(
-        "translation-chunk",
-        TranslationChunkPayload {
-            request_id,
-            content,
-        },
-    );
-}
-
-fn emit_done(app: &AppHandle, request_id: u64) {
-    let _ = app.emit("translation-done", TranslationDonePayload { request_id });
-}
-
-fn emit_error(app: &AppHandle, request_id: u64, message: &str) {
-    let _ = app.emit(
-        "translation-error",
-        TranslationErrorPayload {
-            request_id,
-            message: message.to_string(),
-        },
-    );
-}
-
-fn emit_retry(app: &AppHandle, request_id: u64, attempt: u8) {
-    let _ = app.emit(
-        "translation-retry",
-        TranslationRetryPayload {
-            request_id,
-            attempt,
-        },
-    );
-}
-
 /// Cancel an in-flight translation request by its ID.
 /// Sends the cancellation signal; the stream loop will emit translation-done
 /// with whatever partial text has already been sent.
@@ -374,6 +452,111 @@ pub async fn cancel_translate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::VecDeque;
+    use std::sync::{Arc, Mutex as StdMutex};
+    use std::time::Duration;
+    use tokio::sync::oneshot;
+    use wiremock::{
+        matchers::{header, method, path},
+        Mock, MockServer, Request, Respond, ResponseTemplate,
+    };
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum CapturedEvent {
+        Chunk(String),
+        Done,
+        Error(String),
+        Retry(u8),
+    }
+
+    #[derive(Default)]
+    struct TestSink {
+        events: Vec<CapturedEvent>,
+    }
+
+    impl TranslationEventSink for TestSink {
+        fn emit_chunk(&mut self, _request_id: u64, content: String) {
+            self.events.push(CapturedEvent::Chunk(content));
+        }
+
+        fn emit_done(&mut self, _request_id: u64) {
+            self.events.push(CapturedEvent::Done);
+        }
+
+        fn emit_error(&mut self, _request_id: u64, message: String) {
+            self.events.push(CapturedEvent::Error(message));
+        }
+
+        fn emit_retry(&mut self, _request_id: u64, attempt: u8) {
+            self.events.push(CapturedEvent::Retry(attempt));
+        }
+    }
+
+    #[derive(Clone)]
+    struct SequenceResponder {
+        responses: Arc<StdMutex<VecDeque<ResponseTemplate>>>,
+    }
+
+    impl SequenceResponder {
+        fn new(responses: Vec<ResponseTemplate>) -> Self {
+            Self {
+                responses: Arc::new(StdMutex::new(responses.into())),
+            }
+        }
+    }
+
+    impl Respond for SequenceResponder {
+        fn respond(&self, _request: &Request) -> ResponseTemplate {
+            let mut responses = self.responses.lock().unwrap();
+            if responses.len() > 1 {
+                responses.pop_front().unwrap()
+            } else {
+                responses.front().cloned().unwrap()
+            }
+        }
+    }
+
+    fn sse_body(content: &str) -> String {
+        format!(
+            "data: {{\"choices\":[{{\"delta\":{{\"content\":\"{}\"}}}}]}}\n\ndata: [DONE]\n",
+            content
+        )
+    }
+
+    fn test_request<'a>(
+        api_base_url: &'a str,
+        provider: &'a Provider,
+        api_key: &'a str,
+    ) -> TranslationRequest<'a> {
+        TranslationRequest {
+            text: "hello",
+            source_lang: "English",
+            target_lang: "Chinese",
+            api_key,
+            model: "test-model",
+            api_base_url,
+            provider,
+        }
+    }
+
+    async fn run_request(
+        sink: &mut TestSink,
+        api_base_url: &str,
+        provider: &Provider,
+        api_key: &str,
+        retry_config: RetryConfig,
+    ) -> Result<(), String> {
+        let (_cancel_tx, cancel_rx) = oneshot::channel();
+        translate_stream_with_sink(
+            sink,
+            &Client::new(),
+            cancel_rx,
+            test_request(api_base_url, provider, api_key),
+            42,
+            retry_config,
+        )
+        .await
+    }
 
     #[test]
     fn parses_valid_sse_chunk() {
@@ -416,5 +599,250 @@ mod tests {
             parse_sse_line(line).expect("CRLF-normalized line should parse"),
             SseLine::Chunks(vec!["ok".to_string()])
         );
+    }
+
+    #[test]
+    fn trims_trailing_slash_from_base_url() {
+        assert_eq!(
+            build_chat_completions_url("http://localhost:11434/"),
+            "http://localhost:11434/chat/completions"
+        );
+    }
+
+    #[test]
+    fn openrouter_headers_include_referer_and_title() {
+        let headers = provider_headers(&Provider::OpenRouter, "sk-openrouter").unwrap();
+        assert_eq!(headers.len(), 3);
+        assert_eq!(headers[0].0, HeaderName::from_static("authorization"));
+        assert_eq!(headers[1].0, HeaderName::from_static("http-referer"));
+        assert_eq!(headers[2].0, HeaderName::from_static("x-title"));
+    }
+
+    #[tokio::test]
+    async fn deepseek_requests_use_bearer_auth() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .and(header("authorization", "Bearer sk-deepseek"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(sse_body("你好")))
+            .mount(&server)
+            .await;
+
+        let mut sink = TestSink::default();
+        run_request(
+            &mut sink,
+            &server.uri(),
+            &Provider::DeepSeek,
+            "sk-deepseek",
+            RetryConfig {
+                max_retries: 0,
+                base_retry_ms: 1,
+            },
+        )
+        .await
+        .expect("deepseek request should succeed");
+
+        assert_eq!(
+            sink.events,
+            vec![CapturedEvent::Chunk("你好".into()), CapturedEvent::Done]
+        );
+    }
+
+    #[tokio::test]
+    async fn openrouter_requests_include_required_headers() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .and(header("authorization", "Bearer sk-openrouter"))
+            .and(header(
+                "http-referer",
+                "https://github.com/MapleAllen/Aura-Translation",
+            ))
+            .and(header("x-title", "Aura Translation"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(sse_body("hola")))
+            .mount(&server)
+            .await;
+
+        let mut sink = TestSink::default();
+        run_request(
+            &mut sink,
+            &server.uri(),
+            &Provider::OpenRouter,
+            "sk-openrouter",
+            RetryConfig {
+                max_retries: 0,
+                base_retry_ms: 1,
+            },
+        )
+        .await
+        .expect("openrouter request should succeed");
+
+        assert_eq!(
+            sink.events,
+            vec![CapturedEvent::Chunk("hola".into()), CapturedEvent::Done]
+        );
+    }
+
+    #[tokio::test]
+    async fn ollama_requests_do_not_send_auth_headers() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(sse_body("bonjour")))
+            .mount(&server)
+            .await;
+
+        let mut sink = TestSink::default();
+        run_request(
+            &mut sink,
+            &server.uri(),
+            &Provider::Ollama,
+            "",
+            RetryConfig {
+                max_retries: 0,
+                base_retry_ms: 1,
+            },
+        )
+        .await
+        .expect("ollama request should succeed");
+
+        let requests = server.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 1);
+        assert!(!requests[0].headers.contains_key("authorization"));
+        assert_eq!(
+            sink.events,
+            vec![CapturedEvent::Chunk("bonjour".into()), CapturedEvent::Done]
+        );
+    }
+
+    #[tokio::test]
+    async fn client_errors_do_not_retry() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(401).set_body_string("bad key"))
+            .mount(&server)
+            .await;
+
+        let mut sink = TestSink::default();
+        let result = run_request(
+            &mut sink,
+            &server.uri(),
+            &Provider::DeepSeek,
+            "sk-bad",
+            RetryConfig {
+                max_retries: 3,
+                base_retry_ms: 1,
+            },
+        )
+        .await;
+
+        assert!(result.is_err());
+        let requests = server.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(sink.events.len(), 1);
+        assert!(matches!(sink.events[0], CapturedEvent::Error(_)));
+        assert!(!sink.events.iter().any(|event| matches!(event, CapturedEvent::Retry(_))));
+    }
+
+    #[tokio::test]
+    async fn server_errors_retry_before_success() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(SequenceResponder::new(vec![
+                ResponseTemplate::new(500).set_body_string("temporary"),
+                ResponseTemplate::new(502).set_body_string("temporary"),
+                ResponseTemplate::new(200).set_body_string(sse_body("重试成功")),
+            ]))
+            .mount(&server)
+            .await;
+
+        let mut sink = TestSink::default();
+        run_request(
+            &mut sink,
+            &server.uri(),
+            &Provider::DeepSeek,
+            "sk-ok",
+            RetryConfig {
+                max_retries: 3,
+                base_retry_ms: 1,
+            },
+        )
+        .await
+        .expect("request should eventually succeed");
+
+        let requests = server.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 3);
+        assert_eq!(
+            sink.events,
+            vec![
+                CapturedEvent::Retry(1),
+                CapturedEvent::Retry(2),
+                CapturedEvent::Chunk("重试成功".into()),
+                CapturedEvent::Done
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn cancellation_emits_done_without_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_delay(Duration::from_millis(250))
+                    .set_body_string(sse_body("should-not-arrive")),
+            )
+            .mount(&server)
+            .await;
+
+        let mut sink = TestSink::default();
+        let (cancel_tx, cancel_rx) = oneshot::channel();
+        let cancel_task = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+            let _ = cancel_tx.send(());
+        });
+
+        let result = translate_stream_with_sink(
+            &mut sink,
+            &Client::new(),
+            cancel_rx,
+            test_request(&server.uri(), &Provider::DeepSeek, "sk-cancel"),
+            7,
+            RetryConfig {
+                max_retries: 0,
+                base_retry_ms: 1,
+            },
+        )
+        .await;
+
+        cancel_task.await.unwrap();
+        assert!(result.is_ok());
+        assert_eq!(sink.events, vec![CapturedEvent::Done]);
+    }
+
+    #[tokio::test]
+    async fn malformed_sse_surfaces_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("data: {\"choices\":[\n"))
+            .mount(&server)
+            .await;
+
+        let mut sink = TestSink::default();
+        let result = run_request(
+            &mut sink,
+            &server.uri(),
+            &Provider::DeepSeek,
+            "sk-bad-stream",
+            RetryConfig {
+                max_retries: 0,
+                base_retry_ms: 1,
+            },
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert_eq!(sink.events.len(), 1);
+        assert!(matches!(sink.events[0], CapturedEvent::Error(_)));
     }
 }
