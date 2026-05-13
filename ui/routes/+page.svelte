@@ -1,14 +1,6 @@
 <script lang="ts">
   /**
-   * +page.svelte — Root page orchestrating the popup lifecycle.
-   *
-   * Lifecycle:
-   * 1. Daemon: hidden, waiting for hotkey
-   * 2. Trigger: hotkey → read clipboard → spring popup in (overshoot)
-   * 3. Loading: skeleton loader pulsates
-   * 4. Streaming: tokens flow in one-by-one
-   * 5. Result: full text displayed
-   * 6. Dismiss: Esc/blur → shrink+fade → hide window
+   * +page.svelte - Root page orchestrating the popup lifecycle.
    */
   import { Spring } from 'svelte/motion';
   import { listen } from '@tauri-apps/api/event';
@@ -16,29 +8,35 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import TranslationPopup from '$lib/TranslationPopup.svelte';
   import SettingsPanel from '$lib/SettingsPanel.svelte';
+  import NotificationCenter from '$lib/NotificationCenter.svelte';
+  import {
+    createDaemonErrorNotification,
+    createHotkeyConflictNotification,
+    createTranslationErrorNotification,
+    formatTranslationError,
+    type AppNotification,
+    type DaemonErrorPayload,
+    type HotkeyConflictPayload,
+  } from '$lib/notifications';
   import { onMount } from 'svelte';
 
-  // ── State ──────────────────────────────────────────────────────
   let appState: 'idle' | 'loading' | 'streaming' | 'result' | 'error' = $state('idle');
   let sourceText = $state('');
   let translatedText = $state('');
   let errorMessage = $state('');
   let showSettings = $state(false);
+  let notifications = $state<AppNotification[]>([]);
+  let hotkeyConflictMessage = $state('');
 
-  // Language pair (persisted via config)
   let sourceLang = $state('auto');
   let targetLang = $state('Chinese');
 
-  // Request lifecycle — monotonically incrementing ID for cancellation
   let currentRequestId = $state(0);
   let loadingTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-  // ── Spring Animations ─────────────────────────────────────────
-  // Haptic popup: overshoot past 1.0 then settle
   const popupScale = new Spring(0.92, { stiffness: 0.14, damping: 0.68 });
   const popupOpacity = new Spring(0, { stiffness: 0.18, damping: 0.82 });
 
-  // ── Config ────────────────────────────────────────────────────
   type AppConfig = {
     api_key: string;
     model: string;
@@ -80,6 +78,28 @@
     available_models: ['deepseek-chat', 'deepseek-reasoner'],
   });
 
+  function pushNotification(notification: AppNotification) {
+    notifications = [notification, ...notifications.filter((item) => item.scope !== notification.scope)]
+      .slice(0, 3);
+  }
+
+  function dismissNotification(id: string) {
+    notifications = notifications.filter((item) => item.id !== id);
+  }
+
+  function clearSettingsWarnings() {
+    hotkeyConflictMessage = '';
+    notifications = notifications.filter((item) => item.scope !== 'settings');
+  }
+
+  function showTranslationFailure(rawMessage: unknown) {
+    const message = formatTranslationError(rawMessage);
+    clearLoadingTimeout();
+    appState = 'error';
+    errorMessage = message;
+    pushNotification(createTranslationErrorNotification(message));
+  }
+
   async function loadConfig() {
     try {
       const loaded = await invoke<AppConfig>('get_config');
@@ -88,16 +108,21 @@
       targetLang = config.target_lang;
     } catch (e) {
       console.error('Failed to load config:', e);
+      pushNotification(
+        createDaemonErrorNotification({
+          code: 'config-load-failed',
+          message: 'Failed to load the local Aura config from the desktop backend.',
+          recoverable: true,
+        }),
+      );
     }
   }
 
-  // ── Loading Timeout ────────────────────────────────────────────
   function startLoadingTimeout() {
     clearLoadingTimeout();
     loadingTimeoutId = setTimeout(() => {
       if (appState === 'loading') {
-        appState = 'error';
-        errorMessage = 'No response from API (timeout)';
+        showTranslationFailure('No response from API (timeout)');
       }
     }, 20_000);
   }
@@ -113,7 +138,6 @@
     return requestId === currentRequestId;
   }
 
-  // ── Cancellation ──────────────────────────────────────────────
   async function cancelCurrentTranslation() {
     if (currentRequestId > 0) {
       try {
@@ -125,11 +149,9 @@
     clearLoadingTimeout();
   }
 
-  /** Start a new translation with the current sourceText and language pair. */
   async function startTranslation() {
     if (config.provider !== 'ollama' && !config.api_key) {
-      appState = 'error';
-      errorMessage = 'No API key configured. Right-click the tray icon → Settings.';
+      showTranslationFailure('No API key configured. Right-click the tray icon -> Settings.');
       return;
     }
 
@@ -144,30 +166,25 @@
     try {
       await invoke('translate_text', {
         text: sourceText,
-        sourceLang: sourceLang,
-        targetLang: targetLang,
+        sourceLang,
+        targetLang,
         apiKey: config.api_key,
         model: config.model,
-        requestId: requestId,
+        requestId,
         apiBaseUrl: config.api_base_url,
         provider: config.provider,
       });
     } catch (e) {
-      // appState may have been changed to 'error' by a translation-error event
-      // during the await — avoid overwriting with a less specific message
-      if (isCurrentRequest(requestId) && (appState as string) !== 'error') {
-        appState = 'error';
-        errorMessage = String(e);
+      if (isCurrentRequest(requestId) && errorMessage === '') {
+        showTranslationFailure(e);
       }
     }
   }
 
-  // ── Event Handlers ────────────────────────────────────────────
   async function handleLanguageChange(source: string, target: string) {
     sourceLang = source;
     targetLang = target;
 
-    // Mid-stream language switch: cancel current and retranslate immediately
     if ((appState === 'loading' || appState === 'streaming') && sourceText) {
       await cancelCurrentTranslation();
       currentRequestId++;
@@ -178,24 +195,19 @@
   async function handleCancel() {
     await cancelCurrentTranslation();
     currentRequestId++;
-    // Transition to result state — partial text is preserved
     appState = translatedText ? 'result' : 'idle';
   }
 
   async function dismiss() {
-    // Fire cancel without waiting — animate out immediately
-    cancelCurrentTranslation();
+    void cancelCurrentTranslation();
     currentRequestId++;
 
-    // Animate out
     popupScale.target = 0.92;
     popupOpacity.target = 0;
 
     clearLoadingTimeout();
 
-    // Wait for animation, then hide window
     setTimeout(async () => {
-      // Safety net: ensure cancellation completed before resetting state
       await cancelCurrentTranslation();
       currentRequestId++;
       appState = 'idle';
@@ -217,110 +229,135 @@
       if (showSettings) {
         showSettings = false;
       } else {
-        dismiss();
+        void dismiss();
       }
     }
   }
 
-  // ── Lifecycle ─────────────────────────────────────────────────
   onMount(() => {
-    loadConfig();
+    void loadConfig();
 
-    // Listen for translation trigger from Rust
-    listen<string>('trigger-translate', async (event) => {
-      const text = event.payload;
-      if (!text || !text.trim()) return;
+    const unlisteners: Array<() => void> = [];
 
-      // Cancel any in-flight translation
-      await cancelCurrentTranslation();
-      currentRequestId++;
+    const register = async () => {
+      unlisteners.push(
+        await listen<string>('trigger-translate', async (event) => {
+          const text = event.payload;
+          if (!text || !text.trim()) return;
 
-      // Reset state
-      sourceText = text;
-      showSettings = false;
+          await cancelCurrentTranslation();
+          currentRequestId++;
 
-      // Spring popup in (haptic overshoot effect)
-      popupScale.target = 1;
-      popupOpacity.target = 1;
+          sourceText = text;
+          showSettings = false;
 
-      // Reload config to get latest API key
-      await loadConfig();
+          popupScale.target = 1;
+          popupOpacity.target = 1;
 
-      // Start streaming translation
-      await startTranslation();
-    });
+          await loadConfig();
+          await startTranslation();
+        }),
+      );
 
-    // Listen for streaming chunks
-    listen<TranslationChunkPayload>('translation-chunk', (event) => {
-      if (!isCurrentRequest(event.payload.request_id)) return;
+      unlisteners.push(
+        await listen<TranslationChunkPayload>('translation-chunk', (event) => {
+          if (!isCurrentRequest(event.payload.request_id)) return;
 
-      if (appState === 'loading') {
-        appState = 'streaming';
-        clearLoadingTimeout(); // First token arrived — no longer at risk of timeout
+          if (appState === 'loading') {
+            appState = 'streaming';
+            clearLoadingTimeout();
+          }
+          if (appState === 'streaming') {
+            translatedText += event.payload.content;
+          }
+        }),
+      );
+
+      unlisteners.push(
+        await listen<TranslationDonePayload>('translation-done', (event) => {
+          if (!isCurrentRequest(event.payload.request_id)) return;
+
+          clearLoadingTimeout();
+          if (appState === 'loading' || appState === 'streaming') {
+            appState = 'result';
+          }
+        }),
+      );
+
+      unlisteners.push(
+        await listen<TranslationErrorPayload>('translation-error', (event) => {
+          if (!isCurrentRequest(event.payload.request_id)) return;
+          showTranslationFailure(event.payload.message);
+        }),
+      );
+
+      unlisteners.push(
+        await listen<TranslationRetryPayload>('translation-retry', (event) => {
+          if (!isCurrentRequest(event.payload.request_id)) return;
+          console.warn('Retrying translation request', event.payload);
+        }),
+      );
+
+      unlisteners.push(
+        await listen('window-blur', () => {
+          if (!showSettings) {
+            void dismiss();
+          }
+        }),
+      );
+
+      unlisteners.push(
+        await listen('show-settings', () => {
+          showSettings = true;
+          popupScale.target = 1;
+          popupOpacity.target = 1;
+        }),
+      );
+
+      unlisteners.push(
+        await listen<HotkeyConflictPayload>('hotkey-conflict', (event) => {
+          const notification = createHotkeyConflictNotification(event.payload);
+          hotkeyConflictMessage = notification.message;
+          pushNotification(notification);
+          console.error('Hotkey conflict:', event.payload);
+        }),
+      );
+
+      unlisteners.push(
+        await listen<string>('hotkey-registered', () => {
+          clearSettingsWarnings();
+        }),
+      );
+
+      unlisteners.push(
+        await listen<DaemonErrorPayload>('daemon-error', (event) => {
+          pushNotification(createDaemonErrorNotification(event.payload));
+          console.error('Daemon error:', event.payload);
+        }),
+      );
+    };
+
+    void register();
+
+    return () => {
+      for (const unlisten of unlisteners) {
+        unlisten();
       }
-      if (appState === 'streaming') {
-        translatedText += event.payload.content;
-      }
-    });
-
-    // Listen for stream completion
-    listen<TranslationDonePayload>('translation-done', (event) => {
-      if (!isCurrentRequest(event.payload.request_id)) return;
-
-      clearLoadingTimeout();
-      if (appState === 'loading' || appState === 'streaming') {
-        appState = 'result';
-      }
-    });
-
-    // Listen for errors
-    listen<TranslationErrorPayload>('translation-error', (event) => {
-      if (!isCurrentRequest(event.payload.request_id)) return;
-
-      clearLoadingTimeout();
-      appState = 'error';
-      errorMessage = event.payload.message;
-    });
-
-    // Listen for retry notifications; stale retries are ignored.
-    listen<TranslationRetryPayload>('translation-retry', (event) => {
-      if (!isCurrentRequest(event.payload.request_id)) return;
-    });
-
-    // Listen for window blur (focus loss) → dismiss
-    listen('window-blur', () => {
-      if (!showSettings) {
-        dismiss();
-      }
-    });
-
-    // Listen for settings request from tray
-    listen('show-settings', () => {
-      showSettings = true;
-      popupScale.target = 1;
-      popupOpacity.target = 1;
-    });
-
-    // Listen for hotkey conflict notification from daemon
-    listen<{ hotkey: string; error: string }>('hotkey-conflict', (event) => {
-      console.error('Hotkey conflict:', {
-        hotkey: event.payload.hotkey,
-        error: event.payload.error,
-      });
-      // TODO: surface as a user-visible warning overlay in Daemon-Core Phase 5
-    });
+    };
   });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="w-screen h-screen p-2">
+<div class="h-screen w-screen p-2">
   <div
-    class="w-full h-full relative"
+    class="relative h-full w-full"
     style:transform="scale({popupScale.current})"
     style:opacity={popupOpacity.current}
     style="transform-origin: bottom right; will-change: transform, opacity;"
   >
+    <NotificationCenter {notifications} ondismiss={dismissNotification} />
+
     <TranslationPopup
       viewState={appState}
       {sourceText}
@@ -334,7 +371,8 @@
 
     <SettingsPanel
       visible={showSettings}
-      onclose={() => showSettings = false}
+      onclose={() => (showSettings = false)}
+      {hotkeyConflictMessage}
     />
   </div>
 </div>

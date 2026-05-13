@@ -9,7 +9,12 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "release:smoke-providers": "powershell -ExecutionPolicy Bypass -File scripts/release/smoke-providers.ps1",
+    "release:accept-install": "powershell -ExecutionPolicy Bypass -File scripts/release/accept-install.ps1",
+    "release:measure-resources": "powershell -ExecutionPolicy Bypass -File scripts/release/measure-resources.ps1"
   },
   "license": "MIT",
   "dependencies": {
@@ -24,11 +29,15 @@
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@tailwindcss/vite": "^4.3.0",
     "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/svelte": "^5.2.8",
     "@types/node": "^25.7.0",
+    "jsdom": "^27.0.1",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
     "tailwindcss": "^4.3.0",
     "typescript": "~5.6.2",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "vitest": "^3.2.4"
   }
 }
