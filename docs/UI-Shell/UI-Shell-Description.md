@@ -15,10 +15,10 @@ The shell implements a five-stage lifecycle:
 1. **Daemon** — Window is hidden (`visible: false`), waiting for the hotkey.
 2. **Trigger** — The `trigger-translate` Tauri event fires; Svelte springs the popup in with a scale overshoot (`0.92 → 1.0`, tuned to briefly exceed 1.0 via low damping) and opacity fade, creating a haptic "pop" feel.
 3. **Loading** — `appState` enters `loading`; `SkeletonLoader` renders 4 pulsating shimmer bars to signal activity without feeling mechanical.
-4. **Streaming** — First `translation-chunk` event arrives; `appState` enters `streaming`; tokens append to `translatedText` with a blinking cursor; translated text fades in and pans upward via the `fade-in-up` keyframe animation.
+4. **Streaming** — First current-request `translation-chunk` event arrives; `appState` enters `streaming`; tokens append to `translatedText` with a blinking cursor; translated text fades in and pans upward via the `fade-in-up` keyframe animation.
 5. **Dismiss** — On `Esc` or focus loss, the popup springs back to scale `0.92` / opacity `0` over ~220 ms, then `appWindow.hide()` returns the process to the daemon state.
 
-The shell is a SvelteKit application with a single route (`ui/routes/+page.svelte`) that acts as the lifecycle orchestrator. On mount, it loads config from the Rust backend, registers five Tauri event listeners, and binds keyboard events for `Esc`. Two `Spring` instances (`popupScale` starting at `0.92`, `popupOpacity` starting at `0`) drive the enter/exit animation: on trigger the targets jump to `1`; on dismiss they return to `0.92` / `0`. A 220 ms delay after the spring settles hides the Tauri window.
+The shell is a SvelteKit application with a single route (`ui/routes/+page.svelte`) that acts as the lifecycle orchestrator. On mount, it loads config from the Rust backend, registers eight Tauri event listeners, and binds keyboard events for `Esc`. Two `Spring` instances (`popupScale` starting at `0.92`, `popupOpacity` starting at `0`) drive the enter/exit animation: on trigger the targets jump to `1`; on dismiss they return to `0.92` / `0`. A 220 ms delay after the spring settles hides the Tauri window.
 
 The orchestrator maintains an `appState` union (`idle | loading | streaming | result | error`) that is driven by incoming Tauri events. Each translation is assigned a monotonically incrementing `currentRequestId` (used for cancellation targeting). A `startTranslation()` function encapsulates the API call setup — incrementing the request ID, clearing previous text, setting `appState = 'loading'`, starting a 20-second loading timeout, and invoking `translate_text` with the current source text, language pair, and request ID. The `TranslationPopup` component renders different content for each state and exposes a cancel button (× icon) during `loading` and `streaming` states. `SettingsPanel` is layered absolutely above the popup and toggled via a `showSettings` boolean.
 
@@ -35,7 +35,7 @@ The design system is defined in `ui/app.css` as Tailwind CSS v4 `@theme` tokens 
 **Translation states**
 - `idle`: shows placeholder hint text "Copy text and press Ctrl+T"
 - `loading`: renders `SkeletonLoader` (4 shimmer bars with staggered 120 ms animation delays: widths 100%, 88%, 72%, 55%); starts a 20-second loading timeout
-- `streaming`: renders translated text with an animated blinking cursor appended; chunks are only appended when `appState === 'streaming'` (guarded against stale events)
+- `streaming`: renders translated text with an animated blinking cursor appended; chunks are only appended when `appState === 'streaming'` and the event `request_id` matches `currentRequestId`
 - `result`: same as streaming but cursor removed; copy button appears in footer
 - `error`: error icon + message text (e.g., "No API key configured…", "No response from API (timeout)")
 
@@ -64,8 +64,8 @@ The design system is defined in `ui/app.css` as Tailwind CSS v4 `@theme` tokens 
 
 **Loading timeout**
 - A 20-second `setTimeout` starts when `appState` enters `'loading'`
-- If no `translation-chunk` event arrives within 20 seconds, `appState` transitions to `'error'` with message "No response from API (timeout)"
-- The timeout is cleared when the first chunk arrives, when `translation-done` fires, when `translation-error` fires, or on dismiss
+- If no current-request `translation-chunk` event arrives within 20 seconds, `appState` transitions to `'error'` with message "No response from API (timeout)"
+- The timeout is cleared when the first current-request chunk arrives, when current-request `translation-done` fires, when current-request `translation-error` fires, or on dismiss
 
 **Design system**
 - Color tokens: `aura-accent (#7c6aef)`, `aura-glass (rgba(255,255,255,0.05))`, `aura-border (rgba(255,255,255,0.07))`, `aura-text (#e8e6f0)`, `aura-error (#f87171)`, `aura-success (#4ade80)`
@@ -84,14 +84,14 @@ Single-route SvelteKit application using Svelte 5 runes API (`$state`, `$props`,
   - Owns all `$state` variables: `appState`, `sourceText`, `translatedText`, `errorMessage`, `showSettings`, `sourceLang`, `targetLang`, `config`, `currentRequestId`, `loadingTimeoutId`.
   - Owns the two `Spring` instances for popup animation.
   - `loadConfig()`: invokes `get_config` and syncs `config`, `sourceLang`, `targetLang`.
-  - `startTranslation()`: increments `currentRequestId`, resets text/error state, sets `appState = 'loading'`, starts loading timeout, invokes `translate_text` with all six arguments including `requestId`.
+  - `startTranslation()`: increments `currentRequestId`, resets text/error state, sets `appState = 'loading'`, starts loading timeout, invokes `translate_text` with text, language pair, API key, model, request ID, base URL, and provider.
   - `cancelCurrentTranslation()`: invokes `cancel_translate` with the current request ID and clears the loading timeout.
   - `handleCancel()`: calls `cancelCurrentTranslation()`, then transitions to `result` (if partial text) or `idle`.
   - `dismiss()`: clears loading timeout, springs out → 220 ms timeout → resets state → `appWindow.hide()`.
   - `handleKeydown(e)`: routes `Esc` to close Settings or dismiss.
   - `handleLanguageChange(source, target)`: updates state; if currently loading or streaming, cancels and retranslates immediately.
-  - Registers Tauri event listeners in `onMount`: `trigger-translate`, `translation-chunk`, `translation-done`, `translation-error`, `window-blur`, `show-settings`.
-  - `translation-chunk` listener: only appends to `translatedText` when `appState === 'streaming'` (guards against stale events from cancelled requests).
+  - Registers Tauri event listeners in `onMount`: `trigger-translate`, `translation-chunk`, `translation-done`, `translation-error`, `translation-retry`, `window-blur`, `show-settings`, `hotkey-conflict`.
+  - `translation-chunk`, `translation-done`, `translation-error`, and `translation-retry` listeners ignore payloads whose `request_id` does not match `currentRequestId`, preventing stale events from cancelled requests from corrupting the UI.
 
 ### Components (`ui/lib/`)
 
@@ -128,7 +128,7 @@ Single-route SvelteKit application using Svelte 5 runes API (`$state`, `$props`,
   - `invoke('save_config', { config })`: called in `SettingsPanel.saveConfig()` via the orchestrator.
   - `invoke('translate_text', { text, sourceLang, targetLang, apiKey, model, requestId, apiBaseUrl, provider })`: called in `startTranslation()` on every `trigger-translate` event and on mid-stream language switch.
   - `invoke('cancel_translate', { requestId })`: called in `cancelCurrentTranslation()` on user cancel, language switch mid-stream, or new trigger while streaming.
-  - `listen('trigger-translate')`, `listen('translation-chunk')`, `listen('translation-done')`, `listen('translation-error')`, `listen('window-blur')`, `listen('show-settings')`: all registered in `onMount`.
+  - `listen('trigger-translate')`, `listen('translation-chunk')`, `listen('translation-done')`, `listen('translation-error')`, `listen('translation-retry')`, `listen('window-blur')`, `listen('show-settings')`, `listen('hotkey-conflict')`: all registered in `onMount`.
   - `getCurrentWindow().hide()`: called in the dismiss timeout.
 
 - `ui/lib/TranslationPopup.svelte`
@@ -145,6 +145,6 @@ Single-route SvelteKit application using Svelte 5 runes API (`$state`, `$props`,
 
 - Replace `{#if visible}` in `SettingsPanel` with `display: none` to preserve the mounted component across open/close cycles.
 - Add a collapsible translation history panel showing the last N source/result pairs within a session.
-- Add a `translation-retry` listener to show a "retrying…" indicator badge in the status bar.
+- Surface `translation-retry` as a visible "retrying…" indicator badge in the status bar.
 - Add keyboard navigation shortcuts within the popup (e.g., `Tab` to cycle focus, `Enter` to copy).
 - Support right-to-left layout for Arabic and Hebrew target languages.

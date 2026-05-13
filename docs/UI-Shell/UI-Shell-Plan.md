@@ -26,7 +26,7 @@ Goals:
 
 Completed work:
 
-- Implemented `+page.svelte` as the lifecycle orchestrator with five Tauri event listeners.
+- Implemented `+page.svelte` as the lifecycle orchestrator with eight Tauri event listeners.
 - Implemented `Spring`-based scale/opacity popup animation (scale `0.92→1`, opacity `0→1`), anchored bottom-right.
 - Implemented `appState` union (`idle | loading | streaming | result | error`) driving conditional rendering.
 - Implemented `TranslationPopup.svelte` with drag region, status indicator, source text box, divider, content area, and copy footer.
@@ -53,10 +53,10 @@ Completed work:
 - On cancel click: invokes `cancel_translate({ requestId })` (Rust Phase 2), then transitions `appState` to `result` if partial text exists, or `idle` if no text arrived.
 - Added a monotonically incrementing `currentRequestId` counter in the orchestrator; passed to `invoke('translate_text', …)` on every new translation.
 - Added a 20-second loading timeout in `+page.svelte`: if `appState === 'loading'` after 20 s with no `translation-chunk` event, sets `appState = 'error'` and `errorMessage = 'No response from API (timeout)'`.
-- Timeout is cleared on first chunk, on `translation-done`, on `translation-error`, and on dismiss.
+- Timeout is cleared on first current-request chunk, on current-request `translation-done`, on current-request `translation-error`, and on dismiss.
 - On language change while `loading` or `streaming`: invokes `cancelCurrentTranslation()`, resets state, then calls `startTranslation()` immediately with the new language pair.
 - Extracted `startTranslation()` as a reusable function for both trigger and mid-stream language switch flows.
-- Guarded `translation-chunk` listener to only append text when `appState === 'streaming'` (prevents stale events from cancelled requests from corrupting the display).
+- Guarded `translation-chunk`, `translation-done`, `translation-error`, and `translation-retry` listeners by `request_id === currentRequestId` to prevent stale events from cancelled requests from corrupting the display.
 - New triggers cancel any in-flight translation before starting a new one.
 
 ---
@@ -73,7 +73,7 @@ Completed work:
 
 - Replaced hardcoded `<option>` elements in `SettingsPanel.svelte` with a `{#each config.available_models}` loop.
 - Replaced the static hotkey `<kbd>` display with a live binding capture widget (`<input>` with `keydown` listener that formats modifier+key into `CmdOrCtrl+T`-style string; uses `e.preventDefault()` + `e.stopImmediatePropagation()` to prevent global shortcuts while focused).
-- Added a `Provider` dropdown that auto-populates `api_base_url` and `available_models` on change, using local frontend constants (`PROVIDER_BASE_URLS`, `PROVIDER_DEFAULT_MODELS`).
+- Added a `Provider` dropdown that auto-populates `api_base_url` and `available_models` on change by invoking Rust `get_provider_defaults`, keeping provider defaults centralized in `config.rs`.
 - API base URL is configurable via `config.api_base_url` (defaults populated from provider selection).
 
 ---
@@ -108,7 +108,7 @@ Goals:
 
 Remaining features:
 
-- Add `tabIndex` and `aria-label` attributes to all interactive elements (copy button, swap button, cancel button, settings close button).
+- Add `tabIndex` and `aria-label` attributes to remaining icon-only interactive elements; the settings close button and API-key visibility toggle now have explicit `aria-label` attributes.
 - Add keyboard navigation: `Tab` cycles through interactive elements within the popup; `Enter` activates the focused button.
 - Detect RTL target languages (Arabic) and apply `dir="rtl"` to the result text container.
 - Apply `text-align: right` and `font-size: 0.9em` (Arabic script optical size adjustment) to the result text when target is RTL.

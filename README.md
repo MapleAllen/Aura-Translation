@@ -5,7 +5,7 @@ A lightweight, cross-platform floating desktop translation utility. Runs silentl
 ## Features
 
 - **Zero-friction trigger** — Global hotkey (`Ctrl+T`) reads the clipboard instantly
-- **Streaming output** — Token-by-token translation via the DeepSeek API
+- **Streaming output** — Token-by-token translation via OpenAI-compatible providers
 - **Bidirectional language pairs** — 11 languages with one-click swap
 - **Glassmorphic UI** — Transparent, always-on-top floating popup near the system tray
 - **System tray daemon** — Runs silently in the background; no dock/taskbar footprint
@@ -18,7 +18,7 @@ A lightweight, cross-platform floating desktop translation utility. Runs silentl
 | Desktop shell | [Tauri 2](https://v2.tauri.app/) + Rust |
 | Frontend | [SvelteKit](https://kit.svelte.dev/) + Svelte 5 |
 | Styling | [Tailwind CSS v4](https://tailwindcss.com/) |
-| Translation API | [DeepSeek](https://platform.deepseek.com/) (streaming SSE) |
+| Translation providers | DeepSeek, OpenRouter, Ollama, or another OpenAI-compatible endpoint |
 
 ## Project Structure
 
@@ -36,10 +36,11 @@ Aura-Translation/
 │       └── +page.svelte
 ├── src-tauri/           # Rust backend (Tauri convention — name is fixed)
 │   ├── src/
-│   │   ├── config.rs    # Plaintext JSON config persistence
+│   │   ├── config.rs    # Plaintext JSON config persistence and provider defaults
+│   │   ├── hotkey.rs    # Configurable hotkey parser
 │   │   ├── lib.rs       # App entry: tray, hotkey, window management
 │   │   ├── main.rs
-│   │   └── translate.rs # DeepSeek streaming client
+│   │   └── translate.rs # OpenAI-compatible streaming client
 │   ├── capabilities/    # Tauri permission grants
 │   ├── icons/
 │   └── tauri.conf.json
@@ -64,8 +65,9 @@ npm run tauri dev
 ### First-time Setup
 
 1. After launching, right-click the **system tray icon → Settings**
-2. Enter your [DeepSeek API key](https://platform.deepseek.com/api_keys)
-3. Save — the key is stored in `aura-config.json` in the app data directory
+2. Choose a provider: DeepSeek, OpenRouter, or local Ollama
+3. Enter an API key for DeepSeek/OpenRouter; Ollama does not require one
+4. Save — preferences are stored in `{OS config dir}/aura-translation/config.json`
 
 ### Usage
 

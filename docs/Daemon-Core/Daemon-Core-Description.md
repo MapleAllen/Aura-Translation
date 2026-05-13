@@ -10,13 +10,13 @@ The Daemon Core is the system-level foundation of Aura Translation. It runs as a
 
 The core non-functional targets this module must preserve:
 
-- **Resource budget:** ≤20 MB idle RAM and negligible CPU when waiting for a hotkey. Tauri achieves this by embedding the UI in the host OS's native WebView (WebView2 on Windows, WebKit on macOS/Linux) rather than bundling a Chromium instance, yielding a binary footprint under 10 MB.
+- **Resource budget:** ≤20 MB idle RAM and negligible CPU when waiting for a hotkey. Tauri achieves this by embedding the UI in the host OS's native WebView (WebView2 on Windows, WebKit on macOS/Linux) rather than bundling a Chromium instance. The latest verified Windows release build produced an approximately 11.9 MB executable and installers under 10 MB.
 - **Cross-platform:** A single Rust codebase targets Windows, macOS, and Linux without platform-specific forks.
 - **Zero taskbar footprint:** The window sets `skipTaskbar: true` and `visible: false` at launch; it surfaces only through the system tray and the global hotkey.
 
 ## Current Implementation
 
-The entry point is `src-tauri/src/lib.rs`'s `pub fn run()`, called from `main.rs`. Before constructing the Tauri builder, the function creates two shared resources: a `reqwest::Client` for HTTP connection pooling across all translation requests, and a `CancellationRegistry` (`Arc<Mutex<HashMap<u64, oneshot::Sender<()>>>>`) for tracking in-flight translation requests that can be cancelled. Both are registered via `.manage()` on the builder. The Tauri application builder then registers four plugins at construction time: `tauri_plugin_clipboard_manager`, `tauri_plugin_opener`, and (on desktop targets) `tauri_plugin_global_shortcut`. The global shortcut handler is registered as a builder-level closure rather than in `setup`, which is required by Tauri 2's plugin initialization order.
+The entry point is `src-tauri/src/lib.rs`'s `pub fn run()`, called from `main.rs`. Before constructing the Tauri builder, the function creates three shared resources: a `reqwest::Client` for HTTP connection pooling across all translation requests, a `CancellationRegistry` (`Arc<Mutex<HashMap<u64, oneshot::Sender<()>>>>`) for tracking in-flight translation requests that can be cancelled, and a managed `ConfigState` loaded from disk at startup. These are registered via `.manage()` on the builder. The Tauri application builder then registers the clipboard manager, opener, and (on desktop targets) global shortcut plugins. The global shortcut handler is registered as a builder-level closure rather than in `setup`, which is required by Tauri 2's plugin initialization order.
 
 On `Ctrl+T` press, the handler reads the clipboard via `ClipboardExt::read_text()`, bails silently if the text is empty, then positions the `"main"` webview window at a calculated bottom-right offset (440×360 px, 16 px right margin, 60 px above the taskbar). The window is shown, focused, and a `trigger-translate` event carrying the raw clipboard text is emitted to all listeners.
 
@@ -26,7 +26,7 @@ A `window.on_window_event` listener watches for `WindowEvent::Focused(false)` an
 
 A dedicated `hotkey.rs` module parses the `AppConfig.hotkey` string (e.g. `"CmdOrCtrl+T"`) into a Tauri `Shortcut` at startup and whenever the config is saved. If registration fails, a `hotkey-conflict` event is emitted to the frontend instead of silently failing.
 
-Config persistence is handled by `config.rs`. `AppConfig` serializes to JSON and lives at `{config_dir}/aura-translation/config.json` (resolved via the `dirs` crate). `AppConfig::load()` deserializes on startup; if the file is absent it writes defaults. `AppConfig::save()` serializes with pretty-printing. Two Tauri commands (`get_config`, `save_config`) expose these methods to the frontend.
+Config persistence is handled by `config.rs`. `AppConfig` serializes to JSON and lives at `{config_dir}/aura-translation/config.json` (resolved via the `dirs` crate). `AppConfig::load()` deserializes once on startup; if the file is absent it writes defaults. The loaded config is then kept in managed `ConfigState`, so `get_config` returns the in-memory copy without disk I/O. `save_config` persists the new config and updates managed state.
 
 ### Capabilities
 
@@ -58,7 +58,7 @@ Config persistence is handled by `config.rs`. `AppConfig` serializes to JSON and
 - Automatically creates missing directories on first write
 
 **Tauri commands exposed**
-- `get_config() -> AppConfig`: loads and returns the current config
+- `get_config() -> AppConfig`: returns the current managed in-memory config
 - `save_config(config: AppConfig) -> Result<(), String>`: serializes and writes the config to disk
 - `translate_text(…)`: delegated to `translate::translate_text`; registered in `generate_handler!`
 - `cancel_translate(request_id)`: delegated to `translate::cancel_translate`; cancels an in-flight translation by request ID
@@ -69,14 +69,15 @@ Config persistence is handled by `config.rs`. `AppConfig` serializes to JSON and
 
 ## Architecture
 
-Single-file Tauri application bootstrap with a companion config module and a translation service module. The builder creates two managed `tauri::State` resources (`reqwest::Client` for connection pooling and `CancellationRegistry` for request cancellation), registers four Tauri commands, and delegates all translation logic to `translate.rs`. Tauri wraps the SvelteKit frontend in the host OS's native WebView (WebView2 on Windows, WebKit on macOS/Linux), avoiding the ~150 MB Chromium overhead of Electron and keeping the installed binary under 10 MB.
+Single-file Tauri application bootstrap with companion config, hotkey, and translation service modules. The builder creates managed `tauri::State` resources (`reqwest::Client` for connection pooling, `CancellationRegistry` for request cancellation, and `ConfigState` for the current config), registers five Tauri commands, and delegates all translation logic to `translate.rs`. Tauri wraps the SvelteKit frontend in the host OS's native WebView (WebView2 on Windows, WebKit on macOS/Linux), avoiding the ~150 MB Chromium overhead of Electron.
 
 ### Rust Backend (`src-tauri/src/`)
 
 - `lib.rs`
-  - `run()`: creates shared `reqwest::Client` and `CancellationRegistry`, registers them via `.manage()`, builds and runs the Tauri application; registers plugins, commands, tray, hotkey, and window events.
-  - `get_config()`: Tauri command; delegates to `AppConfig::load()`.
-  - `save_config(config)`: Tauri command; delegates to `config.save()`.
+  - `run()`: creates shared `reqwest::Client`, `CancellationRegistry`, and `ConfigState`, registers them via `.manage()`, builds and runs the Tauri application; registers plugins, commands, tray, hotkey, and window events.
+  - `get_config()`: Tauri command; returns the managed `ConfigState` copy.
+  - `get_provider_defaults(provider)`: Tauri command; returns the provider's default base URL and model list.
+  - `save_config(config)`: Tauri command; writes config atomically, updates `ConfigState`, and re-registers the hotkey if needed.
   - `translate::translate_text`: Tauri command; delegated to the translation module.
   - `translate::cancel_translate`: Tauri command; delegated to the translation module.
   - Global shortcut handler (closure): reads clipboard → positions window → shows window → emits `trigger-translate`.
@@ -121,7 +122,7 @@ Single-file Tauri application bootstrap with a companion config module and a tra
   - `invoke('save_config', { config })`: writes config from the Settings panel.
 
 - `src-tauri/capabilities/` (Tauri permission grants)
-  - Must include `clipboard:read-text`, `global-shortcut:all`, `core:window:allow-show`, `core:window:allow-hide`, `core:window:allow-set-position`, `core:window:allow-set-focus`, `core:event:allow-emit` for the daemon to function.
+  - Current grants include `clipboard-manager:allow-read-text`, `clipboard-manager:allow-write-text`, `global-shortcut:allow-register`, `global-shortcut:allow-unregister`, `global-shortcut:allow-is-registered`, `core:window:allow-show`, `core:window:allow-hide`, `core:window:allow-set-focus`, and `core:event:default`.
 
 ## Current Limitations
 
