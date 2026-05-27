@@ -1,3 +1,7 @@
+param(
+  [switch]$SkipBuild
+)
+
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
@@ -107,7 +111,9 @@ Push-Location $repoRoot
 try {
   Stop-AuraProcesses
 
-  npm run tauri build | Out-Host
+  if (-not $SkipBuild) {
+    npm run tauri build | Out-Host
+  }
 
   $nsisPackage = Get-ChildItem -Path 'src-tauri\target\release\bundle\nsis' -Filter '*setup.exe' | Select-Object -First 1
   $msiPackage = Get-ChildItem -Path 'src-tauri\target\release\bundle\msi' -Filter '*.msi' | Select-Object -First 1

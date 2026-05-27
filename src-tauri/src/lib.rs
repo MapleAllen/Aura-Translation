@@ -314,8 +314,7 @@ pub fn run() {
         .manage(http_client)
         .manage(cancel_registry)
         .manage(config_state.clone())
-        .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_opener::init());
+        .plugin(tauri_plugin_clipboard_manager::init());
 
     // Register global shortcut plugin at the builder level (not in setup)
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
