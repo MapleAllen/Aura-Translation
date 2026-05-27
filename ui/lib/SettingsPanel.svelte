@@ -55,6 +55,7 @@
   let saveMessage = $state('');
   let saveErrorMessage = $state('');
   let panelErrorMessage = $state('');
+  let hotkeyInputMessage = $state('');
   let isCapturingHotkey = $state(false);
 
   const saveScale = new Spring(1, { stiffness: 0.4, damping: 0.5 });
@@ -67,6 +68,7 @@
 
   async function loadConfig() {
     panelErrorMessage = '';
+    hotkeyInputMessage = '';
     try {
       const loaded = await invoke<AppConfig>('get_config');
       config = loaded;
@@ -106,11 +108,20 @@
     if (e.altKey) parts.push('Alt');
     if (e.shiftKey) parts.push('Shift');
 
-    const key = e.key.length === 1 ? e.key.toUpperCase() : null;
-    if (!key) return;
+    if (parts.length === 0) {
+      hotkeyInputMessage = 'Include at least one modifier key.';
+      return;
+    }
+
+    const key = e.key.length === 1 && /^[a-z0-9]$/i.test(e.key) ? e.key.toUpperCase() : null;
+    if (!key) {
+      hotkeyInputMessage = 'Use a letter or digit key with at least one modifier.';
+      return;
+    }
 
     parts.push(key);
     config.hotkey = parts.join('+');
+    hotkeyInputMessage = '';
   }
 
   async function saveConfig() {
@@ -123,13 +134,17 @@
     try {
       await invoke('save_config', { config });
       saveMessage = 'Settings saved';
+      hotkeyInputMessage = '';
       saveScale.target = 1.05;
       setTimeout(() => {
         saveScale.target = 1;
         saveMessage = '';
       }, 1200);
     } catch (e) {
-      saveErrorMessage = 'Failed to save settings to the local Aura config.';
+      const message = String(e ?? '');
+      saveErrorMessage = message.startsWith('Hotkey save rejected:')
+        ? 'Could not save settings. Fix the hotkey and try again.'
+        : 'Failed to save settings to the local Aura config.';
       saveScale.target = 1;
       console.error('Failed to save config:', { error: e });
     }
@@ -275,8 +290,14 @@
           {/if}
         </div>
         <p class="pl-0.5 text-xs text-aura-text-muted">
-          Copy text first, then press your hotkey to translate.
+          Hotkeys must include at least one modifier and a letter or digit key.
         </p>
+
+        {#if hotkeyInputMessage}
+          <p class="pl-0.5 text-xs text-[#e7c980]" data-testid="hotkey-input-message">
+            {hotkeyInputMessage}
+          </p>
+        {/if}
 
         {#if hotkeyConflictMessage}
           <div

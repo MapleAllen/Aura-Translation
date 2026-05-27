@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsPanel from './SettingsPanel.svelte';
 
@@ -61,5 +61,42 @@ describe('SettingsPanel', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('plaintext-api-key-warning')).not.toBeInTheDocument();
     });
+  });
+
+  it('rejects bare single-key hotkeys during capture', async () => {
+    invokeMock.mockResolvedValueOnce(baseConfig);
+
+    render(SettingsPanel, {
+      visible: true,
+      onclose: () => {},
+      hotkeyConflictMessage: '',
+    });
+
+    const input = await screen.findByDisplayValue('CmdOrCtrl+T');
+    await fireEvent.focus(input);
+    await fireEvent.keyDown(input, { key: 't' });
+
+    expect(screen.getByTestId('hotkey-input-message')).toHaveTextContent(
+      'Include at least one modifier key.',
+    );
+    expect(input).toHaveValue('CmdOrCtrl+T');
+  });
+
+  it('captures modifier-based hotkeys and clears the inline validation message', async () => {
+    invokeMock.mockResolvedValueOnce(baseConfig);
+
+    render(SettingsPanel, {
+      visible: true,
+      onclose: () => {},
+      hotkeyConflictMessage: '',
+    });
+
+    const input = await screen.findByDisplayValue('CmdOrCtrl+T');
+    await fireEvent.focus(input);
+    await fireEvent.keyDown(input, { key: 't' });
+    await fireEvent.keyDown(input, { key: 'k', ctrlKey: true });
+
+    expect(screen.queryByTestId('hotkey-input-message')).not.toBeInTheDocument();
+    expect(input).toHaveValue('CmdOrCtrl+K');
   });
 });

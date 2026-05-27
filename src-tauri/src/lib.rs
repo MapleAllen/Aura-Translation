@@ -75,13 +75,43 @@ fn emit_hotkey_conflict(app: &AppHandle, hotkey: &str, error: impl Into<String>)
     );
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn restore_previous_hotkey(app: &AppHandle, hotkey: &str) {
+    match hotkey::parse_hotkey(hotkey) {
+        Ok(shortcut) => {
+            if let Err(e) = app.global_shortcut().register(shortcut) {
+                emit_daemon_error(
+                    app,
+                    "hotkey-restore-failed",
+                    format!(
+                        "Failed to restore the previous hotkey '{}' after a rejected save: {}",
+                        hotkey, e
+                    ),
+                    false,
+                );
+                register_fallback_hotkey(app);
+            }
+        }
+        Err(e) => {
+            emit_daemon_error(
+                app,
+                "hotkey-restore-parse-failed",
+                format!(
+                    "Failed to parse the previous hotkey '{}' after a rejected save: {}",
+                    hotkey, e
+                ),
+                false,
+            );
+            register_fallback_hotkey(app);
+        }
+    }
+}
+
 /// Tauri command: save config from the frontend and re-register the hotkey.
 ///
-/// On hotkey re-registration failure, emits a `hotkey-conflict` event and
-/// re-registers the previously-working hotkey. Falls back to `CmdOrCtrl+T`
-/// only if the old hotkey also fails to re-register (extreme edge case).
-/// Does NOT return an error to the frontend - a conflict is a user-fixable
-/// warning, not a fatal failure.
+/// Saves the full config atomically from the user's perspective:
+/// - if the hotkey is invalid or cannot be registered, no config changes persist
+/// - if disk save fails after hotkey re-registration, the old hotkey is restored
 #[tauri::command]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn save_config(
@@ -89,55 +119,72 @@ fn save_config(
     state: State<'_, ConfigState>,
     config: AppConfig,
 ) -> Result<(), String> {
-    // Capture old hotkey from managed state before overwriting
-    let old_hotkey = state.read().unwrap().hotkey.clone();
-    config.save()?;
-
-    // Update in-memory state
-    *state.write().unwrap() = config.clone();
+    let old_config = state.read().unwrap().clone();
+    let old_hotkey = old_config.hotkey.clone();
 
     // Hotkey unchanged - skip re-registration entirely
     if old_hotkey == config.hotkey {
+        config.save()?;
+        *state.write().unwrap() = config.clone();
         return Ok(());
     }
 
-    match hotkey::parse_hotkey(&config.hotkey) {
-        Ok(new_shortcut) => {
-            if let Err(e) = app.global_shortcut().unregister_all() {
-                emit_daemon_error(
-                    &app,
-                    "hotkey-unregister-failed",
-                    format!(
-                        "Failed to unregister the previous hotkey before saving '{}': {}",
-                        config.hotkey, e
-                    ),
-                    true,
-                );
-            }
-
-            match app.global_shortcut().register(new_shortcut) {
-                Ok(_) => {
-                    let _ = app.emit("hotkey-registered", &config.hotkey);
-                }
-                Err(e) => {
-                    emit_hotkey_conflict(&app, &config.hotkey, e.to_string());
-                    // Re-register the old (previously-working) hotkey
-                    let re_registered = hotkey::parse_hotkey(&old_hotkey)
-                        .map(|old| app.global_shortcut().register(old).is_ok())
-                        .unwrap_or(false);
-
-                    if !re_registered {
-                        register_fallback_hotkey(&app);
-                    }
-                }
-            }
-        }
+    let new_shortcut = match hotkey::parse_hotkey(&config.hotkey) {
+        Ok(shortcut) => shortcut,
         Err(parse_err) => {
-            // New hotkey string is malformed - old shortcut is still registered
-            // (we never called unregister_all), so no fallback needed.
-            emit_hotkey_conflict(&app, &config.hotkey, parse_err);
+            emit_hotkey_conflict(&app, &config.hotkey, parse_err.clone());
+            return Err(format!("Hotkey save rejected: {}", parse_err));
         }
+    };
+
+    if let Err(e) = app.global_shortcut().unregister_all() {
+        emit_daemon_error(
+            &app,
+            "hotkey-unregister-failed",
+            format!(
+                "Failed to unregister the previous hotkey before saving '{}': {}",
+                config.hotkey, e
+            ),
+            true,
+        );
+        return Err(format!("Failed to prepare hotkey update: {}", e));
     }
+
+    if let Err(e) = app.global_shortcut().register(new_shortcut) {
+        emit_hotkey_conflict(&app, &config.hotkey, e.to_string());
+        restore_previous_hotkey(&app, &old_hotkey);
+        return Err(format!("Hotkey save rejected: {}", e));
+    }
+
+    if let Err(e) = config.save() {
+        emit_daemon_error(
+            &app,
+            "config-save-failed",
+            format!(
+                "Failed to persist config after registering hotkey '{}': {}",
+                config.hotkey, e
+            ),
+            false,
+        );
+
+        if let Err(unregister_err) = app.global_shortcut().unregister_all() {
+            emit_daemon_error(
+                &app,
+                "hotkey-unregister-after-save-failure",
+                format!(
+                    "Failed to unregister the new hotkey '{}' after a config save failure: {}",
+                    config.hotkey, unregister_err
+                ),
+                false,
+            );
+        }
+
+        restore_previous_hotkey(&app, &old_hotkey);
+        return Err(format!("Failed to save config: {}", e));
+    }
+
+    *state.write().unwrap() = config.clone();
+    let _ = app.emit("hotkey-registered", &config.hotkey);
 
     Ok(())
 }

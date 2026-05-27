@@ -363,6 +363,7 @@
       {sourceText}
       {translatedText}
       {errorMessage}
+      hotkeyLabel={config.hotkey || 'CmdOrCtrl+T'}
       {sourceLang}
       {targetLang}
       onLanguageChange={handleLanguageChange}
