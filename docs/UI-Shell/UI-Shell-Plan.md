@@ -26,7 +26,7 @@ Goals:
 
 Completed work:
 
-- Implemented `+page.svelte` as the lifecycle orchestrator with eight Tauri event listeners.
+- Implemented `+page.svelte` as the lifecycle orchestrator; it now owns the popup state machine, notifications, and ten Tauri event listeners.
 - Implemented `Spring`-based scale/opacity popup animation (scale `0.92→1`, opacity `0→1`), anchored bottom-right.
 - Implemented `appState` union (`idle | loading | streaming | result | error`) driving conditional rendering.
 - Implemented `TranslationPopup.svelte` with drag region, status indicator, source text box, divider, content area, and copy footer.
@@ -73,6 +73,7 @@ Completed work:
 
 - Replaced hardcoded `<option>` elements in `SettingsPanel.svelte` with a `{#each config.available_models}` loop.
 - Replaced the static hotkey `<kbd>` display with a live binding capture widget (`<input>` with `keydown` listener that formats modifier+key into `CmdOrCtrl+T`-style string; uses `e.preventDefault()` + `e.stopImmediatePropagation()` to prevent global shortcuts while focused).
+- Hardened the hotkey capture widget so bare single-key bindings are rejected inline; only modifier + letter/digit combinations are accepted.
 - Added a `Provider` dropdown that auto-populates `api_base_url` and `available_models` on change by invoking Rust `get_provider_defaults`, keeping provider defaults centralized in `config.rs`.
 - API base URL is configurable via `config.api_base_url` (defaults populated from provider selection).
 
@@ -116,9 +117,9 @@ Remaining features:
 
 ---
 
-## Phase 6: Testing Strategy — NOT STARTED
+## Phase 6: Testing Strategy — PARTIAL
 
-Status: **Not Started**
+Status: **Partial**
 
 Goals:
 
@@ -131,6 +132,11 @@ Remaining features:
 - Add a Playwright integration test (via webapp-testing skill) for the full translate flow: trigger → loading → streaming → result → copy.
 - Add a Playwright test for dismiss: trigger → streaming → press Esc → window hidden.
 - Add a Playwright test for settings: open via tray → change API key → save → reload and verify.
+
+Completed work:
+
+- Added Vitest coverage for `SettingsPanel.svelte` covering the plaintext API key warning, inline hotkey conflict rendering, bare single-key hotkey rejection, and modifier-based hotkey capture.
+- Added Vitest coverage for `TranslationPopup.svelte` confirming the idle-state hint reflects the configured hotkey.
 
 ---
 

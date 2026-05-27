@@ -53,6 +53,7 @@ Completed work:
 - Implemented `parse_hotkey(s: &str) -> Result<Shortcut, String>` in `src-tauri/src/hotkey.rs` covering `Ctrl`, `Alt`, `Shift`, `CmdOrCtrl` modifiers and all alpha/digit key codes.
 - On startup (`setup` closure): loads `AppConfig.hotkey`, parses it, and registers the shortcut; falls back to `CmdOrCtrl+T` on parse or registration failure.
 - On `save_config` command: unregisters all shortcuts, parses the new `config.hotkey`, and registers it immediately without requiring a restart.
+- Hotkey parsing now rejects bare single-key bindings; release builds require at least one modifier plus a letter or digit.
 - Emits `hotkey-registered` event on success.
 - Emits `hotkey-conflict` event on registration failure; falls back to `CmdOrCtrl+T` if re-registration fails.
 - Settings UI (`SettingsPanel.svelte`) includes a live hotkey capture widget (`<input>` with `keydown` listener that formats `CmdOrCtrl+T`-style strings).
@@ -103,7 +104,7 @@ Remaining features:
 
 ## Phase 5: Atomic Config Save & Error Surface — PARTIAL
 
-Status: **Partial (atomic save done; error surface still pending)**
+Status: **Partial (atomic save, daemon-error events, and frontend error surface done; lifecycle logging still pending)**
 
 Goals:
 
@@ -112,18 +113,19 @@ Goals:
 Completed work:
 
 - Replaced `fs::write` in `AppConfig::save` with write-to-`.tmp`-then-`fs::rename` for crash-safe atomicity.
+- Updated `save_config` so config changes are atomic from the user's perspective: if hotkey parsing or registration fails, no new config is written; if disk persistence fails after hotkey registration, the previous hotkey is restored.
+- Replaced fallible setup-path panics for tray and startup hotkey issues with emitted `daemon-error` events.
+- Added frontend listeners in `+page.svelte` that surface `daemon-error` and `hotkey-conflict` through the notification layer and inline Settings warnings.
 
 Remaining features:
 
-- Wrap all Tauri setup errors (tray build, shortcut registration) in a `DaemonError { code: String, message: String }` enum and emit as `daemon-error` events instead of using `?` (which panics on failure).
-- Add a frontend listener for `daemon-error` in `+page.svelte` that surfaces the message as an error overlay.
 - Log all daemon lifecycle events (startup, hotkey registration, config load/save, tray creation) to a rotating `aura-translation.log` file in the app data directory using the `tracing` crate.
 
 ---
 
-## Phase 6: Testing Strategy — NOT STARTED
+## Phase 6: Testing Strategy — PARTIAL
 
-Status: **Not Started**
+Status: **Partial**
 
 Goals:
 
@@ -131,10 +133,14 @@ Goals:
 
 Remaining features:
 
-- Add unit tests for `parse_hotkey`: valid strings, unknown modifiers, unknown key codes, empty string.
 - Add unit tests for `AppConfig::load`: missing file (should return defaults), malformed JSON (should return defaults), valid JSON with all fields, valid JSON with missing fields (partial forward-compatibility).
 - Add unit tests for `AppConfig::save`: verify the output file matches the expected JSON schema.
 - Add unit tests for window positioning: given a mock monitor size + scale factor + taskbar edge, verify the computed `LogicalPosition` is within the expected quadrant.
+
+Completed work:
+
+- Added unit tests for `parse_hotkey`, including valid combos, unknown modifiers, unsupported keys, empty input, and bare single-key rejection.
+- Added `AppConfig` regression coverage for defaults, backward-compatible deserialization of legacy configs, and full round-trip serialization.
 
 ---
 

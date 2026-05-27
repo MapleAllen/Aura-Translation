@@ -40,10 +40,12 @@ Complete these checks on the installed build:
 5. Enter a valid API key, copy source text, and trigger the hotkey.
 6. Confirm the translation streams and finishes successfully.
 7. Change the hotkey to an in-use shortcut and confirm the conflict appears both in the notification layer and inline in Settings.
-8. Restore a valid hotkey and confirm the warning clears after save.
+8. Try capturing a bare single-key hotkey such as `T` and confirm the Settings UI rejects it before save.
+9. Restore a valid hotkey and confirm the warning clears after save.
 
 ## Notes
 
 - This trial gate is Windows-only.
 - OpenRouter remains supported but is not a blocking smoke gate for this release.
 - API keys are intentionally still stored in plaintext `config.json` for this trial; that is why the warning must remain visible in Settings.
+- Hotkeys for this release must include at least one modifier key plus a letter or digit.
