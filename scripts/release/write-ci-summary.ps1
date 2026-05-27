@@ -34,7 +34,7 @@ function Read-JsonFile {
   }
 
   try {
-    return Get-Content -Path $Path -Raw | ConvertFrom-Json -Depth 32
+    return Get-Content -Path $Path -Raw | ConvertFrom-Json
   } catch {
     return [pscustomobject]@{
       ParseError = $_.Exception.Message

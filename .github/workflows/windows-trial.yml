@@ -116,6 +116,7 @@ jobs:
 
       - name: Resource measurement
         id: resource_measurement
+        if: ${{ always() }}
         run: npm run release:measure-resources
 
       - name: Write CI summary
