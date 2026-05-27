@@ -27,6 +27,70 @@ function Get-RegistryInstallEntry {
   return $null
 }
 
+function Resolve-ExecutablePathFromCommand {
+  param(
+    [string]$Command
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Command)) {
+    return $null
+  }
+
+  if ($Command.StartsWith('"')) {
+    $parts = $Command -split '"'
+    if ($parts.Length -ge 2 -and -not [string]::IsNullOrWhiteSpace($parts[1])) {
+      return $parts[1]
+    }
+    return $null
+  }
+
+  $segments = $Command.Split(' ', 2)
+  if ($segments.Length -gt 0 -and -not [string]::IsNullOrWhiteSpace($segments[0])) {
+    return $segments[0]
+  }
+
+  return $null
+}
+
+function Resolve-InstallDir {
+  param(
+    [string[]]$PreferredPaths = @()
+  )
+
+  $entry = Get-RegistryInstallEntry
+  $candidatePaths = @()
+
+  if ($null -ne $entry) {
+    if (-not [string]::IsNullOrWhiteSpace($entry.InstallLocation)) {
+      $candidatePaths += $entry.InstallLocation
+    }
+
+    foreach ($command in @($entry.DisplayIcon, $entry.QuietUninstallString, $entry.UninstallString)) {
+      $exePath = Resolve-ExecutablePathFromCommand -Command $command
+      if (-not [string]::IsNullOrWhiteSpace($exePath)) {
+        $candidatePaths += (Split-Path -Path $exePath -Parent)
+      }
+    }
+  }
+
+  $candidatePaths += $PreferredPaths
+  $candidatePaths += @(
+    (Join-Path $env:LOCALAPPDATA 'Programs\Aura Translation'),
+    (Join-Path $env:LOCALAPPDATA 'Aura Translation'),
+    (Join-Path $env:ProgramFiles 'Aura Translation'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Aura Translation')
+  )
+
+  foreach ($candidate in ($candidatePaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)) {
+    $exePath = Join-Path $candidate 'aura-translation.exe'
+    if ((Test-Path $exePath) -or (Test-Path $candidate)) {
+      return $candidate
+    }
+  }
+
+  return $null
+}
+
 function Stop-AuraProcesses {
   Get-Process -Name 'aura-translation' -ErrorAction SilentlyContinue | Stop-Process -Force
 }
@@ -135,7 +199,14 @@ try {
     throw "NSIS installer exited with code $($installProcess.ExitCode)."
   }
 
-  Wait-Until -Condition { Test-Path $result.InstallDir } -FailureMessage 'Install directory was not created after NSIS install.'
+  $resolvedInstallDir = $null
+  Wait-Until `
+    -Condition {
+      $script:resolvedInstallDir = Resolve-InstallDir -PreferredPaths @($result.InstallDir)
+      $null -ne $script:resolvedInstallDir
+    } `
+    -FailureMessage 'Install directory was not created after NSIS install.'
+  $result.InstallDir = $resolvedInstallDir
   $result.Checks += [pscustomobject]@{ Name = 'install-dir-created'; Passed = $true; Detail = $result.InstallDir }
 
   $installedExe = Join-Path $result.InstallDir 'aura-translation.exe'
