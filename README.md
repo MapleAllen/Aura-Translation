@@ -83,3 +83,5 @@ npm run tauri build
 ```
 
 The installer will be output to `src-tauri/target/release/bundle/`.
+
+For the Windows trial release gate, use [docs/Windows-Trial-Checklist.md](/Users/maple/Github/Aura-Translation/docs/Windows-Trial-Checklist.md). The repo also includes a Windows GitHub Actions workflow at [.github/workflows/windows-trial.yml](/Users/maple/Github/Aura-Translation/.github/workflows/windows-trial.yml) for repeatable build, install, and resource checks.

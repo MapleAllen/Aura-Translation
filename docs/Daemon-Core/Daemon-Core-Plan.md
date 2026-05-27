@@ -116,6 +116,7 @@ Completed work:
 - Updated `save_config` so config changes are atomic from the user's perspective: if hotkey parsing or registration fails, no new config is written; if disk persistence fails after hotkey registration, the previous hotkey is restored.
 - Replaced fallible setup-path panics for tray and startup hotkey issues with emitted `daemon-error` events.
 - Added frontend listeners in `+page.svelte` that surface `daemon-error` and `hotkey-conflict` through the notification layer and inline Settings warnings.
+- Removed the unused opener plugin and tightened the Rust release profile (`lto`, `strip`, `opt-level = "s"`) as part of the installer-size optimization track.
 
 Remaining features:
 

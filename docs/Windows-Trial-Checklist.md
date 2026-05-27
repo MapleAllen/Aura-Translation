@@ -21,6 +21,8 @@ Generated artifacts are written to `artifacts/windows-trial/`:
 - `accept-install.json`
 - `resource-metrics.json`
 
+The repository also includes a Windows CI workflow at [.github/workflows/windows-trial.yml](/Users/maple/Github/Aura-Translation/.github/workflows/windows-trial.yml). It runs `check`, Rust tests, UI tests, bundle build, install acceptance, and resource measurement on `windows-latest`. Live provider smoke remains opt-in because it needs a real DeepSeek key and a reachable Ollama endpoint.
+
 Pass criteria:
 
 - DeepSeek live smoke passes with `AURA_SMOKE_DEEPSEEK_API_KEY`
@@ -49,3 +51,4 @@ Complete these checks on the installed build:
 - OpenRouter remains supported but is not a blocking smoke gate for this release.
 - API keys are intentionally still stored in plaintext `config.json` for this trial; that is why the warning must remain visible in Settings.
 - Hotkeys for this release must include at least one modifier key plus a letter or digit.
+- Release builds rely on the Rust release profile in `src-tauri/Cargo.toml` (`lto`, `strip`, `opt-level = "s"`) to stay within the installer-size target.

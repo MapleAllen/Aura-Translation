@@ -16,7 +16,7 @@ The core non-functional targets this module must preserve:
 
 ## Current Implementation
 
-The entry point is `src-tauri/src/lib.rs`'s `pub fn run()`, called from `main.rs`. Before constructing the Tauri builder, the function creates three shared resources: a `reqwest::Client` for HTTP connection pooling across all translation requests, a `CancellationRegistry` (`Arc<Mutex<HashMap<u64, oneshot::Sender<()>>>>`) for tracking in-flight translation requests that can be cancelled, and a managed `ConfigState` loaded from disk at startup. These are registered via `.manage()` on the builder. The Tauri application builder then registers the clipboard manager, opener, and (on desktop targets) global shortcut plugins. The global shortcut handler is registered as a builder-level closure rather than in `setup`, which is required by Tauri 2's plugin initialization order.
+The entry point is `src-tauri/src/lib.rs`'s `pub fn run()`, called from `main.rs`. Before constructing the Tauri builder, the function creates three shared resources: a `reqwest::Client` for HTTP connection pooling across all translation requests, a `CancellationRegistry` (`Arc<Mutex<HashMap<u64, oneshot::Sender<()>>>>`) for tracking in-flight translation requests that can be cancelled, and a managed `ConfigState` loaded from disk at startup. These are registered via `.manage()` on the builder. The Tauri application builder then registers the clipboard manager and (on desktop targets) global shortcut plugins. The global shortcut handler is registered as a builder-level closure rather than in `setup`, which is required by Tauri 2's plugin initialization order. The Rust release profile also enables LTO, symbol stripping, and `opt-level = "s"` so release bundles stay closer to the Windows trial size budget.
 
 On hotkey press, the handler reads the clipboard via `ClipboardExt::read_text()`, bails silently if the text is empty, then positions the `"main"` webview window at a calculated bottom-right offset (440×360 px, 16 px right margin, 60 px above the taskbar). The window is shown, focused, and a `trigger-translate` event carrying the raw clipboard text is emitted to all listeners.
 
@@ -132,7 +132,6 @@ Single-file Tauri application bootstrap with companion config, hotkey, and trans
 - **API key stored in plaintext JSON** — the API key is stored in cleartext in `config.json`; no OS keychain integration. The config save itself is now atomic (write-then-rename).
 - **Daemon lifecycle is not logged yet** — tray and hotkey errors are surfaced to the frontend, but there is no rotating log file for post-mortem diagnostics.
 - **Focus-loss on Settings** — the `window-blur` handler in the frontend suppresses dismiss when `showSettings` is true, but the Rust side does not know the settings state; a race condition exists if blur fires during a settings transition.
-- **`tauri_plugin_opener` registered but unused** — the opener plugin is initialized but no shell command or URL opening is currently performed from Rust.
 
 ## Future Directions
 
