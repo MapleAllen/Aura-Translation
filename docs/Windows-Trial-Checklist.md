@@ -20,8 +20,9 @@ Generated artifacts are written to `artifacts/windows-trial/`:
 - `smoke-providers.json`
 - `accept-install.json`
 - `resource-metrics.json`
+- `ci-summary.json`
 
-The repository also includes a Windows CI workflow at [.github/workflows/windows-trial.yml](/Users/maple/Github/Aura-Translation/.github/workflows/windows-trial.yml). It runs `check`, Rust tests, UI tests, bundle build, install acceptance, and resource measurement on `windows-latest`. Live provider smoke remains opt-in because it needs a real DeepSeek key and a reachable Ollama endpoint.
+The repository also includes a Windows CI workflow at [.github/workflows/windows-trial.yml](/Users/maple/Github/Aura-Translation/.github/workflows/windows-trial.yml). It runs `check`, Rust tests, UI tests, bundle build, install acceptance, and resource measurement on `windows-latest`. Live provider smoke remains opt-in because it needs a real DeepSeek key and a reachable Ollama endpoint. For `codex/*` push branches, the workflow also commits `artifacts/windows-trial/ci-summary.json` back to the branch so the gate result can be fetched with plain Git even when GitHub Actions API access is unavailable.
 
 Pass criteria:
 

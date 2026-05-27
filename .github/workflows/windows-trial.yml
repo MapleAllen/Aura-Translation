@@ -5,7 +5,11 @@ on:
     branches:
       - main
       - codex/**
+    paths-ignore:
+      - artifacts/windows-trial/ci-summary.json
   pull_request:
+    paths-ignore:
+      - artifacts/windows-trial/ci-summary.json
   workflow_dispatch:
     inputs:
       run_live_smoke:
@@ -18,39 +22,52 @@ jobs:
   windows-trial:
     runs-on: windows-latest
     timeout-minutes: 45
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
+        id: checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
+        id: setup_node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
       - name: Setup Rust
+        id: setup_rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
 
       - name: Install dependencies
+        id: install_dependencies
         run: npm ci
 
       - name: Svelte check
+        id: svelte_check
         run: npm run check
 
       - name: Rust tests
+        id: rust_tests
         run: cargo test --manifest-path .\src-tauri\Cargo.toml
 
       - name: UI tests
+        id: ui_tests
         run: npm test
 
       - name: Build release bundles
+        id: build_release_bundles
         run: npm run tauri build
 
       - name: Live provider smoke
+        id: live_provider_smoke
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live_smoke }}
         env:
           AURA_SMOKE_DEEPSEEK_API_KEY: ${{ secrets.AURA_SMOKE_DEEPSEEK_API_KEY }}
@@ -59,10 +76,65 @@ jobs:
         run: npm run release:smoke-providers
 
       - name: Install acceptance
+        id: install_acceptance
         run: powershell -ExecutionPolicy Bypass -File scripts/release/accept-install.ps1 -SkipBuild
 
       - name: Resource measurement
+        id: resource_measurement
         run: npm run release:measure-resources
+
+      - name: Write CI summary
+        if: always()
+        run: >
+          powershell -ExecutionPolicy Bypass -File scripts/release/write-ci-summary.ps1
+          -Repo "${{ github.repository }}"
+          -Branch "${{ github.ref_name }}"
+          -Sha "${{ github.sha }}"
+          -RunId "${{ github.run_id }}"
+          -RunUrl "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          -EventName "${{ github.event_name }}"
+          -InstallOutcome "${{ steps.install_dependencies.outcome }}"
+          -CheckOutcome "${{ steps.svelte_check.outcome }}"
+          -RustTestsOutcome "${{ steps.rust_tests.outcome }}"
+          -UiTestsOutcome "${{ steps.ui_tests.outcome }}"
+          -BuildOutcome "${{ steps.build_release_bundles.outcome }}"
+          -LiveSmokeOutcome "${{ steps.live_provider_smoke.outcome || 'skipped' }}"
+          -AcceptInstallOutcome "${{ steps.install_acceptance.outcome }}"
+          -MeasureResourcesOutcome "${{ steps.resource_measurement.outcome }}"
+
+      - name: Commit CI summary
+        if: ${{ always() && github.event_name == 'push' && startsWith(github.ref_name, 'codex/') }}
+        shell: powershell
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/windows-trial/ci-summary.json
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "chore: record windows trial summary [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          } else {
+            Write-Host "CI summary unchanged; skipping commit."
+          }
+
+      - name: Enforce required gates
+        if: always()
+        shell: powershell
+        run: |
+          $failed = @()
+          if ('${{ steps.install_dependencies.outcome }}' -ne 'success') { $failed += 'install_dependencies' }
+          if ('${{ steps.svelte_check.outcome }}' -ne 'success') { $failed += 'check' }
+          if ('${{ steps.rust_tests.outcome }}' -ne 'success') { $failed += 'rust_tests' }
+          if ('${{ steps.ui_tests.outcome }}' -ne 'success') { $failed += 'ui_tests' }
+          if ('${{ steps.build_release_bundles.outcome }}' -ne 'success') { $failed += 'build_release_bundles' }
+          if ('${{ steps.live_provider_smoke.outcome || 'skipped' }}' -notin @('success', 'skipped')) { $failed += 'live_provider_smoke' }
+          if ('${{ steps.install_acceptance.outcome }}' -ne 'success') { $failed += 'install_acceptance' }
+          if ('${{ steps.resource_measurement.outcome }}' -ne 'success') { $failed += 'resource_measurement' }
+
+          if ($failed.Count -gt 0) {
+            Write-Error ("Required gates failed: " + ($failed -join ', '))
+            exit 1
+          }
 
       - name: Upload Windows trial artifacts
         if: always()
