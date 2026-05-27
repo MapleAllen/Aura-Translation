@@ -27,6 +27,20 @@ function Get-RegistryInstallEntry {
   return $null
 }
 
+function Get-OptionalPropertyValue {
+  param(
+    [Parameter(Mandatory = $true)]$Object,
+    [Parameter(Mandatory = $true)][string]$Name
+  )
+
+  $property = $Object.PSObject.Properties[$Name]
+  if ($null -eq $property) {
+    return $null
+  }
+
+  return $property.Value
+}
+
 function Resolve-ExecutablePathFromCommand {
   param(
     [string]$Command
@@ -61,11 +75,16 @@ function Resolve-InstallDir {
   $candidatePaths = @()
 
   if ($null -ne $entry) {
-    if (-not [string]::IsNullOrWhiteSpace($entry.InstallLocation)) {
-      $candidatePaths += $entry.InstallLocation
+    $installLocation = Get-OptionalPropertyValue -Object $entry -Name 'InstallLocation'
+    if (-not [string]::IsNullOrWhiteSpace($installLocation)) {
+      $candidatePaths += $installLocation
     }
 
-    foreach ($command in @($entry.DisplayIcon, $entry.QuietUninstallString, $entry.UninstallString)) {
+    foreach ($command in @(
+      (Get-OptionalPropertyValue -Object $entry -Name 'DisplayIcon'),
+      (Get-OptionalPropertyValue -Object $entry -Name 'QuietUninstallString'),
+      (Get-OptionalPropertyValue -Object $entry -Name 'UninstallString')
+    )) {
       $exePath = Resolve-ExecutablePathFromCommand -Command $command
       if (-not [string]::IsNullOrWhiteSpace($exePath)) {
         $candidatePaths += (Split-Path -Path $exePath -Parent)
@@ -133,7 +152,13 @@ function Invoke-Uninstall {
     throw 'Could not find an Aura Translation uninstall entry.'
   }
 
-  $command = if ($entry.QuietUninstallString) { $entry.QuietUninstallString } else { $entry.UninstallString }
+  $quietUninstallString = Get-OptionalPropertyValue -Object $entry -Name 'QuietUninstallString'
+  $uninstallString = Get-OptionalPropertyValue -Object $entry -Name 'UninstallString'
+  $command = if (-not [string]::IsNullOrWhiteSpace($quietUninstallString)) {
+    $quietUninstallString
+  } else {
+    $uninstallString
+  }
   if ([string]::IsNullOrWhiteSpace($command)) {
     throw 'Uninstall command is empty.'
   }
