@@ -6,16 +6,18 @@ use config::{AppConfig, Provider};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager, State,
+    AppHandle, Emitter, Manager, State, WebviewWindow, WebviewWindowBuilder,
 };
 use tokio::sync::Mutex;
 use translate::CancellationRegistry;
 
 /// Managed config - the single source of truth, shared between commands.
 type ConfigState = Arc<RwLock<AppConfig>>;
+type UiReadyState = Arc<RwLock<bool>>;
 
 #[derive(Serialize)]
 struct ProviderDefaults {
@@ -49,6 +51,11 @@ fn get_provider_defaults(provider: Provider) -> ProviderDefaults {
     }
 }
 
+#[tauri::command]
+fn mark_ui_ready(state: State<'_, UiReadyState>) {
+    *state.write().unwrap() = true;
+}
+
 fn emit_daemon_error(
     app: &AppHandle,
     code: impl Into<String>,
@@ -73,6 +80,108 @@ fn emit_hotkey_conflict(app: &AppHandle, hotkey: &str, error: impl Into<String>)
             "error": error.into()
         }),
     );
+}
+
+fn attach_main_window_blur_listener(window: &WebviewWindow) {
+    let emitted_window = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::Focused(false) = event {
+            let _ = emitted_window.emit("window-blur", ());
+        }
+    });
+}
+
+fn ensure_main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
+    if let Some(window) = app.get_webview_window("main") {
+        return Ok(window);
+    }
+
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == "main")
+        .ok_or_else(|| "Main window config is missing.".to_string())?;
+
+    *app.state::<UiReadyState>().write().unwrap() = false;
+
+    let window = WebviewWindowBuilder::from_config(app, config)
+        .map_err(|e| format!("Failed to prepare main window from config: {}", e))?
+        .build()
+        .map_err(|e| format!("Failed to build main window: {}", e))?;
+    attach_main_window_blur_listener(&window);
+
+    Ok(window)
+}
+
+async fn wait_for_ui_ready(app: &AppHandle, timeout: Duration) -> Result<(), String> {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if *app.state::<UiReadyState>().read().unwrap() {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+
+    Err("Timed out waiting for the main UI window to finish initializing.".to_string())
+}
+
+fn position_main_window(window: &WebviewWindow) {
+    if let Ok(Some(monitor)) = window.primary_monitor() {
+        let screen_size = monitor.size();
+        let scale = monitor.scale_factor();
+        let screen_w = screen_size.width as f64 / scale;
+        let screen_h = screen_size.height as f64 / scale;
+
+        let win_w = 440.0;
+        let win_h = 360.0;
+        let x = screen_w - win_w - 16.0;
+        let y = screen_h - win_h - 60.0;
+
+        let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+    }
+}
+
+async fn show_translation_window(app: AppHandle, clipboard_text: String) {
+    let window = match ensure_main_window(&app) {
+        Ok(window) => window,
+        Err(err) => {
+            emit_daemon_error(&app, "main-window-create-failed", err, false);
+            return;
+        }
+    };
+
+    position_main_window(&window);
+    let _ = window.show();
+    let _ = window.set_focus();
+
+    if let Err(err) = wait_for_ui_ready(&app, Duration::from_secs(5)).await {
+        emit_daemon_error(&app, "main-window-ui-timeout", err, true);
+        return;
+    }
+
+    let _ = app.emit("trigger-translate", clipboard_text);
+}
+
+async fn show_settings_window(app: AppHandle) {
+    let window = match ensure_main_window(&app) {
+        Ok(window) => window,
+        Err(err) => {
+            emit_daemon_error(&app, "main-window-create-failed", err, false);
+            return;
+        }
+    };
+
+    let _ = window.show();
+    let _ = window.set_focus();
+
+    if let Err(err) = wait_for_ui_ready(&app, Duration::from_secs(5)).await {
+        emit_daemon_error(&app, "main-window-ui-timeout", err, true);
+        return;
+    }
+
+    let _ = app.emit("show-settings", ());
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -218,18 +327,10 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
         .tooltip("Aura Translation")
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "settings" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = app.emit("show-settings", ());
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                } else {
-                    emit_daemon_error(
-                        &app,
-                        "settings-window-missing",
-                        "The main window was not available when opening Settings from the tray.",
-                        false,
-                    );
-                }
+                let app_handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    show_settings_window(app_handle).await;
+                });
             }
             "quit" => {
                 app.exit(0);
@@ -309,11 +410,13 @@ pub fn run() {
     let cancel_registry: CancellationRegistry = Arc::new(Mutex::new(HashMap::new()));
     // Config loaded once at startup, kept in managed state for all commands
     let config_state: ConfigState = Arc::new(RwLock::new(AppConfig::load()));
+    let ui_ready_state: UiReadyState = Arc::new(RwLock::new(false));
 
     let mut builder = tauri::Builder::default()
         .manage(http_client)
         .manage(cancel_registry)
         .manage(config_state.clone())
+        .manage(ui_ready_state)
         .plugin(tauri_plugin_clipboard_manager::init());
 
     // Register global shortcut plugin at the builder level (not in setup)
@@ -331,30 +434,10 @@ pub fn run() {
                             return;
                         }
 
-                        // Position window near system tray (bottom-right of screen)
-                        if let Some(window) = app.get_webview_window("main") {
-                            // Get primary monitor dimensions
-                            if let Ok(Some(monitor)) = window.primary_monitor() {
-                                let screen_size = monitor.size();
-                                let scale = monitor.scale_factor();
-                                let screen_w = screen_size.width as f64 / scale;
-                                let screen_h = screen_size.height as f64 / scale;
-
-                                // Position near bottom-right (system tray area)
-                                let win_w = 440.0;
-                                let win_h = 360.0;
-                                let x = screen_w - win_w - 16.0;
-                                let y = screen_h - win_h - 60.0;
-
-                                let _ = window.set_position(tauri::LogicalPosition::new(x, y));
-                            }
-
-                            let _ = window.show();
-                            let _ = window.set_focus();
-
-                            // Emit clipboard text to frontend
-                            let _ = app.emit("trigger-translate", clipboard_text);
-                        }
+                        let app_handle = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            show_translation_window(app_handle, clipboard_text).await;
+                        });
                     }
                 })
                 .build(),
@@ -365,6 +448,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             get_provider_defaults,
+            mark_ui_ready,
             save_config,
             translate::translate_text,
             translate::cancel_translate
@@ -372,23 +456,6 @@ pub fn run() {
         .setup(|app| {
             if let Err(err) = build_tray(app.app_handle()) {
                 emit_daemon_error(app.app_handle(), "tray-build-failed", err, false);
-            }
-
-            // Main Window - Focus Loss Handler
-            if let Some(window) = app.get_webview_window("main") {
-                let w = window.clone();
-                window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::Focused(false) = event {
-                        let _ = w.emit("window-blur", ());
-                    }
-                });
-            } else {
-                emit_daemon_error(
-                    app.app_handle(),
-                    "main-window-missing",
-                    "The main window was not available during setup.",
-                    false,
-                );
             }
 
             // Register Global Shortcut from Config

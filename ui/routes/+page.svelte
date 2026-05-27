@@ -338,6 +338,9 @@
     };
 
     void register();
+    void invoke('mark_ui_ready').catch((e) => {
+      console.error('Failed to mark UI as ready:', e);
+    });
 
     return () => {
       for (const unlisten of unlisteners) {
