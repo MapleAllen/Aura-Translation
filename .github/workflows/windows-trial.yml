@@ -46,6 +46,41 @@ jobs:
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Write start marker
+        if: ${{ github.event_name == 'push' && startsWith(github.ref_name, 'codex/') }}
+        run: >
+          powershell -ExecutionPolicy Bypass -File scripts/release/write-ci-summary.ps1
+          -Repo "${{ github.repository }}"
+          -Branch "${{ github.ref_name }}"
+          -Sha "${{ github.sha }}"
+          -RunId "${{ github.run_id }}"
+          -RunUrl "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          -EventName "${{ github.event_name }}"
+          -Phase "started"
+          -InstallOutcome "pending"
+          -CheckOutcome "pending"
+          -RustTestsOutcome "pending"
+          -UiTestsOutcome "pending"
+          -BuildOutcome "pending"
+          -LiveSmokeOutcome "skipped"
+          -AcceptInstallOutcome "pending"
+          -MeasureResourcesOutcome "pending"
+
+      - name: Commit start marker
+        if: ${{ github.event_name == 'push' && startsWith(github.ref_name, 'codex/') }}
+        shell: powershell
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/windows-trial/ci-summary.json
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "chore: mark windows trial run start [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          } else {
+            Write-Host "Start marker unchanged; skipping commit."
+          }
+
       - name: Install dependencies
         id: install_dependencies
         run: npm ci
@@ -93,6 +128,7 @@ jobs:
           -RunId "${{ github.run_id }}"
           -RunUrl "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           -EventName "${{ github.event_name }}"
+          -Phase "completed"
           -InstallOutcome "${{ steps.install_dependencies.outcome }}"
           -CheckOutcome "${{ steps.svelte_check.outcome }}"
           -RustTestsOutcome "${{ steps.rust_tests.outcome }}"

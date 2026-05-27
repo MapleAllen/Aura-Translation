@@ -5,6 +5,7 @@ param(
   [Parameter(Mandatory = $true)][string]$RunId,
   [Parameter(Mandatory = $true)][string]$RunUrl,
   [Parameter(Mandatory = $true)][string]$EventName,
+  [string]$Phase = 'completed',
   [Parameter(Mandatory = $true)][string]$InstallOutcome,
   [Parameter(Mandatory = $true)][string]$CheckOutcome,
   [Parameter(Mandatory = $true)][string]$RustTestsOutcome,
@@ -77,11 +78,14 @@ $gateOutcomes = [ordered]@{
   }
 }
 
-$requiredFailures = @(
-  $gateOutcomes.GetEnumerator() |
-    Where-Object { $_.Value.required -and $_.Value.outcome -ne 'success' } |
-    ForEach-Object { $_.Key }
-)
+$requiredFailures = @()
+if ($Phase -eq 'completed') {
+  $requiredFailures = @(
+    $gateOutcomes.GetEnumerator() |
+      Where-Object { $_.Value.required -and $_.Value.outcome -ne 'success' } |
+      ForEach-Object { $_.Key }
+  )
+}
 
 $summary = [ordered]@{
   generatedAt = (Get-Date).ToUniversalTime().ToString('s') + 'Z'
@@ -91,7 +95,9 @@ $summary = [ordered]@{
   runId = $RunId
   runUrl = $RunUrl
   eventName = $EventName
-  passed = ($requiredFailures.Count -eq 0)
+  phase = $Phase
+  status = if ($Phase -eq 'started') { 'running' } elseif ($requiredFailures.Count -eq 0) { 'passed' } else { 'failed' }
+  passed = if ($Phase -eq 'completed') { ($requiredFailures.Count -eq 0) } else { $null }
   requiredFailures = $requiredFailures
   gateOutcomes = $gateOutcomes
   smokeProviders = Read-JsonFile (Join-Path $artifactDir 'smoke-providers.json')
