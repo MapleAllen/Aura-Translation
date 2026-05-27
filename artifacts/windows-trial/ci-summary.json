@@ -1,37 +1,38 @@
 ﻿{
-    "generatedAt":  "2026-05-27T05:55:29Z",
+    "generatedAt":  "2026-05-27T06:13:13Z",
     "repo":  "MapleAllen/Aura-Translation",
     "branch":  "codex/v1-release-hardening",
     "sha":  "7d1fadc049dec6a13549810b92d4fd549e508725",
     "runId":  "26493553950",
     "runUrl":  "https://github.com/MapleAllen/Aura-Translation/actions/runs/26493553950",
     "eventName":  "push",
-    "phase":  "started",
-    "status":  "running",
-    "passed":  null,
+    "phase":  "completed",
+    "status":  "failed",
+    "passed":  false,
     "requiredFailures":  [
-
+                             "install_acceptance",
+                             "resource_measurement"
                          ],
     "gateOutcomes":  {
                          "install_dependencies":  {
                                                       "required":  true,
-                                                      "outcome":  "pending"
+                                                      "outcome":  "success"
                                                   },
                          "check":  {
                                        "required":  true,
-                                       "outcome":  "pending"
+                                       "outcome":  "success"
                                    },
                          "rust_tests":  {
                                             "required":  true,
-                                            "outcome":  "pending"
+                                            "outcome":  "success"
                                         },
                          "ui_tests":  {
                                           "required":  true,
-                                          "outcome":  "pending"
+                                          "outcome":  "success"
                                       },
                          "build_release_bundles":  {
                                                        "required":  true,
-                                                       "outcome":  "pending"
+                                                       "outcome":  "success"
                                                    },
                          "live_provider_smoke":  {
                                                      "required":  false,
@@ -39,14 +40,17 @@
                                                  },
                          "install_acceptance":  {
                                                     "required":  true,
-                                                    "outcome":  "pending"
+                                                    "outcome":  "failure"
                                                 },
                          "resource_measurement":  {
                                                       "required":  true,
-                                                      "outcome":  "pending"
+                                                      "outcome":  "skipped"
                                                   }
                      },
     "smokeProviders":  null,
-    "acceptInstall":  null,
+    "acceptInstall":  {
+                          "ParseError":  "A parameter cannot be found that matches parameter name \u0027Depth\u0027.",
+                          "Path":  "D:\\a\\Aura-Translation\\Aura-Translation\\artifacts\\windows-trial\\accept-install.json"
+                      },
     "resourceMetrics":  null
 }
