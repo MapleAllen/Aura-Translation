@@ -41,7 +41,7 @@ function Get-OptionalPropertyValue {
   return $property.Value
 }
 
-function Resolve-ExecutablePathFromCommand {
+function Split-CommandInvocation {
   param(
     [string]$Command
   )
@@ -50,22 +50,36 @@ function Resolve-ExecutablePathFromCommand {
     return $null
   }
 
-  $trimmedCommand = $Command.Trim()
+  $trimmedCommand = ($Command -replace '\\"', '"').Trim()
 
-  if ($trimmedCommand.StartsWith('"')) {
-    $parts = $trimmedCommand -split '"'
-    if ($parts.Length -ge 2 -and -not [string]::IsNullOrWhiteSpace($parts[1])) {
-      return $parts[1]
+  if ($trimmedCommand -match '^\s*"(?<exe>[^"]+)"\s*(?<args>.*)$') {
+    return [pscustomobject]@{
+      Executable = $Matches.exe.Trim()
+      Arguments = $Matches.args.Trim()
     }
-    return $null
   }
 
-  $segments = $trimmedCommand.Split(' ', 2)
-  if ($segments.Length -gt 0 -and -not [string]::IsNullOrWhiteSpace($segments[0])) {
-    return $segments[0].Trim('"')
+  if ($trimmedCommand -match '^\s*(?<exe>\S+)\s*(?<args>.*)$') {
+    return [pscustomobject]@{
+      Executable = $Matches.exe.Trim().Trim('"')
+      Arguments = $Matches.args.Trim()
+    }
   }
 
   return $null
+}
+
+function Resolve-ExecutablePathFromCommand {
+  param(
+    [string]$Command
+  )
+
+  $invocation = Split-CommandInvocation -Command $Command
+  if ($null -eq $invocation -or [string]::IsNullOrWhiteSpace($invocation.Executable)) {
+    return $null
+  }
+
+  return $invocation.Executable
 }
 
 function Resolve-InstallDir {
@@ -89,7 +103,11 @@ function Resolve-InstallDir {
     )) {
       $exePath = Resolve-ExecutablePathFromCommand -Command $command
       if (-not [string]::IsNullOrWhiteSpace($exePath)) {
-        $candidatePaths += (Split-Path -Path $exePath -Parent)
+        try {
+          $candidatePaths += (Split-Path -Path $exePath.Trim().Trim('"') -Parent)
+        } catch {
+          continue
+        }
       }
     }
   }
@@ -103,9 +121,18 @@ function Resolve-InstallDir {
   )
 
   foreach ($candidate in ($candidatePaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)) {
-    $exePath = Join-Path $candidate 'aura-translation.exe'
-    if ((Test-Path $exePath) -or (Test-Path $candidate)) {
-      return $candidate
+    $normalizedCandidate = $candidate.Trim().Trim('"')
+    if ([string]::IsNullOrWhiteSpace($normalizedCandidate)) {
+      continue
+    }
+
+    try {
+      $exePath = Join-Path $normalizedCandidate 'aura-translation.exe'
+      if ((Test-Path $exePath) -or (Test-Path $normalizedCandidate)) {
+        return $normalizedCandidate
+      }
+    } catch {
+      continue
     }
   }
 
@@ -165,17 +192,13 @@ function Invoke-Uninstall {
     throw 'Uninstall command is empty.'
   }
 
-  $trimmedCommand = $command.Trim()
-
-  if ($trimmedCommand.StartsWith('"')) {
-    $parts = $trimmedCommand -split '"'
-    $exe = $parts[1]
-    $args = ($parts[2..($parts.Length - 1)] -join '"').Trim()
-  } else {
-    $segments = $trimmedCommand.Split(' ', 2)
-    $exe = $segments[0].Trim('"')
-    $args = if ($segments.Length -gt 1) { $segments[1] } else { '' }
+  $invocation = Split-CommandInvocation -Command $command
+  if ($null -eq $invocation -or [string]::IsNullOrWhiteSpace($invocation.Executable)) {
+    throw "Could not parse uninstall command: $command"
   }
+
+  $exe = $invocation.Executable
+  $args = $invocation.Arguments
 
   if ($exe -like '*.msiexec*' -and $args -notmatch '/qn') {
     $args = "$args /qn"
