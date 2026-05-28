@@ -1,28 +1,29 @@
-/* ── Google Fonts — must come before @import "tailwindcss" ────────── */
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,400&display=swap');
 
 @import "tailwindcss";
 
-/* ── Aura Design Tokens ──────────────────────────────────────────── */
 @theme {
-  --color-aura-bg: rgba(12, 12, 20, 0.78);
-  --color-aura-glass: rgba(255, 255, 255, 0.05);
-  --color-aura-glass-hover: rgba(255, 255, 255, 0.08);
-  --color-aura-border: rgba(255, 255, 255, 0.07);
-  --color-aura-border-accent: rgba(124, 106, 239, 0.25);
-  --color-aura-accent: #7c6aef;
-  --color-aura-accent-soft: rgba(124, 106, 239, 0.15);
-  --color-aura-accent-glow: rgba(124, 106, 239, 0.35);
-  --color-aura-text: #e8e6f0;
-  --color-aura-text-dim: #8b87a0;
-  --color-aura-text-muted: #5a566e;
-  --color-aura-success: #4ade80;
-  --color-aura-error: #f87171;
+  --color-aura-bg: rgba(246, 242, 236, 0.84);
+  --color-aura-glass: rgba(255, 255, 255, 0.7);
+  --color-aura-glass-hover: rgba(255, 255, 255, 0.9);
+  --color-aura-border: rgba(112, 127, 146, 0.18);
+  --color-aura-border-accent: rgba(43, 134, 255, 0.3);
+  --color-aura-accent: #2b86ff;
+  --color-aura-accent-soft: rgba(43, 134, 255, 0.12);
+  --color-aura-accent-glow: rgba(43, 134, 255, 0.16);
+  --color-aura-text: #18212b;
+  --color-aura-text-dim: #566273;
+  --color-aura-text-muted: #8a96a6;
+  --color-aura-surface-strong: rgba(255, 255, 255, 0.9);
+  --color-aura-surface-soft: rgba(243, 246, 249, 0.82);
+  --color-aura-shadow: rgba(89, 104, 129, 0.18);
+  --color-aura-focus-ring: rgba(43, 134, 255, 0.2);
+  --color-aura-success: #1f9d68;
+  --color-aura-error: #d95b69;
   --font-display: 'Outfit', sans-serif;
   --font-body: 'DM Sans', sans-serif;
 }
 
-/* ── Global Reset ────────────────────────────────────────────────── */
 *, *::before, *::after {
   margin: 0;
   padding: 0;
@@ -39,19 +40,29 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Scrollbar Styling ───────────────────────────────────────────── */
-::-webkit-scrollbar {
-  width: 4px;
+body {
+  background-image:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.6), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(43, 134, 255, 0.12), transparent 38%);
 }
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
+  background: rgba(112, 127, 146, 0.18);
+  border-radius: 999px;
 }
 
-/* ── Skeleton Shimmer Animation ──────────────────────────────────── */
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(112, 127, 146, 0.28);
+}
+
 @keyframes shimmer {
   0% {
     background-position: -200% 0;
@@ -63,17 +74,17 @@ html, body {
 
 @keyframes pulse-glow {
   0%, 100% {
-    opacity: 0.4;
+    opacity: 0.45;
   }
   50% {
-    opacity: 0.7;
+    opacity: 0.75;
   }
 }
 
 @keyframes fade-in-up {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -84,11 +95,11 @@ html, body {
 .skeleton-bar {
   background: linear-gradient(
     90deg,
-    rgba(124, 106, 239, 0.06) 25%,
-    rgba(124, 106, 239, 0.14) 50%,
-    rgba(124, 106, 239, 0.06) 75%
+    rgba(112, 127, 146, 0.08) 18%,
+    rgba(43, 134, 255, 0.18) 50%,
+    rgba(112, 127, 146, 0.08) 82%
   );
   background-size: 200% 100%;
   animation: shimmer 1.8s ease-in-out infinite, pulse-glow 2.4s ease-in-out infinite;
-  border-radius: 6px;
+  border-radius: 999px;
 }

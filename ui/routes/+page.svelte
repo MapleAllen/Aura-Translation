@@ -352,7 +352,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="h-screen w-screen p-2">
+<div class="h-screen w-screen p-3">
   <div
     class="relative h-full w-full"
     style:transform="scale({popupScale.current})"

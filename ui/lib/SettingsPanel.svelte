@@ -1,7 +1,6 @@
 <script lang="ts">
   /**
    * SettingsPanel - Configuration UI for API key, model, provider, and hotkey.
-   * Glassmorphic styling consistent with the translation popup.
    */
   import { Spring } from 'svelte/motion';
   import { invoke } from '@tauri-apps/api/core';
@@ -129,7 +128,7 @@
     saveMessage = '';
     saveErrorMessage = '';
     panelErrorMessage = '';
-    saveScale.target = 0.95;
+    saveScale.target = 0.97;
 
     try {
       await invoke('save_config', { config });
@@ -155,83 +154,100 @@
 
 {#if visible}
   <div
-    class="absolute inset-0 z-50 flex flex-col overflow-hidden rounded-[18px] border border-aura-border"
+    class="absolute inset-0 z-50 flex flex-col overflow-hidden rounded-[24px] border border-aura-border/80"
     style="
-      background: rgba(12, 12, 20, 0.92);
-      backdrop-filter: blur(32px) saturate(1.5);
-      -webkit-backdrop-filter: blur(32px) saturate(1.5);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.82) 0%, rgba(246, 242, 236, 0.96) 100%);
+      backdrop-filter: blur(22px) saturate(1.08);
+      -webkit-backdrop-filter: blur(22px) saturate(1.08);
       animation: fade-in-up 0.25s ease-out both;
+      box-shadow: 0 22px 44px var(--color-aura-shadow);
     "
   >
-    <div class="flex items-center justify-between border-b border-aura-border/50 px-4 py-3" data-tauri-drag-region>
-      <h2 class="text-sm font-display font-semibold tracking-wide text-aura-text" data-tauri-drag-region>
-        Settings
-      </h2>
+    <div class="flex items-start justify-between border-b border-aura-border/70 px-5 py-4" data-tauri-drag-region>
+      <div data-tauri-drag-region>
+        <h2 class="text-sm font-display font-semibold tracking-wide text-aura-text" data-tauri-drag-region>
+          Settings
+        </h2>
+        <p class="mt-1 text-xs leading-relaxed text-aura-text-dim" data-tauri-drag-region>
+          Choose a provider, model, and shortcut for the floating translator.
+        </p>
+      </div>
       <button
-        class="flex h-6 w-6 items-center justify-center rounded-md hover:bg-aura-glass-hover transition-colors duration-150"
+        class="flex h-8 w-8 items-center justify-center rounded-full bg-white/72 text-aura-text-dim transition-colors duration-150 hover:bg-white hover:text-aura-text"
         onclick={onclose}
         aria-label="Close settings"
+        type="button"
       >
-        <svg class="h-4 w-4 text-aura-text-dim" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
     </div>
 
-    <div class="flex-1 space-y-4 overflow-y-auto px-4 py-3">
+    <div class="flex-1 space-y-5 overflow-y-auto px-5 py-5">
       {#if panelErrorMessage}
-        <div class="rounded-lg border border-aura-error/45 bg-aura-error/8 px-3 py-2 text-xs text-aura-error">
+        <div class="rounded-2xl border border-aura-error/25 bg-[#fff4f6] px-4 py-3 text-sm leading-relaxed text-aura-error">
           {panelErrorMessage}
         </div>
       {/if}
 
-      <div class="space-y-1.5">
-        <label class="text-xs font-display font-medium uppercase tracking-wider text-aura-text-dim" for="provider">
-          Provider
-        </label>
+      <section class="space-y-3 rounded-[22px] bg-white/54 px-4 py-4 ring-1 ring-white/65">
+        <div>
+          <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
+            Provider
+          </p>
+          <p class="mt-1 text-xs text-aura-text-dim">
+            Aura uses any OpenAI-compatible endpoint, including local Ollama.
+          </p>
+        </div>
         <select
           id="provider"
           value={config.provider}
           onchange={(e) => handleProviderChange((e.currentTarget as HTMLSelectElement).value as Provider)}
-          class="w-full cursor-pointer appearance-none rounded-lg border border-aura-border bg-aura-glass px-3 py-2 text-sm text-aura-text transition-all duration-200 hover:border-aura-border-accent focus:border-aura-accent focus:outline-none"
+          class="w-full cursor-pointer rounded-2xl border border-aura-border bg-white/82 px-3 py-3 text-sm text-aura-text outline-none transition-all duration-200 hover:border-aura-border-accent focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
         >
           {#each PROVIDER_OPTIONS as opt}
-            <option value={opt.value} class="bg-[#1a1a2e]">{opt.label}</option>
+            <option value={opt.value}>{opt.label}</option>
           {/each}
         </select>
-      </div>
+      </section>
 
       {#if shouldShowPlaintextApiKeyWarning(config.provider)}
         <div
-          class="rounded-lg border border-[#d6a743]/35 bg-[#2a2216]/88 px-3 py-2"
+          class="rounded-2xl border border-[#e6c683] bg-[#fff7e4] px-4 py-3"
           data-testid="plaintext-api-key-warning"
         >
-          <p class="text-[11px] leading-relaxed text-[#e7c980]">
+          <p class="text-xs leading-relaxed text-[#8a6226]">
             API keys are stored in plaintext in the local Aura config on this machine. Use a trial or low-permission key when possible.
           </p>
         </div>
       {/if}
 
       {#if config.provider !== 'ollama'}
-        <div class="space-y-1.5">
-          <label class="text-xs font-display font-medium uppercase tracking-wider text-aura-text-dim" for="api-key">
-            API Key
-          </label>
+        <section class="space-y-3 rounded-[22px] bg-white/54 px-4 py-4 ring-1 ring-white/65">
+          <div>
+            <label class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted" for="api-key">
+              API Key
+            </label>
+            <p class="mt-1 text-xs text-aura-text-dim">
+              Stored locally for the selected provider.
+            </p>
+          </div>
           <div class="relative">
             <input
               id="api-key"
               type={showApiKey ? 'text' : 'password'}
               bind:value={config.api_key}
               placeholder="sk-..."
-              class="w-full rounded-lg border border-aura-border bg-aura-glass px-3 py-2 text-sm text-aura-text placeholder:text-aura-text-muted transition-all duration-200 hover:border-aura-border-accent focus:border-aura-accent focus:outline-none focus:ring-1 focus:ring-aura-accent/30"
+              class="w-full rounded-2xl border border-aura-border bg-white/82 px-3 py-3 pr-12 text-sm text-aura-text outline-none transition-all duration-200 placeholder:text-aura-text-muted hover:border-aura-border-accent focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
             />
             <button
-              class="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 hover:bg-aura-glass-hover transition-colors"
+              class="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-aura-text-muted transition-colors hover:bg-aura-accent-soft hover:text-aura-accent"
               onclick={() => (showApiKey = !showApiKey)}
               type="button"
               aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
             >
-              <svg class="h-4 w-4 text-aura-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 {#if showApiKey}
                   <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
                 {:else}
@@ -241,28 +257,38 @@
               </svg>
             </button>
           </div>
-        </div>
+        </section>
       {/if}
 
-      <div class="space-y-1.5">
-        <label class="text-xs font-display font-medium uppercase tracking-wider text-aura-text-dim" for="model">
-          Model
-        </label>
+      <section class="space-y-3 rounded-[22px] bg-white/54 px-4 py-4 ring-1 ring-white/65">
+        <div>
+          <label class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted" for="model">
+            Model
+          </label>
+          <p class="mt-1 text-xs text-aura-text-dim">
+            The list updates when you switch providers.
+          </p>
+        </div>
         <select
           id="model"
           bind:value={config.model}
-          class="w-full cursor-pointer appearance-none rounded-lg border border-aura-border bg-aura-glass px-3 py-2 text-sm text-aura-text transition-all duration-200 hover:border-aura-border-accent focus:border-aura-accent focus:outline-none"
+          class="w-full cursor-pointer rounded-2xl border border-aura-border bg-white/82 px-3 py-3 text-sm text-aura-text outline-none transition-all duration-200 hover:border-aura-border-accent focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
         >
           {#each config.available_models as m}
-            <option value={m} class="bg-[#1a1a2e]">{m}</option>
+            <option value={m}>{m}</option>
           {/each}
         </select>
-      </div>
+      </section>
 
-      <div class="space-y-1.5">
-        <label class="text-xs font-display font-medium uppercase tracking-wider text-aura-text-dim" for="hotkey-capture">
-          Hotkey
-        </label>
+      <section class="space-y-3 rounded-[22px] bg-white/54 px-4 py-4 ring-1 ring-white/65">
+        <div>
+          <label class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted" for="hotkey-capture">
+            Hotkey
+          </label>
+          <p class="mt-1 text-xs text-aura-text-dim">
+            Copy text first, then press your shortcut to translate.
+          </p>
+        </div>
         <div class="relative">
           <input
             id="hotkey-capture"
@@ -273,21 +299,15 @@
             onfocus={() => (isCapturingHotkey = true)}
             onblur={() => (isCapturingHotkey = false)}
             onkeydown={handleHotkeyKeydown}
-            class={`w-full cursor-pointer select-none caret-transparent rounded-lg border bg-aura-glass px-3 py-2 text-sm font-medium text-aura-text transition-all duration-200 ${
+            class={`w-full cursor-pointer select-none rounded-2xl border bg-white/82 px-3 py-3 pr-28 text-sm font-medium text-aura-text outline-none transition-all duration-200 ${
               isCapturingHotkey
-                ? 'border-aura-accent ring-1 ring-aura-accent/30'
+                ? 'border-aura-accent ring-2 ring-aura-accent/15'
                 : 'border-aura-border hover:border-aura-border-accent'
             }`}
           />
-          {#if isCapturingHotkey}
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-aura-accent animate-pulse">
-              recording...
-            </span>
-          {:else}
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-aura-text-muted">
-              click to change
-            </span>
-          {/if}
+          <span class={`absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium ${isCapturingHotkey ? 'text-aura-accent' : 'text-aura-text-muted'}`}>
+            {isCapturingHotkey ? 'recording...' : 'click to edit'}
+          </span>
         </div>
         <p class="pl-0.5 text-xs text-aura-text-muted">
           Hotkeys must include at least one modifier and a letter or digit key.
@@ -301,27 +321,28 @@
 
         {#if hotkeyConflictMessage}
           <div
-            class="rounded-lg border border-[#d6a743]/35 bg-[#2a2216]/88 px-3 py-2 text-xs leading-relaxed text-[#e7c980]"
+            class="rounded-2xl border border-[#e6c683] bg-[#fff7e4] px-4 py-3 text-xs leading-relaxed text-[#8a6226]"
             data-testid="hotkey-conflict-inline"
           >
             {hotkeyConflictMessage}
           </div>
         {/if}
-      </div>
+      </section>
     </div>
 
-    <div class="border-t border-aura-border/50 px-4 py-3">
+    <div class="border-t border-aura-border/70 px-5 py-4">
       {#if saveErrorMessage}
-        <p class="mb-2 text-xs text-aura-error" data-testid="save-error-message">{saveErrorMessage}</p>
+        <p class="mb-3 text-sm text-aura-error" data-testid="save-error-message">{saveErrorMessage}</p>
       {:else if saveMessage}
-        <p class="mb-2 text-xs text-aura-success">{saveMessage}</p>
+        <p class="mb-3 text-sm text-aura-success">{saveMessage}</p>
       {/if}
 
       <button
-        class="w-full rounded-lg bg-aura-accent py-2 text-sm font-display font-medium text-white transition-all duration-200 hover:brightness-110 active:brightness-90 disabled:cursor-not-allowed disabled:opacity-50"
+        class="w-full rounded-2xl bg-aura-accent py-3 text-sm font-display font-medium text-white transition-all duration-200 hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
         style:transform="scale({saveScale.current})"
         onclick={saveConfig}
         disabled={saving}
+        type="button"
       >
         {#if saving}
           Saving...

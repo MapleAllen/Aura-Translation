@@ -1,7 +1,6 @@
 <script lang="ts">
   /**
-   * TranslationPopup — The glassmorphic floating card.
-   * Shows source text, loading skeleton, streaming result, or error state.
+   * TranslationPopup - Floating translation surface with a dominant reading panel.
    */
   import { Spring } from 'svelte/motion';
   import SkeletonLoader from './SkeletonLoader.svelte';
@@ -32,7 +31,6 @@
     oncancel,
   }: Props = $props();
 
-  // Copy button spring animation
   const copyScale = new Spring(1, { stiffness: 0.4, damping: 0.5 });
   let copied = $state(false);
 
@@ -41,7 +39,7 @@
     try {
       await writeText(translatedText);
       copied = true;
-      copyScale.target = 1.2;
+      copyScale.target = 1.08;
       setTimeout(() => {
         copyScale.target = 1;
       }, 150);
@@ -55,50 +53,48 @@
 </script>
 
 <div
-  class="relative flex flex-col h-full rounded-[18px] overflow-hidden
-         border border-aura-border"
+  class="relative flex h-full flex-col overflow-hidden rounded-[24px] border border-aura-border/80"
+  data-testid="popup-shell"
   style="
-    background: rgba(12, 12, 20, 0.78);
-    backdrop-filter: blur(28px) saturate(1.4);
-    -webkit-backdrop-filter: blur(28px) saturate(1.4);
-    box-shadow:
-      0 0 0 1px rgba(255,255,255,0.04) inset,
-      0 8px 32px rgba(0,0,0,0.5),
-      0 2px 8px rgba(0,0,0,0.3),
-      0 0 60px rgba(124,106,239,0.06);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(246, 242, 236, 0.92) 100%);
+    backdrop-filter: blur(20px) saturate(1.1);
+    -webkit-backdrop-filter: blur(20px) saturate(1.1);
+    box-shadow: 0 20px 44px var(--color-aura-shadow);
   "
 >
-  <!-- Drag Region (top bar) -->
   <div
-    class="flex items-center justify-between px-4 py-2.5 shrink-0"
+    class="flex shrink-0 items-center justify-between px-5 pt-4 pb-3"
     data-tauri-drag-region
   >
-    <div class="flex items-center gap-2" data-tauri-drag-region>
-      <div class="w-2 h-2 rounded-full bg-aura-accent opacity-70"></div>
-      <span class="text-xs font-display font-medium text-aura-text-dim tracking-wide uppercase" data-tauri-drag-region>
-        Aura
-      </span>
+    <div class="flex items-center gap-3" data-tauri-drag-region>
+      <div class="flex h-8 w-8 items-center justify-center rounded-full bg-aura-surface-strong text-[11px] font-display font-semibold tracking-[0.24em] text-aura-accent shadow-sm">
+        AU
+      </div>
+      <div data-tauri-drag-region>
+        <p class="text-[11px] font-display font-medium uppercase tracking-[0.22em] text-aura-text-dim" data-tauri-drag-region>
+          Aura Translation
+        </p>
+        <p class="text-[11px] text-aura-text-muted" data-tauri-drag-region>
+          Clipboard translation, kept close to the tray.
+        </p>
+      </div>
     </div>
 
-    <!-- Status indicator + Cancel button -->
     {#if viewState === 'loading' || viewState === 'streaming'}
-      <div class="flex items-center gap-2">
-        <div class="flex items-center gap-1.5">
-          <div class="w-1.5 h-1.5 rounded-full bg-aura-accent animate-pulse"></div>
-          <span class="text-[10px] text-aura-text-muted font-display">
-            {viewState === 'loading' ? 'connecting...' : 'translating...'}
-          </span>
-        </div>
+      <div class="flex items-center gap-2 rounded-full bg-aura-surface-soft px-2.5 py-1 text-[11px] text-aura-text-dim">
+        <span class="h-2 w-2 rounded-full bg-aura-accent shadow-[0_0_0_4px_rgba(43,134,255,0.12)] animate-pulse"></span>
+        <span class="font-display font-medium">
+          {viewState === 'loading' ? 'Connecting' : 'Translating'}
+        </span>
         <button
           id="cancel-translate-btn"
-          class="flex items-center justify-center w-5 h-5 rounded-full
-                 text-aura-text-muted hover:text-aura-error
-                 bg-transparent hover:bg-aura-error/10
-                 transition-all duration-200 cursor-pointer"
+          class="ml-0.5 flex h-5 w-5 items-center justify-center rounded-full text-aura-text-muted transition-colors duration-200 hover:bg-white/70 hover:text-aura-error"
           onclick={() => oncancel?.()}
           aria-label="Cancel translation"
+          data-testid="cancel-translate-button"
+          type="button"
         >
-          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
@@ -106,8 +102,7 @@
     {/if}
   </div>
 
-  <!-- Language Selector -->
-  <div class="px-4 pb-2 shrink-0">
+  <div class="shrink-0 px-5 pb-3">
     <LanguageSelector
       {sourceLang}
       {targetLang}
@@ -115,11 +110,13 @@
     />
   </div>
 
-  <!-- Source Text -->
   {#if sourceText}
-    <div class="px-4 pb-2 shrink-0">
-      <div class="px-3 py-2 rounded-lg bg-aura-glass border border-aura-border">
-        <p class="text-xs text-aura-text-dim font-body leading-relaxed line-clamp-2 select-text">
+    <div class="shrink-0 px-5 pb-3">
+      <div class="rounded-2xl bg-white/48 px-4 py-3 text-sm text-aura-text-dim ring-1 ring-white/60" data-testid="source-context">
+        <p class="mb-1 text-[10px] font-display font-semibold uppercase tracking-[0.2em] text-aura-text-muted">
+          Source
+        </p>
+        <p class="max-h-11 overflow-hidden leading-relaxed select-text">
           {sourceText}
         </p>
       </div>
@@ -181,7 +178,40 @@
           </svg>
           <span>Copy</span>
         {/if}
-      </button>
+      </div>
+
+      <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        {#if viewState === 'idle'}
+          <div class="flex h-full items-center justify-center">
+            <p class="max-w-[240px] text-center text-sm leading-relaxed text-aura-text-dim" data-testid="idle-hint">
+              Copy text, press your hotkey, and Aura will keep the translation close without taking over your screen.
+            </p>
+          </div>
+        {:else if viewState === 'loading'}
+          <div data-testid="loading-state">
+            <SkeletonLoader />
+          </div>
+        {:else if viewState === 'streaming' || viewState === 'result'}
+          <p
+            class="whitespace-pre-wrap break-words text-[15px] leading-7 text-aura-text select-text"
+            data-testid="translation-output"
+            style="animation: fade-in-up 0.3s ease-out both;"
+          >
+            {translatedText}{#if viewState === 'streaming'}<span class="ml-0.5 inline-block h-4 w-0.5 animate-pulse align-text-bottom bg-aura-accent"></span>{/if}
+          </p>
+        {:else if viewState === 'error'}
+          <div class="flex h-full flex-col items-center justify-center gap-3 text-center" data-testid="error-state">
+            <div class="flex h-10 w-10 items-center justify-center rounded-full bg-[#fce8eb] text-aura-error">
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
+            </div>
+            <p class="max-w-[280px] text-sm leading-relaxed text-aura-text-dim">
+              {errorMessage || 'Translation failed'}
+            </p>
+          </div>
+        {/if}
+      </div>
     </div>
-  {/if}
+  </div>
 </div>

@@ -14,8 +14,8 @@
       {
         "label": "main",
         "title": "Aura Translation",
-        "width": 440,
-        "height": 360,
+        "width": 500,
+        "height": 400,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
