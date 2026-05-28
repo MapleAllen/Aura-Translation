@@ -13,6 +13,7 @@
     sourceText: string;
     translatedText: string;
     errorMessage: string;
+    hotkeyLabel: string;
     sourceLang: string;
     targetLang: string;
     onLanguageChange: (source: string, target: string) => void;
@@ -24,6 +25,7 @@
     sourceText,
     translatedText,
     errorMessage,
+    hotkeyLabel,
     sourceLang,
     targetLang,
     onLanguageChange,
@@ -132,7 +134,7 @@
     {#if viewState === 'idle'}
       <div class="flex items-center justify-center h-full">
         <p class="text-sm text-aura-text-muted font-display italic">
-          Copy text and press Ctrl+T
+          Copy text and press {hotkeyLabel}
         </p>
       </div>
     {:else if viewState === 'loading'}

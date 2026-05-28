@@ -338,6 +338,9 @@
     };
 
     void register();
+    void invoke('mark_ui_ready').catch((e) => {
+      console.error('Failed to mark UI as ready:', e);
+    });
 
     return () => {
       for (const unlisten of unlisteners) {
@@ -349,7 +352,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="h-screen w-screen p-2">
+<div class="h-screen w-screen p-3">
   <div
     class="relative h-full w-full"
     style:transform="scale({popupScale.current})"
@@ -363,6 +366,7 @@
       {sourceText}
       {translatedText}
       {errorMessage}
+      hotkeyLabel={config.hotkey || 'CmdOrCtrl+T'}
       {sourceLang}
       {targetLang}
       onLanguageChange={handleLanguageChange}

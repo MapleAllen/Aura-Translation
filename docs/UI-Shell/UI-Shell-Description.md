@@ -18,7 +18,7 @@ The shell implements a five-stage lifecycle:
 4. **Streaming** — First current-request `translation-chunk` event arrives; `appState` enters `streaming`; tokens append to `translatedText` with a blinking cursor; translated text fades in and pans upward via the `fade-in-up` keyframe animation.
 5. **Dismiss** — On `Esc` or focus loss, the popup springs back to scale `0.92` / opacity `0` over ~220 ms, then `appWindow.hide()` returns the process to the daemon state.
 
-The shell is a SvelteKit application with a single route (`ui/routes/+page.svelte`) that acts as the lifecycle orchestrator. On mount, it loads config from the Rust backend, registers eight Tauri event listeners, and binds keyboard events for `Esc`. Two `Spring` instances (`popupScale` starting at `0.92`, `popupOpacity` starting at `0`) drive the enter/exit animation: on trigger the targets jump to `1`; on dismiss they return to `0.92` / `0`. A 220 ms delay after the spring settles hides the Tauri window.
+The shell is a SvelteKit application with a single route (`ui/routes/+page.svelte`) that acts as the lifecycle orchestrator. On mount, it loads config from the Rust backend, registers ten Tauri event listeners, and binds keyboard events for `Esc`. Two `Spring` instances (`popupScale` starting at `0.92`, `popupOpacity` starting at `0`) drive the enter/exit animation: on trigger the targets jump to `1`; on dismiss they return to `0.92` / `0`. A 220 ms delay after the spring settles hides the Tauri window.
 
 The orchestrator maintains an `appState` union (`idle | loading | streaming | result | error`) that is driven by incoming Tauri events. Each translation is assigned a monotonically incrementing `currentRequestId` (used for cancellation targeting). A `startTranslation()` function encapsulates the API call setup — incrementing the request ID, clearing previous text, setting `appState = 'loading'`, starting a 20-second loading timeout, and invoking `translate_text` with the current source text, language pair, and request ID. The `TranslationPopup` component renders different content for each state and exposes a cancel button (× icon) during `loading` and `streaming` states. `SettingsPanel` is layered absolutely above the popup and toggled via a `showSettings` boolean.
 
@@ -33,7 +33,7 @@ The design system is defined in `ui/app.css` as Tailwind CSS v4 `@theme` tokens 
 - Auto-dismiss on `Esc` key or `window-blur` Tauri event (suppressed when Settings is open)
 
 **Translation states**
-- `idle`: shows placeholder hint text "Copy text and press Ctrl+T"
+- `idle`: shows placeholder hint text "Copy text and press {configured hotkey}"
 - `loading`: renders `SkeletonLoader` (4 shimmer bars with staggered 120 ms animation delays: widths 100%, 88%, 72%, 55%); starts a 20-second loading timeout
 - `streaming`: renders translated text with an animated blinking cursor appended; chunks are only appended when `appState === 'streaming'` and the event `request_id` matches `currentRequestId`
 - `result`: same as streaming but cursor removed; copy button appears in footer
@@ -52,8 +52,8 @@ The design system is defined in `ui/app.css` as Tailwind CSS v4 `@theme` tokens 
 
 **Settings panel**
 - Glassmorphic overlay rendered absolutely over the popup (`z-50`)
-- Fields: Provider (dropdown: DeepSeek / OpenRouter / Ollama), API Key (password input with show/hide toggle, hidden for Ollama), Model (dropdown populated from `config.available_models`), Hotkey (live capture widget — listens to `keydown`, formats `CmdOrCtrl+T`-style string)
-- Save button with spring bounce animation; shows "Saved!" for 1200 ms on success
+- Fields: Provider (dropdown: DeepSeek / OpenRouter / Ollama), API Key (password input with show/hide toggle, hidden for Ollama), Model (dropdown populated from `config.available_models`), Hotkey (live capture widget — listens to `keydown`, formats `CmdOrCtrl+T`-style string, and rejects bare single-key bindings)
+- Save button with spring bounce animation; shows "Settings saved" briefly on success
 - Panel opened via tray `show-settings` event or programmatically; closed by `Esc` or the close button
 
 **Request cancellation**
@@ -92,14 +92,16 @@ Single-route SvelteKit application using Svelte 5 runes API (`$state`, `$props`,
   - `handleLanguageChange(source, target)`: updates state; if currently loading or streaming, cancels and retranslates immediately.
   - Registers Tauri event listeners in `onMount`: `trigger-translate`, `translation-chunk`, `translation-done`, `translation-error`, `translation-retry`, `window-blur`, `show-settings`, `hotkey-conflict`.
   - `translation-chunk`, `translation-done`, `translation-error`, and `translation-retry` listeners ignore payloads whose `request_id` does not match `currentRequestId`, preventing stale events from cancelled requests from corrupting the UI.
+  - Surfaces `hotkey-conflict` and `daemon-error` as visible notifications rather than leaving them in developer logs only.
 
 ### Components (`ui/lib/`)
 
 - `TranslationPopup.svelte`
-  - Props: `viewState`, `sourceText`, `translatedText`, `errorMessage`, `sourceLang`, `targetLang`, `onLanguageChange`, `oncancel`.
+  - Props: `viewState`, `sourceText`, `translatedText`, `errorMessage`, `hotkeyLabel`, `sourceLang`, `targetLang`, `onLanguageChange`, `oncancel`.
   - Renders the glassmorphic card with backdrop blur (`28px`), box-shadow stack, and drag region.
   - Delegates loading state to `SkeletonLoader` and language UI to `LanguageSelector`.
   - Renders a cancel button (× icon) in the header bar during `loading` and `streaming` states; fires `oncancel` on click.
+  - Displays the currently configured hotkey in the idle-state hint text.
   - `copyResult()`: calls `writeText(translatedText)` from `@tauri-apps/plugin-clipboard-manager`; spring-bounces the copy button.
 
 - `LanguageSelector.svelte`
@@ -113,6 +115,7 @@ Single-route SvelteKit application using Svelte 5 runes API (`$state`, `$props`,
 - `SettingsPanel.svelte`
   - Props: `visible`, `onclose`.
   - `$effect`: calls `loadConfig()` whenever `visible` becomes `true`.
+  - `handleHotkeyKeydown(e)`: requires at least one modifier plus an alphanumeric key before updating `config.hotkey`; otherwise shows inline guidance.
   - `saveConfig()`: invokes `save_config` with the local `config` object; spring-bounces the save button.
   - Rendered only when `visible === true` (Svelte `{#if}` block — full DOM teardown on hide).
 
@@ -128,7 +131,7 @@ Single-route SvelteKit application using Svelte 5 runes API (`$state`, `$props`,
   - `invoke('save_config', { config })`: called in `SettingsPanel.saveConfig()` via the orchestrator.
   - `invoke('translate_text', { text, sourceLang, targetLang, apiKey, model, requestId, apiBaseUrl, provider })`: called in `startTranslation()` on every `trigger-translate` event and on mid-stream language switch.
   - `invoke('cancel_translate', { requestId })`: called in `cancelCurrentTranslation()` on user cancel, language switch mid-stream, or new trigger while streaming.
-  - `listen('trigger-translate')`, `listen('translation-chunk')`, `listen('translation-done')`, `listen('translation-error')`, `listen('translation-retry')`, `listen('window-blur')`, `listen('show-settings')`, `listen('hotkey-conflict')`: all registered in `onMount`.
+  - `listen('trigger-translate')`, `listen('translation-chunk')`, `listen('translation-done')`, `listen('translation-error')`, `listen('translation-retry')`, `listen('window-blur')`, `listen('show-settings')`, `listen('hotkey-conflict')`, and `listen('daemon-error')`: all registered in `onMount`.
   - `getCurrentWindow().hide()`: called in the dismiss timeout.
 
 - `ui/lib/TranslationPopup.svelte`

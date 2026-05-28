@@ -20,8 +20,8 @@ use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 /// Single digits (`0`–`9`) → `Code::Digit0`…`Code::Digit9`
 ///
 /// # Errors
-/// Returns `Err(String)` for empty input, unknown modifiers, unknown key codes,
-/// or input with no key token.
+/// Returns `Err(String)` for empty input, missing modifiers, unknown modifiers,
+/// unknown key codes, or input with no key token.
 pub fn parse_hotkey(s: &str) -> Result<Shortcut, String> {
     let s = s.trim();
     if s.is_empty() {
@@ -36,6 +36,10 @@ pub fn parse_hotkey(s: &str) -> Result<Shortcut, String> {
     // All tokens except the last are modifiers; the last is the key.
     let (modifier_tokens, key_tokens) = parts.split_at(parts.len() - 1);
     let key_token = key_tokens[0].trim();
+
+    if modifier_tokens.is_empty() {
+        return Err("Hotkey must include at least one modifier".to_string());
+    }
 
     // Build modifier bitmask
     let mut modifiers = Modifiers::empty();
@@ -162,6 +166,11 @@ mod tests {
     #[test]
     fn unknown_modifier_errors() {
         assert!(parse_hotkey("Win+T").is_err());
+    }
+
+    #[test]
+    fn single_key_errors() {
+        assert!(parse_hotkey("T").is_err());
     }
 
     #[test]

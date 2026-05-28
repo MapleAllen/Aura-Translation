@@ -4,7 +4,7 @@ A lightweight, cross-platform floating desktop translation utility. Runs silentl
 
 ## Features
 
-- **Zero-friction trigger** — Global hotkey (`Ctrl+T`) reads the clipboard instantly
+- **Zero-friction trigger** — Configurable global hotkey (default `CmdOrCtrl+T`) reads the clipboard instantly
 - **Streaming output** — Token-by-token translation via OpenAI-compatible providers
 - **Bidirectional language pairs** — 11 languages with one-click swap
 - **Glassmorphic UI** — Transparent, always-on-top floating popup near the system tray
@@ -72,7 +72,7 @@ npm run tauri dev
 ### Usage
 
 1. Select any text and copy it (`Ctrl+C`)
-2. Press `Ctrl+T` — the popup springs open near the tray
+2. Press your configured hotkey (default `CmdOrCtrl+T`) — the popup springs open near the tray
 3. Watch the translation stream in
 4. Press `Esc` or click elsewhere to dismiss
 
@@ -83,3 +83,5 @@ npm run tauri build
 ```
 
 The installer will be output to `src-tauri/target/release/bundle/`.
+
+For the Windows trial release gate, use [docs/Windows-Trial-Checklist.md](/Users/maple/Github/Aura-Translation/docs/Windows-Trial-Checklist.md). The repo also includes a Windows GitHub Actions workflow at [.github/workflows/windows-trial.yml](/Users/maple/Github/Aura-Translation/.github/workflows/windows-trial.yml) for repeatable build, install, and resource checks; live provider smoke and installed-build sign-off remain separate release steps.

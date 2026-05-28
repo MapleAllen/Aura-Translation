@@ -1,0 +1,52 @@
+﻿{
+    "generatedAt":  "2026-05-28T08:23:07Z",
+    "repo":  "MapleAllen/Aura-Translation",
+    "branch":  "codex/v1-release-hardening",
+    "sha":  "559a9384c012331aa6cbf9f741ff89d9d2630bf6",
+    "runId":  "26563420371",
+    "runUrl":  "https://github.com/MapleAllen/Aura-Translation/actions/runs/26563420371",
+    "eventName":  "push",
+    "phase":  "started",
+    "status":  "running",
+    "passed":  null,
+    "requiredFailures":  [
+
+                         ],
+    "gateOutcomes":  {
+                         "install_dependencies":  {
+                                                      "required":  true,
+                                                      "outcome":  "pending"
+                                                  },
+                         "check":  {
+                                       "required":  true,
+                                       "outcome":  "pending"
+                                   },
+                         "rust_tests":  {
+                                            "required":  true,
+                                            "outcome":  "pending"
+                                        },
+                         "ui_tests":  {
+                                          "required":  true,
+                                          "outcome":  "pending"
+                                      },
+                         "build_release_bundles":  {
+                                                       "required":  true,
+                                                       "outcome":  "pending"
+                                                   },
+                         "live_provider_smoke":  {
+                                                     "required":  false,
+                                                     "outcome":  "skipped"
+                                                 },
+                         "install_acceptance":  {
+                                                    "required":  true,
+                                                    "outcome":  "pending"
+                                                },
+                         "resource_measurement":  {
+                                                      "required":  true,
+                                                      "outcome":  "pending"
+                                                  }
+                     },
+    "smokeProviders":  null,
+    "acceptInstall":  null,
+    "resourceMetrics":  null
+}

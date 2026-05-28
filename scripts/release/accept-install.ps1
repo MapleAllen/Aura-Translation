@@ -1,3 +1,7 @@
+param(
+  [switch]$SkipBuild
+)
+
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
@@ -17,6 +21,118 @@ function Get-RegistryInstallEntry {
       Select-Object -First 1
     if ($null -ne $entry) {
       return $entry
+    }
+  }
+
+  return $null
+}
+
+function Get-OptionalPropertyValue {
+  param(
+    [Parameter(Mandatory = $true)]$Object,
+    [Parameter(Mandatory = $true)][string]$Name
+  )
+
+  $property = $Object.PSObject.Properties[$Name]
+  if ($null -eq $property) {
+    return $null
+  }
+
+  return $property.Value
+}
+
+function Split-CommandInvocation {
+  param(
+    [string]$Command
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Command)) {
+    return $null
+  }
+
+  $trimmedCommand = ($Command -replace '\\"', '"').Trim()
+
+  if ($trimmedCommand -match '^\s*"(?<exe>[^"]+)"\s*(?<args>.*)$') {
+    return [pscustomobject]@{
+      Executable = $Matches.exe.Trim()
+      Arguments = $Matches.args.Trim()
+    }
+  }
+
+  if ($trimmedCommand -match '^\s*(?<exe>\S+)\s*(?<args>.*)$') {
+    return [pscustomobject]@{
+      Executable = $Matches.exe.Trim().Trim('"')
+      Arguments = $Matches.args.Trim()
+    }
+  }
+
+  return $null
+}
+
+function Resolve-ExecutablePathFromCommand {
+  param(
+    [string]$Command
+  )
+
+  $invocation = Split-CommandInvocation -Command $Command
+  if ($null -eq $invocation -or [string]::IsNullOrWhiteSpace($invocation.Executable)) {
+    return $null
+  }
+
+  return $invocation.Executable
+}
+
+function Resolve-InstallDir {
+  param(
+    [string[]]$PreferredPaths = @()
+  )
+
+  $entry = Get-RegistryInstallEntry
+  $candidatePaths = @()
+
+  if ($null -ne $entry) {
+    $installLocation = Get-OptionalPropertyValue -Object $entry -Name 'InstallLocation'
+    if (-not [string]::IsNullOrWhiteSpace($installLocation)) {
+      $candidatePaths += $installLocation
+    }
+
+    foreach ($command in @(
+      (Get-OptionalPropertyValue -Object $entry -Name 'DisplayIcon'),
+      (Get-OptionalPropertyValue -Object $entry -Name 'QuietUninstallString'),
+      (Get-OptionalPropertyValue -Object $entry -Name 'UninstallString')
+    )) {
+      $exePath = Resolve-ExecutablePathFromCommand -Command $command
+      if (-not [string]::IsNullOrWhiteSpace($exePath)) {
+        try {
+          $candidatePaths += (Split-Path -Path $exePath.Trim().Trim('"') -Parent)
+        } catch {
+          continue
+        }
+      }
+    }
+  }
+
+  $candidatePaths += $PreferredPaths
+  $candidatePaths += @(
+    (Join-Path $env:LOCALAPPDATA 'Programs\Aura Translation'),
+    (Join-Path $env:LOCALAPPDATA 'Aura Translation'),
+    (Join-Path $env:ProgramFiles 'Aura Translation'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Aura Translation')
+  )
+
+  foreach ($candidate in ($candidatePaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)) {
+    $normalizedCandidate = $candidate.Trim().Trim('"')
+    if ([string]::IsNullOrWhiteSpace($normalizedCandidate)) {
+      continue
+    }
+
+    try {
+      $exePath = Join-Path $normalizedCandidate 'aura-translation.exe'
+      if ((Test-Path $exePath) -or (Test-Path $normalizedCandidate)) {
+        return $normalizedCandidate
+      }
+    } catch {
+      continue
     }
   }
 
@@ -65,20 +181,24 @@ function Invoke-Uninstall {
     throw 'Could not find an Aura Translation uninstall entry.'
   }
 
-  $command = if ($entry.QuietUninstallString) { $entry.QuietUninstallString } else { $entry.UninstallString }
+  $quietUninstallString = Get-OptionalPropertyValue -Object $entry -Name 'QuietUninstallString'
+  $uninstallString = Get-OptionalPropertyValue -Object $entry -Name 'UninstallString'
+  $command = if (-not [string]::IsNullOrWhiteSpace($quietUninstallString)) {
+    $quietUninstallString
+  } else {
+    $uninstallString
+  }
   if ([string]::IsNullOrWhiteSpace($command)) {
     throw 'Uninstall command is empty.'
   }
 
-  if ($command.StartsWith('"')) {
-    $parts = $command -split '"'
-    $exe = $parts[1]
-    $args = ($parts[2..($parts.Length - 1)] -join '"').Trim()
-  } else {
-    $segments = $command.Split(' ', 2)
-    $exe = $segments[0]
-    $args = if ($segments.Length -gt 1) { $segments[1] } else { '' }
+  $invocation = Split-CommandInvocation -Command $command
+  if ($null -eq $invocation -or [string]::IsNullOrWhiteSpace($invocation.Executable)) {
+    throw "Could not parse uninstall command: $command"
   }
+
+  $exe = $invocation.Executable
+  $args = $invocation.Arguments
 
   if ($exe -like '*.msiexec*' -and $args -notmatch '/qn') {
     $args = "$args /qn"
@@ -107,7 +227,9 @@ Push-Location $repoRoot
 try {
   Stop-AuraProcesses
 
-  npm run tauri build | Out-Host
+  if (-not $SkipBuild) {
+    npm run tauri build | Out-Host
+  }
 
   $nsisPackage = Get-ChildItem -Path 'src-tauri\target\release\bundle\nsis' -Filter '*setup.exe' | Select-Object -First 1
   $msiPackage = Get-ChildItem -Path 'src-tauri\target\release\bundle\msi' -Filter '*.msi' | Select-Object -First 1
@@ -129,7 +251,14 @@ try {
     throw "NSIS installer exited with code $($installProcess.ExitCode)."
   }
 
-  Wait-Until -Condition { Test-Path $result.InstallDir } -FailureMessage 'Install directory was not created after NSIS install.'
+  $resolvedInstallDir = $null
+  Wait-Until `
+    -Condition {
+      $script:resolvedInstallDir = Resolve-InstallDir -PreferredPaths @($result.InstallDir)
+      $null -ne $script:resolvedInstallDir
+    } `
+    -FailureMessage 'Install directory was not created after NSIS install.'
+  $result.InstallDir = $resolvedInstallDir
   $result.Checks += [pscustomobject]@{ Name = 'install-dir-created'; Passed = $true; Detail = $result.InstallDir }
 
   $installedExe = Join-Path $result.InstallDir 'aura-translation.exe'

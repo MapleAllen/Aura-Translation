@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * LanguageSelector — Bidirectional language pair selector with swap button.
+   * LanguageSelector - Compact source/target language toolbar.
    */
   import { Spring } from 'svelte/motion';
 
@@ -13,17 +13,17 @@
   let { sourceLang, targetLang, onchange }: Props = $props();
 
   const LANGUAGES = [
-    { code: 'auto', label: 'Auto Detect', flag: '🌐' },
-    { code: 'Chinese', label: '中文', flag: '🇨🇳' },
-    { code: 'English', label: 'English', flag: '🇬🇧' },
-    { code: 'Japanese', label: '日本語', flag: '🇯🇵' },
-    { code: 'Korean', label: '한국어', flag: '🇰🇷' },
-    { code: 'French', label: 'Français', flag: '🇫🇷' },
-    { code: 'German', label: 'Deutsch', flag: '🇩🇪' },
-    { code: 'Spanish', label: 'Español', flag: '🇪🇸' },
-    { code: 'Russian', label: 'Русский', flag: '🇷🇺' },
-    { code: 'Arabic', label: 'العربية', flag: '🇸🇦' },
-    { code: 'Portuguese', label: 'Português', flag: '🇵🇹' },
+    { code: 'auto', label: 'Auto detect' },
+    { code: 'Chinese', label: 'Chinese' },
+    { code: 'English', label: 'English' },
+    { code: 'Japanese', label: 'Japanese' },
+    { code: 'Korean', label: 'Korean' },
+    { code: 'French', label: 'French' },
+    { code: 'German', label: 'German' },
+    { code: 'Spanish', label: 'Spanish' },
+    { code: 'Russian', label: 'Russian' },
+    { code: 'Arabic', label: 'Arabic' },
+    { code: 'Portuguese', label: 'Portuguese' },
   ];
 
   const swapRotation = new Spring(0, { stiffness: 0.3, damping: 0.65 });
@@ -38,37 +38,33 @@
   }
 </script>
 
-<div class="flex items-center gap-2">
-  <!-- Source Language -->
-  <select
-    class="flex-1 bg-aura-glass border border-aura-border rounded-lg px-3 py-1.5 text-sm
-           text-aura-text font-body appearance-none cursor-pointer
-           hover:bg-aura-glass-hover hover:border-aura-border-accent
-           focus:outline-none focus:border-aura-accent
-           transition-all duration-200"
-    value={sourceLang}
-    onchange={(e) => onchange((e.target as HTMLSelectElement).value, targetLang)}
-  >
-    {#each LANGUAGES as lang}
-      <option value={lang.code} class="bg-[#1a1a2e] text-aura-text">
-        {lang.flag} {lang.label}
-      </option>
-    {/each}
-  </select>
+<div class="flex items-center gap-2 rounded-[18px] border border-aura-border/80 bg-aura-glass px-2 py-2 shadow-[0_6px_18px_rgba(89,104,129,0.06)]">
+  <label class="min-w-0 flex-1 rounded-2xl bg-white/58 px-3 py-2">
+    <span class="mb-1 block text-[10px] font-display font-semibold uppercase tracking-[0.18em] text-aura-text-muted">
+      From
+    </span>
+    <select
+      class="w-full cursor-pointer appearance-none bg-transparent text-sm font-medium text-aura-text outline-none"
+      value={sourceLang}
+      onchange={(e) => onchange((e.target as HTMLSelectElement).value, targetLang)}
+    >
+      {#each LANGUAGES as lang}
+        <option value={lang.code}>
+          {lang.label}
+        </option>
+      {/each}
+    </select>
+  </label>
 
-  <!-- Swap Button -->
   <button
-    class="flex items-center justify-center w-8 h-8 rounded-full
-           bg-aura-glass border border-aura-border
-           hover:bg-aura-accent-soft hover:border-aura-border-accent
-           active:scale-90 transition-all duration-200
-           disabled:opacity-30 disabled:cursor-not-allowed"
+    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-aura-border bg-white/72 text-aura-accent transition-all duration-200 hover:border-aura-border-accent hover:bg-aura-accent-soft active:scale-95 disabled:opacity-35 disabled:hover:border-aura-border disabled:hover:bg-white/72"
     onclick={swap}
     disabled={sourceLang === 'auto'}
     title="Swap languages"
+    type="button"
   >
     <svg
-      class="w-4 h-4 text-aura-accent"
+      class="h-4 w-4"
       style:transform="rotate({swapRotation.current}deg)"
       fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
     >
@@ -76,20 +72,20 @@
     </svg>
   </button>
 
-  <!-- Target Language -->
-  <select
-    class="flex-1 bg-aura-glass border border-aura-border rounded-lg px-3 py-1.5 text-sm
-           text-aura-text font-body appearance-none cursor-pointer
-           hover:bg-aura-glass-hover hover:border-aura-border-accent
-           focus:outline-none focus:border-aura-accent
-           transition-all duration-200"
-    value={targetLang}
-    onchange={(e) => onchange(sourceLang, (e.target as HTMLSelectElement).value)}
-  >
-    {#each LANGUAGES.filter(l => l.code !== 'auto') as lang}
-      <option value={lang.code} class="bg-[#1a1a2e] text-aura-text">
-        {lang.flag} {lang.label}
-      </option>
-    {/each}
-  </select>
+  <label class="min-w-0 flex-1 rounded-2xl bg-white/58 px-3 py-2">
+    <span class="mb-1 block text-[10px] font-display font-semibold uppercase tracking-[0.18em] text-aura-text-muted">
+      To
+    </span>
+    <select
+      class="w-full cursor-pointer appearance-none bg-transparent text-sm font-medium text-aura-text outline-none"
+      value={targetLang}
+      onchange={(e) => onchange(sourceLang, (e.target as HTMLSelectElement).value)}
+    >
+      {#each LANGUAGES.filter((language) => language.code !== 'auto') as lang}
+        <option value={lang.code}>
+          {lang.label}
+        </option>
+      {/each}
+    </select>
+  </label>
 </div>
