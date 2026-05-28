@@ -50,17 +50,19 @@ function Resolve-ExecutablePathFromCommand {
     return $null
   }
 
-  if ($Command.StartsWith('"')) {
-    $parts = $Command -split '"'
+  $trimmedCommand = $Command.Trim()
+
+  if ($trimmedCommand.StartsWith('"')) {
+    $parts = $trimmedCommand -split '"'
     if ($parts.Length -ge 2 -and -not [string]::IsNullOrWhiteSpace($parts[1])) {
       return $parts[1]
     }
     return $null
   }
 
-  $segments = $Command.Split(' ', 2)
+  $segments = $trimmedCommand.Split(' ', 2)
   if ($segments.Length -gt 0 -and -not [string]::IsNullOrWhiteSpace($segments[0])) {
-    return $segments[0]
+    return $segments[0].Trim('"')
   }
 
   return $null
@@ -163,13 +165,15 @@ function Invoke-Uninstall {
     throw 'Uninstall command is empty.'
   }
 
-  if ($command.StartsWith('"')) {
-    $parts = $command -split '"'
+  $trimmedCommand = $command.Trim()
+
+  if ($trimmedCommand.StartsWith('"')) {
+    $parts = $trimmedCommand -split '"'
     $exe = $parts[1]
     $args = ($parts[2..($parts.Length - 1)] -join '"').Trim()
   } else {
-    $segments = $command.Split(' ', 2)
-    $exe = $segments[0]
+    $segments = $trimmedCommand.Split(' ', 2)
+    $exe = $segments[0].Trim('"')
     $args = if ($segments.Length -gt 1) { $segments[1] } else { '' }
   }
 
