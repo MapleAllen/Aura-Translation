@@ -24,13 +24,17 @@ Generated artifacts are written to `artifacts/windows-trial/`:
 
 The repository also includes a Windows CI workflow at [.github/workflows/windows-trial.yml](/Users/maple/Github/Aura-Translation/.github/workflows/windows-trial.yml). It runs `check`, Rust tests, UI tests, bundle build, install acceptance, and resource measurement on `windows-latest`. Live provider smoke remains opt-in because it needs a real DeepSeek key and a reachable Ollama endpoint. For `codex/*` push branches, the workflow also commits `artifacts/windows-trial/ci-summary.json` back to the branch so the gate result can be fetched with plain Git even when GitHub Actions API access is unavailable.
 
-Pass criteria:
+Required CI gates:
 
-- DeepSeek live smoke passes with `AURA_SMOKE_DEEPSEEK_API_KEY`
-- Ollama live smoke passes against `http://localhost:11434` or `AURA_SMOKE_OLLAMA_BASE_URL`
 - NSIS and MSI installer sizes are both `< 10 MB`
 - Silent install, launch, config creation, uninstall all pass
 - Idle max Working Set is `<= 20 MB`
+- `check`, Rust tests, UI tests, bundle build, install acceptance, and resource measurement all pass in the Windows workflow summary
+
+Release sign-off extras:
+
+- DeepSeek live smoke passes with `AURA_SMOKE_DEEPSEEK_API_KEY`
+- Ollama live smoke passes against `http://localhost:11434` or `AURA_SMOKE_OLLAMA_BASE_URL`
 
 ## Manual Verification
 
