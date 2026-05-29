@@ -3,20 +3,20 @@
 @import "tailwindcss";
 
 @theme {
-  --color-aura-bg: rgba(246, 242, 236, 0.84);
-  --color-aura-glass: rgba(255, 255, 255, 0.7);
-  --color-aura-glass-hover: rgba(255, 255, 255, 0.9);
-  --color-aura-border: rgba(112, 127, 146, 0.18);
+  --color-aura-bg: rgba(248, 250, 252, 0.94);
+  --color-aura-glass: rgba(255, 255, 255, 0.78);
+  --color-aura-glass-hover: rgba(255, 255, 255, 0.92);
+  --color-aura-border: rgba(103, 120, 142, 0.18);
   --color-aura-border-accent: rgba(43, 134, 255, 0.3);
   --color-aura-accent: #2b86ff;
   --color-aura-accent-soft: rgba(43, 134, 255, 0.12);
   --color-aura-accent-glow: rgba(43, 134, 255, 0.16);
-  --color-aura-text: #18212b;
-  --color-aura-text-dim: #566273;
-  --color-aura-text-muted: #8a96a6;
-  --color-aura-surface-strong: rgba(255, 255, 255, 0.9);
-  --color-aura-surface-soft: rgba(243, 246, 249, 0.82);
-  --color-aura-shadow: rgba(89, 104, 129, 0.18);
+  --color-aura-text: #17212c;
+  --color-aura-text-dim: #556275;
+  --color-aura-text-muted: #8a95a6;
+  --color-aura-surface-strong: rgba(255, 255, 255, 0.92);
+  --color-aura-surface-soft: rgba(241, 245, 249, 0.86);
+  --color-aura-shadow: rgba(89, 104, 129, 0.14);
   --color-aura-focus-ring: rgba(43, 134, 255, 0.2);
   --color-aura-success: #1f9d68;
   --color-aura-error: #d95b69;
@@ -42,8 +42,12 @@ html, body {
 
 body {
   background-image:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.6), transparent 34%),
-    radial-gradient(circle at bottom right, rgba(43, 134, 255, 0.12), transparent 38%);
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.5), transparent 38%),
+    radial-gradient(circle at bottom right, rgba(43, 134, 255, 0.08), transparent 42%);
+}
+
+button, input, select, textarea {
+  font: inherit;
 }
 
 ::-webkit-scrollbar {
@@ -95,9 +99,9 @@ body {
 .skeleton-bar {
   background: linear-gradient(
     90deg,
-    rgba(112, 127, 146, 0.08) 18%,
-    rgba(43, 134, 255, 0.18) 50%,
-    rgba(112, 127, 146, 0.08) 82%
+    rgba(103, 120, 142, 0.08) 18%,
+    rgba(43, 134, 255, 0.14) 50%,
+    rgba(103, 120, 142, 0.08) 82%
   );
   background-size: 200% 100%;
   animation: shimmer 1.8s ease-in-out infinite, pulse-glow 2.4s ease-in-out infinite;

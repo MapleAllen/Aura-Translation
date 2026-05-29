@@ -6,6 +6,8 @@
   import { listen } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
+  import type { AppConfig } from '$lib/appConfig';
+  import { cloneAppConfig, createDefaultAppConfig } from '$lib/appConfig';
   import TranslationPopup from '$lib/TranslationPopup.svelte';
   import SettingsPanel from '$lib/SettingsPanel.svelte';
   import NotificationCenter from '$lib/NotificationCenter.svelte';
@@ -18,6 +20,7 @@
     type DaemonErrorPayload,
     type HotkeyConflictPayload,
   } from '$lib/notifications';
+  import { RESIZE_HANDLES, shouldDismissOnBlur, type ResizeDirection } from '$lib/windowBehavior';
   import { onMount } from 'svelte';
 
   let appState: 'idle' | 'loading' | 'streaming' | 'result' | 'error' = $state('idle');
@@ -36,17 +39,6 @@
 
   const popupScale = new Spring(0.92, { stiffness: 0.14, damping: 0.68 });
   const popupOpacity = new Spring(0, { stiffness: 0.18, damping: 0.82 });
-
-  type AppConfig = {
-    api_key: string;
-    model: string;
-    source_lang: string;
-    target_lang: string;
-    hotkey: string;
-    provider: 'deepseek' | 'openrouter' | 'ollama';
-    api_base_url: string;
-    available_models: string[];
-  };
 
   type TranslationChunkPayload = {
     request_id: number;
@@ -67,16 +59,7 @@
     attempt: number;
   };
 
-  let config: AppConfig = $state({
-    api_key: '',
-    model: 'deepseek-chat',
-    source_lang: 'auto',
-    target_lang: 'Chinese',
-    hotkey: 'CmdOrCtrl+T',
-    provider: 'deepseek',
-    api_base_url: 'https://api.deepseek.com',
-    available_models: ['deepseek-chat', 'deepseek-reasoner'],
-  });
+  let config: AppConfig = $state(createDefaultAppConfig());
 
   function pushNotification(notification: AppNotification) {
     notifications = [notification, ...notifications.filter((item) => item.scope !== notification.scope)]
@@ -103,9 +86,7 @@
   async function loadConfig() {
     try {
       const loaded = await invoke<AppConfig>('get_config');
-      config = loaded;
-      sourceLang = config.source_lang;
-      targetLang = config.target_lang;
+      applyLoadedConfig(loaded);
     } catch (e) {
       console.error('Failed to load config:', e);
       pushNotification(
@@ -136,6 +117,12 @@
 
   function isCurrentRequest(requestId: number) {
     return requestId === currentRequestId;
+  }
+
+  function applyLoadedConfig(nextConfig: AppConfig) {
+    config = cloneAppConfig(nextConfig);
+    sourceLang = nextConfig.source_lang;
+    targetLang = nextConfig.target_lang;
   }
 
   async function cancelCurrentTranslation() {
@@ -196,6 +183,39 @@
     await cancelCurrentTranslation();
     currentRequestId++;
     appState = translatedText ? 'result' : 'idle';
+  }
+
+  async function handlePinnedChange(nextPinned: boolean) {
+    if (config.window_pinned === nextPinned) return;
+
+    const previousPinned = config.window_pinned;
+    config.window_pinned = nextPinned;
+
+    try {
+      await invoke('save_config', { config: cloneAppConfig(config) });
+    } catch (e) {
+      config.window_pinned = previousPinned;
+      console.error('Failed to save window pin state:', e);
+      pushNotification(
+        createDaemonErrorNotification({
+          code: 'window-pin-save-failed',
+          message: 'Failed to update window behavior. Try again from Settings.',
+          recoverable: true,
+        }),
+      );
+    }
+  }
+
+  function handleSettingsSaved(nextConfig: AppConfig) {
+    applyLoadedConfig(nextConfig);
+  }
+
+  async function startResize(direction: ResizeDirection) {
+    try {
+      await getCurrentWindow().startResizeDragging(direction);
+    } catch (e) {
+      console.error('Failed to start resize drag:', e);
+    }
   }
 
   async function dismiss() {
@@ -300,14 +320,15 @@
 
       unlisteners.push(
         await listen('window-blur', () => {
-          if (!showSettings) {
+          if (shouldDismissOnBlur(showSettings, config.window_pinned)) {
             void dismiss();
           }
         }),
       );
 
       unlisteners.push(
-        await listen('show-settings', () => {
+        await listen('show-settings', async () => {
+          await loadConfig();
           showSettings = true;
           popupScale.target = 1;
           popupOpacity.target = 1;
@@ -352,7 +373,23 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="h-screen w-screen p-3">
+<div class="relative h-screen w-screen overflow-hidden">
+  <div class="pointer-events-none absolute inset-0 z-[80]">
+    {#each RESIZE_HANDLES as handle}
+      <button
+        class={`pointer-events-auto absolute ${handle.className}`}
+        style={`cursor: ${handle.cursor};`}
+        onmousedown={(event) => {
+          event.preventDefault();
+          void startResize(handle.direction);
+        }}
+        aria-hidden="true"
+        tabindex="-1"
+        type="button"
+      ></button>
+    {/each}
+  </div>
+
   <div
     class="relative h-full w-full"
     style:transform="scale({popupScale.current})"
@@ -369,13 +406,17 @@
       hotkeyLabel={config.hotkey || 'CmdOrCtrl+T'}
       {sourceLang}
       {targetLang}
+      windowPinned={config.window_pinned}
       onLanguageChange={handleLanguageChange}
+      onTogglePinned={handlePinnedChange}
       oncancel={handleCancel}
+      ondismiss={dismiss}
     />
 
     <SettingsPanel
       visible={showSettings}
       onclose={() => (showSettings = false)}
+      onsaved={handleSettingsSaved}
       {hotkeyConflictMessage}
     />
   </div>

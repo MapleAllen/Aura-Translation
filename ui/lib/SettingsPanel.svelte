@@ -4,9 +4,9 @@
    */
   import { Spring } from 'svelte/motion';
   import { invoke } from '@tauri-apps/api/core';
+  import type { AppConfig, Provider } from './appConfig';
+  import { cloneAppConfig, createDefaultAppConfig } from './appConfig';
   import { shouldShowPlaintextApiKeyWarning } from './notifications';
-
-  type Provider = 'deepseek' | 'openrouter' | 'ollama';
 
   const PROVIDER_OPTIONS: { value: Provider; label: string }[] = [
     { value: 'deepseek', label: 'DeepSeek (api.deepseek.com)' },
@@ -19,35 +19,16 @@
     models: string[];
   };
 
-  type AppConfig = {
-    api_key: string;
-    model: string;
-    source_lang: string;
-    target_lang: string;
-    hotkey: string;
-    provider: Provider;
-    api_base_url: string;
-    available_models: string[];
-  };
-
   type Props = {
     visible: boolean;
     onclose: () => void;
+    onsaved?: (config: AppConfig) => void;
     hotkeyConflictMessage?: string;
   };
 
-  let { visible, onclose, hotkeyConflictMessage = '' }: Props = $props();
+  let { visible, onclose, onsaved, hotkeyConflictMessage = '' }: Props = $props();
 
-  let config: AppConfig = $state({
-    api_key: '',
-    model: 'deepseek-chat',
-    source_lang: 'auto',
-    target_lang: 'Chinese',
-    hotkey: 'CmdOrCtrl+T',
-    provider: 'deepseek',
-    api_base_url: 'https://api.deepseek.com',
-    available_models: ['deepseek-chat', 'deepseek-reasoner'],
-  });
+  let config: AppConfig = $state(createDefaultAppConfig());
 
   let showApiKey = $state(false);
   let saving = $state(false);
@@ -68,9 +49,11 @@
   async function loadConfig() {
     panelErrorMessage = '';
     hotkeyInputMessage = '';
+    saveMessage = '';
+    saveErrorMessage = '';
     try {
       const loaded = await invoke<AppConfig>('get_config');
-      config = loaded;
+      config = cloneAppConfig(loaded);
     } catch (e) {
       panelErrorMessage = 'Failed to load settings from the local Aura config.';
       console.error('Failed to load config:', { error: e });
@@ -131,8 +114,9 @@
     saveScale.target = 0.97;
 
     try {
-      await invoke('save_config', { config });
+      await invoke('save_config', { config: cloneAppConfig(config) });
       saveMessage = 'Settings saved';
+      onsaved?.(cloneAppConfig(config));
       hotkeyInputMessage = '';
       saveScale.target = 1.05;
       setTimeout(() => {
@@ -154,26 +138,24 @@
 
 {#if visible}
   <div
-    class="absolute inset-0 z-50 flex flex-col overflow-hidden rounded-[24px] border border-aura-border/80"
+    class="absolute inset-0 z-50 flex flex-col overflow-hidden rounded-[10px] border border-aura-border bg-[rgba(248,250,252,0.96)] text-aura-text shadow-[0_18px_40px_rgba(89,104,129,0.16)]"
     style="
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.82) 0%, rgba(246, 242, 236, 0.96) 100%);
-      backdrop-filter: blur(22px) saturate(1.08);
-      -webkit-backdrop-filter: blur(22px) saturate(1.08);
+      backdrop-filter: blur(18px) saturate(1.02);
+      -webkit-backdrop-filter: blur(18px) saturate(1.02);
       animation: fade-in-up 0.25s ease-out both;
-      box-shadow: 0 22px 44px var(--color-aura-shadow);
     "
   >
-    <div class="flex items-start justify-between border-b border-aura-border/70 px-5 py-4" data-tauri-drag-region>
+    <div class="flex items-start justify-between border-b border-aura-border px-5 py-4" data-tauri-drag-region>
       <div data-tauri-drag-region>
-        <h2 class="text-sm font-display font-semibold tracking-wide text-aura-text" data-tauri-drag-region>
+        <h2 class="text-sm font-display font-semibold tracking-[0.08em] text-aura-text uppercase" data-tauri-drag-region>
           Settings
         </h2>
         <p class="mt-1 text-xs leading-relaxed text-aura-text-dim" data-tauri-drag-region>
-          Choose a provider, model, and shortcut for the floating translator.
+          Tune provider access, shortcut capture, and how the window behaves on blur.
         </p>
       </div>
       <button
-        class="flex h-8 w-8 items-center justify-center rounded-full bg-white/72 text-aura-text-dim transition-colors duration-150 hover:bg-white hover:text-aura-text"
+        class="flex h-8 w-8 items-center justify-center rounded-md border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
         onclick={onclose}
         aria-label="Close settings"
         type="button"
@@ -184,14 +166,55 @@
       </button>
     </div>
 
-    <div class="flex-1 space-y-5 overflow-y-auto px-5 py-5">
+    <div class="flex-1 space-y-4 overflow-y-auto px-5 py-4">
       {#if panelErrorMessage}
-        <div class="rounded-2xl border border-aura-error/25 bg-[#fff4f6] px-4 py-3 text-sm leading-relaxed text-aura-error">
+        <div class="rounded-lg border border-aura-error/25 bg-[#fff4f6] px-4 py-3 text-sm leading-relaxed text-aura-error">
           {panelErrorMessage}
         </div>
       {/if}
 
-      <section class="space-y-3 rounded-[22px] bg-white/54 px-4 py-4 ring-1 ring-white/65">
+      <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
+              Window behavior
+            </p>
+            <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
+              Pin the translator when you want it to stay visible for side-by-side comparison.
+            </p>
+          </div>
+          <button
+            class={`flex h-7 w-12 items-center rounded-full border px-1 transition-all duration-150 ${
+              config.window_pinned
+                ? 'border-aura-accent bg-aura-accent text-white'
+                : 'border-aura-border bg-white text-aura-text-muted'
+            }`}
+            role="switch"
+            aria-checked={config.window_pinned}
+            aria-label="Pin window"
+            type="button"
+            onclick={() => (config.window_pinned = !config.window_pinned)}
+          >
+            <span
+              class={`h-5 w-5 rounded-full bg-current transition-transform duration-150 ${
+                config.window_pinned ? 'translate-x-5' : 'translate-x-0'
+              }`}
+              style={config.window_pinned ? 'color: white;' : 'color: rgba(138, 150, 166, 0.75);'}
+            ></span>
+          </button>
+        </div>
+
+        <div class="grid gap-2 text-xs text-aura-text-dim sm:grid-cols-2">
+          <div class="rounded-md border border-aura-border/80 bg-aura-surface-soft px-3 py-2">
+            Default: blur hides the window.
+          </div>
+          <div class="rounded-md border border-aura-border/80 bg-aura-surface-soft px-3 py-2">
+            Pinned: always on top and stays visible on blur.
+          </div>
+        </div>
+      </section>
+
+      <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
         <div>
           <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
             Provider
@@ -204,7 +227,7 @@
           id="provider"
           value={config.provider}
           onchange={(e) => handleProviderChange((e.currentTarget as HTMLSelectElement).value as Provider)}
-          class="w-full cursor-pointer rounded-2xl border border-aura-border bg-white/82 px-3 py-3 text-sm text-aura-text outline-none transition-all duration-200 hover:border-aura-border-accent focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
+          class="w-full cursor-pointer rounded-lg border border-aura-border bg-white px-3 py-2.5 text-sm text-aura-text outline-none transition-all duration-200 hover:border-aura-border-accent focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
         >
           {#each PROVIDER_OPTIONS as opt}
             <option value={opt.value}>{opt.label}</option>
@@ -214,7 +237,7 @@
 
       {#if shouldShowPlaintextApiKeyWarning(config.provider)}
         <div
-          class="rounded-2xl border border-[#e6c683] bg-[#fff7e4] px-4 py-3"
+          class="rounded-lg border border-[#e6c683] bg-[#fff7e4] px-4 py-3"
           data-testid="plaintext-api-key-warning"
         >
           <p class="text-xs leading-relaxed text-[#8a6226]">
@@ -224,7 +247,7 @@
       {/if}
 
       {#if config.provider !== 'ollama'}
-        <section class="space-y-3 rounded-[22px] bg-white/54 px-4 py-4 ring-1 ring-white/65">
+        <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
           <div>
             <label class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted" for="api-key">
               API Key
@@ -239,10 +262,10 @@
               type={showApiKey ? 'text' : 'password'}
               bind:value={config.api_key}
               placeholder="sk-..."
-              class="w-full rounded-2xl border border-aura-border bg-white/82 px-3 py-3 pr-12 text-sm text-aura-text outline-none transition-all duration-200 placeholder:text-aura-text-muted hover:border-aura-border-accent focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
+              class="w-full rounded-lg border border-aura-border bg-white px-3 py-2.5 pr-12 text-sm text-aura-text outline-none transition-all duration-200 placeholder:text-aura-text-muted hover:border-aura-border-accent focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
             />
             <button
-              class="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-aura-text-muted transition-colors hover:bg-aura-accent-soft hover:text-aura-accent"
+              class="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-aura-text-muted transition-colors hover:bg-aura-accent-soft hover:text-aura-accent"
               onclick={() => (showApiKey = !showApiKey)}
               type="button"
               aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
@@ -260,7 +283,7 @@
         </section>
       {/if}
 
-      <section class="space-y-3 rounded-[22px] bg-white/54 px-4 py-4 ring-1 ring-white/65">
+      <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
         <div>
           <label class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted" for="model">
             Model
@@ -272,7 +295,7 @@
         <select
           id="model"
           bind:value={config.model}
-          class="w-full cursor-pointer rounded-2xl border border-aura-border bg-white/82 px-3 py-3 text-sm text-aura-text outline-none transition-all duration-200 hover:border-aura-border-accent focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
+          class="w-full cursor-pointer rounded-lg border border-aura-border bg-white px-3 py-2.5 text-sm text-aura-text outline-none transition-all duration-200 hover:border-aura-border-accent focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
         >
           {#each config.available_models as m}
             <option value={m}>{m}</option>
@@ -280,7 +303,7 @@
         </select>
       </section>
 
-      <section class="space-y-3 rounded-[22px] bg-white/54 px-4 py-4 ring-1 ring-white/65">
+      <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
         <div>
           <label class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted" for="hotkey-capture">
             Hotkey
@@ -299,7 +322,7 @@
             onfocus={() => (isCapturingHotkey = true)}
             onblur={() => (isCapturingHotkey = false)}
             onkeydown={handleHotkeyKeydown}
-            class={`w-full cursor-pointer select-none rounded-2xl border bg-white/82 px-3 py-3 pr-28 text-sm font-medium text-aura-text outline-none transition-all duration-200 ${
+            class={`w-full cursor-pointer select-none rounded-lg border bg-white px-3 py-2.5 pr-28 text-sm font-medium text-aura-text outline-none transition-all duration-200 ${
               isCapturingHotkey
                 ? 'border-aura-accent ring-2 ring-aura-accent/15'
                 : 'border-aura-border hover:border-aura-border-accent'
@@ -321,7 +344,7 @@
 
         {#if hotkeyConflictMessage}
           <div
-            class="rounded-2xl border border-[#e6c683] bg-[#fff7e4] px-4 py-3 text-xs leading-relaxed text-[#8a6226]"
+            class="rounded-lg border border-[#e6c683] bg-[#fff7e4] px-4 py-3 text-xs leading-relaxed text-[#8a6226]"
             data-testid="hotkey-conflict-inline"
           >
             {hotkeyConflictMessage}
@@ -330,7 +353,7 @@
       </section>
     </div>
 
-    <div class="border-t border-aura-border/70 px-5 py-4">
+    <div class="border-t border-aura-border px-5 py-4">
       {#if saveErrorMessage}
         <p class="mb-3 text-sm text-aura-error" data-testid="save-error-message">{saveErrorMessage}</p>
       {:else if saveMessage}
@@ -338,7 +361,7 @@
       {/if}
 
       <button
-        class="w-full rounded-2xl bg-aura-accent py-3 text-sm font-display font-medium text-white transition-all duration-200 hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+        class="w-full rounded-lg bg-aura-accent py-3 text-sm font-display font-medium text-white transition-all duration-200 hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
         style:transform="scale({saveScale.current})"
         onclick={saveConfig}
         disabled={saving}

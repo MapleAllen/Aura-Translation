@@ -14,6 +14,7 @@ const baseConfig = {
   source_lang: 'auto',
   target_lang: 'Chinese',
   hotkey: 'CmdOrCtrl+T',
+  window_pinned: false,
   provider: 'deepseek',
   api_base_url: 'https://api.deepseek.com',
   available_models: ['deepseek-chat', 'deepseek-reasoner'],
@@ -98,5 +99,34 @@ describe('SettingsPanel', () => {
 
     expect(screen.queryByTestId('hotkey-input-message')).not.toBeInTheDocument();
     expect(input).toHaveValue('CmdOrCtrl+K');
+  });
+
+  it('loads and saves the window pin preference', async () => {
+    invokeMock.mockResolvedValueOnce(baseConfig);
+    invokeMock.mockResolvedValueOnce(undefined);
+    const onsaved = vi.fn();
+
+    render(SettingsPanel, {
+      visible: true,
+      onclose: () => {},
+      onsaved,
+      hotkeyConflictMessage: '',
+    });
+
+    const pinSwitch = await screen.findByRole('switch', { name: /pin window/i });
+    expect(pinSwitch).toHaveAttribute('aria-checked', 'false');
+
+    await fireEvent.click(pinSwitch);
+    expect(pinSwitch).toHaveAttribute('aria-checked', 'true');
+
+    await fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
+
+    expect(invokeMock).toHaveBeenLastCalledWith(
+      'save_config',
+      expect.objectContaining({
+        config: expect.objectContaining({ window_pinned: true }),
+      }),
+    );
+    expect(onsaved).toHaveBeenCalledWith(expect.objectContaining({ window_pinned: true }));
   });
 });

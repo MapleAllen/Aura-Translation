@@ -56,6 +56,8 @@ pub struct AppConfig {
     pub source_lang: String,
     pub target_lang: String,
     pub hotkey: String,
+    /// Whether the window should stay pinned above other windows and remain visible on blur.
+    pub window_pinned: bool,
     /// The active translation provider.
     pub provider: Provider,
     /// The API base URL for the active provider.
@@ -85,6 +87,8 @@ impl<'de> Deserialize<'de> for AppConfig {
             target_lang: String,
             #[serde(default = "default_hotkey")]
             hotkey: String,
+            #[serde(default)]
+            window_pinned: bool,
             #[serde(default)]
             provider: Provider,
             api_base_url: Option<String>,
@@ -124,6 +128,7 @@ impl<'de> Deserialize<'de> for AppConfig {
             source_lang: helper.source_lang,
             target_lang: helper.target_lang,
             hotkey: helper.hotkey,
+            window_pinned: helper.window_pinned,
             provider,
             api_base_url,
             available_models,
@@ -142,6 +147,7 @@ impl Default for AppConfig {
             source_lang: "auto".to_string(),
             target_lang: "Chinese".to_string(),
             hotkey: "CmdOrCtrl+T".to_string(),
+            window_pinned: false,
             provider,
             api_base_url,
             available_models,
@@ -215,6 +221,7 @@ mod tests {
         assert_eq!(c.model, "deepseek-chat");
         assert_eq!(c.hotkey, "CmdOrCtrl+T");
         assert_eq!(c.api_base_url, "https://api.deepseek.com");
+        assert!(!c.window_pinned);
         assert!(!c.available_models.is_empty());
     }
 
@@ -231,6 +238,7 @@ mod tests {
         let config: AppConfig = serde_json::from_str(legacy_json).expect("should parse");
         assert_eq!(config.provider, Provider::DeepSeek);
         assert_eq!(config.api_base_url, "https://api.deepseek.com");
+        assert!(!config.window_pinned);
         assert!(!config.available_models.is_empty());
     }
 
@@ -242,6 +250,7 @@ mod tests {
             source_lang: "English".to_string(),
             target_lang: "Japanese".to_string(),
             hotkey: "Alt+Shift+T".to_string(),
+            window_pinned: true,
             provider: Provider::Ollama,
             api_base_url: "http://localhost:11434".to_string(),
             available_models: vec!["mistral".to_string(), "llama3".to_string()],
@@ -249,6 +258,7 @@ mod tests {
         let json = serde_json::to_string(&original).unwrap();
         let restored: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.provider, Provider::Ollama);
+        assert!(restored.window_pinned);
         assert_eq!(restored.api_base_url, "http://localhost:11434");
         assert_eq!(restored.available_models, vec!["mistral", "llama3"]);
     }

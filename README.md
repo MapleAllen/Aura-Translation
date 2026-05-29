@@ -1,15 +1,15 @@
 # Aura Translation
 
-A lightweight, cross-platform floating desktop translation utility. Runs silently as a background daemon and is invoked via a global hotkey — it reads your clipboard, streams a translation token-by-token, and dismisses itself when you're done.
+A lightweight cross-platform desktop translator that runs as a tray daemon. Trigger it with a global hotkey, stream results token by token, and pin the window only when you need side-by-side comparison.
 
 ## Features
 
-- **Zero-friction trigger** — Configurable global hotkey (default `CmdOrCtrl+T`) reads the clipboard instantly
-- **Streaming output** — Token-by-token translation via OpenAI-compatible providers
-- **Bidirectional language pairs** — 11 languages with one-click swap
-- **Glassmorphic UI** — Transparent, always-on-top floating popup near the system tray
-- **System tray daemon** — Runs silently in the background; no dock/taskbar footprint
-- **Auto-dismiss** — Closes on `Esc` or focus loss
+- **Zero-friction trigger**: Configurable global hotkey (default `CmdOrCtrl+T`) reads the clipboard instantly.
+- **Streaming output**: Token-by-token translation via OpenAI-compatible providers.
+- **Bidirectional language pairs**: 11 languages with one-click swap.
+- **Dense desktop panel**: Compact tray-adjacent translator with optional pin mode.
+- **System tray daemon**: Runs silently in the background with no taskbar footprint.
+- **Adaptive dismiss**: Press `Esc` to close; blur hides it by default, while pinned mode stays visible.
 
 ## Tech Stack
 
@@ -22,30 +22,30 @@ A lightweight, cross-platform floating desktop translation utility. Runs silentl
 
 ## Project Structure
 
-```
+```text
 Aura-Translation/
-├── ui/                  # SvelteKit frontend
-│   ├── app.css          # Tailwind + design tokens
-│   ├── app.html         # HTML shell
-│   ├── lib/             # Svelte components
-│   │   ├── LanguageSelector.svelte
-│   │   ├── SettingsPanel.svelte
-│   │   ├── SkeletonLoader.svelte
-│   │   └── TranslationPopup.svelte
-│   └── routes/          # SvelteKit pages
-│       └── +page.svelte
-├── src-tauri/           # Rust backend (Tauri convention — name is fixed)
-│   ├── src/
-│   │   ├── config.rs    # Plaintext JSON config persistence and provider defaults
-│   │   ├── hotkey.rs    # Configurable hotkey parser
-│   │   ├── lib.rs       # App entry: tray, hotkey, window management
-│   │   ├── main.rs
-│   │   └── translate.rs # OpenAI-compatible streaming client
-│   ├── capabilities/    # Tauri permission grants
-│   ├── icons/
-│   └── tauri.conf.json
-└── static/
-    └── favicon.png
+|-- ui/                  # SvelteKit frontend
+|   |-- app.css          # Tailwind + design tokens
+|   |-- app.html         # HTML shell
+|   |-- lib/             # Svelte components and UI helpers
+|   |   |-- LanguageSelector.svelte
+|   |   |-- SettingsPanel.svelte
+|   |   |-- SkeletonLoader.svelte
+|   |   `-- TranslationPopup.svelte
+|   `-- routes/
+|       `-- +page.svelte
+|-- src-tauri/           # Rust backend (Tauri convention, folder name is fixed)
+|   |-- src/
+|   |   |-- config.rs    # Plaintext JSON config persistence and provider defaults
+|   |   |-- hotkey.rs    # Configurable hotkey parser
+|   |   |-- lib.rs       # App entry: tray, hotkey, window management
+|   |   |-- main.rs
+|   |   `-- translate.rs # OpenAI-compatible streaming client
+|   |-- capabilities/    # Tauri permission grants
+|   |-- icons/
+|   `-- tauri.conf.json
+`-- static/
+    `-- favicon.png
 ```
 
 ## Getting Started
@@ -53,7 +53,7 @@ Aura-Translation/
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 18+
-- [Rust](https://rustup.rs/) (stable toolchain)
+- [Rust](https://rustup.rs/) stable
 
 ### Development
 
@@ -64,17 +64,17 @@ npm run tauri dev
 
 ### First-time Setup
 
-1. After launching, right-click the **system tray icon → Settings**
-2. Choose a provider: DeepSeek, OpenRouter, or local Ollama
-3. Enter an API key for DeepSeek/OpenRouter; Ollama does not require one
-4. Save — preferences are stored in `{OS config dir}/aura-translation/config.json`
+1. Launch the app and right-click the system tray icon, then open `Settings`.
+2. Choose a provider: DeepSeek, OpenRouter, or local Ollama.
+3. Enter an API key for DeepSeek or OpenRouter. Ollama does not require one.
+4. Save the settings. Preferences are stored in `{OS config dir}/aura-translation/config.json`.
 
 ### Usage
 
-1. Select any text and copy it (`Ctrl+C`)
-2. Press your configured hotkey (default `CmdOrCtrl+T`) — the popup springs open near the tray
-3. Watch the translation stream in
-4. Press `Esc` or click elsewhere to dismiss
+1. Select any text and copy it with `Ctrl+C`.
+2. Press your configured hotkey (default `CmdOrCtrl+T`) to open the translator near the tray.
+3. Watch the translation stream in.
+4. Press `Esc` to dismiss, or pin the window to keep it visible while you read other pages.
 
 ## Build for Production
 
@@ -82,6 +82,6 @@ npm run tauri dev
 npm run tauri build
 ```
 
-The installer will be output to `src-tauri/target/release/bundle/`.
+The installer is emitted to `src-tauri/target/release/bundle/`.
 
-For the Windows trial release gate, use [docs/Windows-Trial-Checklist.md](/Users/maple/Github/Aura-Translation/docs/Windows-Trial-Checklist.md). The repo also includes a Windows GitHub Actions workflow at [.github/workflows/windows-trial.yml](/Users/maple/Github/Aura-Translation/.github/workflows/windows-trial.yml) for repeatable build, install, and resource checks; live provider smoke and installed-build sign-off remain separate release steps.
+For the Windows trial release gate, use [docs/Windows-Trial-Checklist.md](docs/Windows-Trial-Checklist.md). The repo also includes a Windows GitHub Actions workflow at [.github/workflows/windows-trial.yml](.github/workflows/windows-trial.yml) for repeatable build, install, and resource checks. Live provider smoke and installed-build sign-off remain separate release steps.

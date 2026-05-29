@@ -38,9 +38,9 @@
   }
 </script>
 
-<div class="flex items-center gap-2 rounded-[18px] border border-aura-border/80 bg-aura-glass px-2 py-2 shadow-[0_6px_18px_rgba(89,104,129,0.06)]">
-  <label class="min-w-0 flex-1 rounded-2xl bg-white/58 px-3 py-2">
-    <span class="mb-1 block text-[10px] font-display font-semibold uppercase tracking-[0.18em] text-aura-text-muted">
+<div class="flex items-center gap-2 rounded-lg border border-aura-border bg-white px-2 py-2">
+  <label class="min-w-0 flex-1 rounded-md border border-aura-border/70 bg-aura-surface-soft px-3 py-2">
+    <span class="mb-1 block text-[10px] font-display font-semibold uppercase tracking-[0.16em] text-aura-text-muted">
       From
     </span>
     <select
@@ -57,7 +57,7 @@
   </label>
 
   <button
-    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-aura-border bg-white/72 text-aura-accent transition-all duration-200 hover:border-aura-border-accent hover:bg-aura-accent-soft active:scale-95 disabled:opacity-35 disabled:hover:border-aura-border disabled:hover:bg-white/72"
+    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-aura-border bg-white text-aura-accent transition-all duration-200 hover:border-aura-border-accent hover:bg-aura-accent-soft active:scale-95 disabled:opacity-35 disabled:hover:border-aura-border disabled:hover:bg-white"
     onclick={swap}
     disabled={sourceLang === 'auto'}
     title="Swap languages"
@@ -72,8 +72,8 @@
     </svg>
   </button>
 
-  <label class="min-w-0 flex-1 rounded-2xl bg-white/58 px-3 py-2">
-    <span class="mb-1 block text-[10px] font-display font-semibold uppercase tracking-[0.18em] text-aura-text-muted">
+  <label class="min-w-0 flex-1 rounded-md border border-aura-border/70 bg-aura-surface-soft px-3 py-2">
+    <span class="mb-1 block text-[10px] font-display font-semibold uppercase tracking-[0.16em] text-aura-text-muted">
       To
     </span>
     <select

@@ -91,6 +91,20 @@ fn attach_main_window_blur_listener(window: &WebviewWindow) {
     });
 }
 
+fn apply_window_preferences(window: &WebviewWindow, config: &AppConfig) -> Result<(), String> {
+    window
+        .set_always_on_top(config.window_pinned)
+        .map_err(|e| format!("Failed to apply window pin state: {}", e))
+}
+
+fn sync_existing_main_window(app: &AppHandle, config: &AppConfig) {
+    if let Some(window) = app.get_webview_window("main") {
+        if let Err(err) = apply_window_preferences(&window, config) {
+            emit_daemon_error(app, "main-window-sync-failed", err, true);
+        }
+    }
+}
+
 fn ensure_main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
     if let Some(window) = app.get_webview_window("main") {
         return Ok(window);
@@ -128,19 +142,45 @@ async fn wait_for_ui_ready(app: &AppHandle, timeout: Duration) -> Result<(), Str
 }
 
 fn position_main_window(window: &WebviewWindow) {
-    if let Ok(Some(monitor)) = window.primary_monitor() {
-        let screen_size = monitor.size();
-        let scale = monitor.scale_factor();
-        let screen_w = screen_size.width as f64 / scale;
-        let screen_h = screen_size.height as f64 / scale;
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten());
 
-        let win_w = 440.0;
-        let win_h = 360.0;
-        let x = screen_w - win_w - 16.0;
-        let y = screen_h - win_h - 60.0;
+    let Some(monitor) = monitor else {
+        return;
+    };
 
-        let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+    let Ok(window_size) = window.inner_size() else {
+        return;
+    };
+
+    let scale = monitor.scale_factor();
+    let work_area = monitor.work_area();
+    let work_x = work_area.position.x as f64 / scale;
+    let work_y = work_area.position.y as f64 / scale;
+    let work_w = work_area.size.width as f64 / scale;
+    let work_h = work_area.size.height as f64 / scale;
+    let win_w = window_size.width as f64 / scale;
+    let win_h = window_size.height as f64 / scale;
+
+    let x = work_x + (work_w - win_w - 18.0).max(0.0);
+    let y = work_y + (work_h - win_h - 18.0).max(0.0);
+
+    let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+}
+
+fn current_config(app: &AppHandle) -> AppConfig {
+    app.state::<ConfigState>().read().unwrap().clone()
+}
+
+fn prepare_main_window(app: &AppHandle, window: &WebviewWindow) {
+    let config = current_config(app);
+    if let Err(err) = apply_window_preferences(window, &config) {
+        emit_daemon_error(app, "main-window-pin-apply-failed", err, true);
     }
+    position_main_window(window);
 }
 
 async fn show_translation_window(app: AppHandle, clipboard_text: String) {
@@ -152,7 +192,7 @@ async fn show_translation_window(app: AppHandle, clipboard_text: String) {
         }
     };
 
-    position_main_window(&window);
+    prepare_main_window(&app, &window);
     let _ = window.show();
     let _ = window.set_focus();
 
@@ -173,6 +213,7 @@ async fn show_settings_window(app: AppHandle) {
         }
     };
 
+    prepare_main_window(&app, &window);
     let _ = window.show();
     let _ = window.set_focus();
 
@@ -235,6 +276,7 @@ fn save_config(
     if old_hotkey == config.hotkey {
         config.save()?;
         *state.write().unwrap() = config.clone();
+        sync_existing_main_window(&app, &config);
         return Ok(());
     }
 
@@ -293,6 +335,7 @@ fn save_config(
     }
 
     *state.write().unwrap() = config.clone();
+    sync_existing_main_window(&app, &config);
     let _ = app.emit("hotkey-registered", &config.hotkey);
 
     Ok(())
