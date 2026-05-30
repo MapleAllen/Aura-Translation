@@ -6,148 +6,169 @@ UI Shell
 
 ## Purpose
 
-The UI Shell is the visual layer of Aura Translation. It renders a 440×360 px glassmorphic floating popup that animates into view when the hotkey fires and dismisses on `Esc` or focus loss. The core UX goal is for the widget to feel like a **natural extension of the operating system** rather than a browser tab: physically-based spring animations create a haptic "pop-up" effect — the popup briefly overshoots past 100% scale before settling — giving every interaction a tangible, alive quality. The shell handles the complete translation lifecycle from the user's perspective: displaying the source text, pulsating while waiting for the first token, streaming translated text token-by-token, surfacing error states, and letting the user copy the result or change the language pair. A settings overlay is also embedded in the shell for API key, provider, model, and hotkey configuration. The model dropdown is populated dynamically from `config.available_models`, and the hotkey field is a live capture widget that reads and writes `config.hotkey`.
+The UI Shell is the visual layer of Aura Translation. It renders a compact desktop translation window that opens on demand, streams translated text in real time, and can either dismiss on blur or remain pinned for side-by-side reading. The shell owns the full user-facing workflow: showing copied source text, loading and streaming states, inline translation errors, transient daemon warnings, language selection, copy-to-clipboard, and settings management for provider, model, hotkey, API key, and window behavior.
 
 ## Current Implementation
 
-The shell implements a five-stage lifecycle:
+The shell is a SvelteKit application with a single route (`ui/routes/+page.svelte`) acting as the lifecycle orchestrator. The Tauri backend creates the `main` window lazily; once the frontend mounts it calls `mark_ui_ready`, loads config via `get_config`, and registers request-scoped listeners for translation and daemon events.
 
-1. **Daemon** — Window is hidden (`visible: false`), waiting for the hotkey.
-2. **Trigger** — The `trigger-translate` Tauri event fires; Svelte springs the popup in with a scale overshoot (`0.92 → 1.0`, tuned to briefly exceed 1.0 via low damping) and opacity fade, creating a haptic "pop" feel.
-3. **Loading** — `appState` enters `loading`; `SkeletonLoader` renders 4 pulsating shimmer bars to signal activity without feeling mechanical.
-4. **Streaming** — First current-request `translation-chunk` event arrives; `appState` enters `streaming`; tokens append to `translatedText` with a blinking cursor; translated text fades in and pans upward via the `fade-in-up` keyframe animation.
-5. **Dismiss** — On `Esc` or focus loss, the popup springs back to scale `0.92` / opacity `0` over ~220 ms, then `appWindow.hide()` returns the process to the daemon state.
+The runtime lifecycle is:
 
-The shell is a SvelteKit application with a single route (`ui/routes/+page.svelte`) that acts as the lifecycle orchestrator. On mount, it loads config from the Rust backend, registers ten Tauri event listeners, and binds keyboard events for `Esc`. Two `Spring` instances (`popupScale` starting at `0.92`, `popupOpacity` starting at `0`) drive the enter/exit animation: on trigger the targets jump to `1`; on dismiss they return to `0.92` / `0`. A 220 ms delay after the spring settles hides the Tauri window.
+1. **Hidden**: the desktop window is not visible and waits for a hotkey or tray action.
+2. **Show**: `trigger-translate` or `show-settings` arrives; the shell springs to full opacity and scale.
+3. **Translate**: `startTranslation()` moves `appState` from `idle` to `loading`, starts a 20-second timeout, and invokes `translate_text`.
+4. **Stream**: current-request `translation-chunk` events move the UI into `streaming` and append text incrementally.
+5. **Settle**: `translation-done` moves the UI to `result`; `translation-error` moves it to `error`.
+6. **Dismiss or stay visible**: blur hides the window only when Settings is closed and `config.window_pinned === false`; otherwise the window stays visible for side-by-side comparison.
 
-The orchestrator maintains an `appState` union (`idle | loading | streaming | result | error`) that is driven by incoming Tauri events. Each translation is assigned a monotonically incrementing `currentRequestId` (used for cancellation targeting). A `startTranslation()` function encapsulates the API call setup — incrementing the request ID, clearing previous text, setting `appState = 'loading'`, starting a 20-second loading timeout, and invoking `translate_text` with the current source text, language pair, and request ID. The `TranslationPopup` component renders different content for each state and exposes a cancel button (× icon) during `loading` and `streaming` states. `SettingsPanel` is layered absolutely above the popup and toggled via a `showSettings` boolean.
+The shell uses two `Spring` instances for structural motion: `popupScale` starts at `0.92` and `popupOpacity` starts at `0`. Dismiss animates back to those values, waits 220 ms, resets transient state, and calls `getCurrentWindow().hide()`.
 
-The design system is defined in `ui/app.css` as Tailwind CSS v4 `@theme` tokens under the `aura-` namespace (accent color `#7c6aef`, glassmorphic background `rgba(12, 12, 20, 0.78)`, two font families: Outfit and DM Sans).
+State is kept locally in the route component with Svelte 5 runes: `appState`, `sourceText`, `translatedText`, `errorMessage`, `showSettings`, `notifications`, `hotkeyConflictMessage`, language pair state, the current request ID, and the in-memory `AppConfig` copy. There are no Svelte stores.
 
 ### Capabilities
 
 **Popup lifecycle**
-- Spring-animated scale (`stiffness: 0.14, damping: 0.68`) and opacity (`stiffness: 0.18, damping: 0.82`) entry/exit, anchored to `transform-origin: bottom right`
-- Low damping on the scale spring is intentional: it allows the popup to momentarily overshoot past `scale(1.0)` before settling, producing the haptic "pop" feel described in the architecture goals
-- 220 ms post-animation delay before `appWindow.hide()` to allow the spring to settle
-- Auto-dismiss on `Esc` key or `window-blur` Tauri event (suppressed when Settings is open)
+- Spring-driven show/hide animation with scale (`stiffness: 0.14`, `damping: 0.68`) and opacity (`stiffness: 0.18`, `damping: 0.82`)
+- Dismiss via `Esc` or `window-blur` when `shouldDismissOnBlur(showSettings, windowPinned)` returns `true`
+- 220 ms delay before `appWindow.hide()` so the close animation can complete
+- `show-settings` opens the same shell window in-place instead of launching a separate settings surface
 
 **Translation states**
-- `idle`: shows placeholder hint text "Copy text and press {configured hotkey}"
-- `loading`: renders `SkeletonLoader` (4 shimmer bars with staggered 120 ms animation delays: widths 100%, 88%, 72%, 55%); starts a 20-second loading timeout
-- `streaming`: renders translated text with an animated blinking cursor appended; chunks are only appended when `appState === 'streaming'` and the event `request_id` matches `currentRequestId`
-- `result`: same as streaming but cursor removed; copy button appears in footer
-- `error`: error icon + message text (e.g., "No API key configured…", "No response from API (timeout)")
+- `idle`: shows a quick-capture hint using the configured hotkey label
+- `loading`: renders `SkeletonLoader` and starts a 20-second timeout
+- `streaming`: appends current-request chunks to `translatedText` and shows a blinking cursor
+- `result`: shows the final text and keeps copy actions available
+- `error`: shows a centered error panel and also pushes a notification
 
-**Language selector**
-- 11 language options including `auto` (source only): Chinese, English, Japanese, Korean, French, German, Spanish, Russian, Arabic, Portuguese
-- Animated swap button (`Spring { stiffness: 0.3, damping: 0.65 }`, continuous rotation accumulation) — disabled when source is `auto`
-- Language changes propagate up to the orchestrator via `onLanguageChange(source, target)`
-- **Mid-stream language switch:** if a language change occurs while `appState === 'loading'` or `'streaming'`, the orchestrator cancels the current translation (via `cancel_translate`) and immediately starts a new one with the updated language pair
+**Request scoping and cancellation**
+- Every translation uses a monotonically increasing `currentRequestId`
+- Stale `translation-chunk`, `translation-done`, `translation-error`, and `translation-retry` payloads are ignored unless `request_id === currentRequestId`
+- Starting a new translation, cancelling manually, dismissing the shell, or switching languages mid-stream all invoke `cancel_translate`
+- Manual cancel falls back to `result` when partial text exists, otherwise `idle`
 
-**Copy result**
-- Available in `streaming` and `result` states when `translatedText` is non-empty
-- Writes to the system clipboard via `@tauri-apps/plugin-clipboard-manager`
-- Copy button uses a `Spring { stiffness: 0.4, damping: 0.5 }` scale bounce on click; shows "Copied!" for 1500 ms
+**Language controls**
+- 11 selectable languages including `auto` for source detection
+- Swap button is disabled when the source language is `auto`
+- Changing language during `loading` or `streaming` cancels the active request and immediately restarts translation with the new pair
+
+**Pinned window mode**
+- Header pin button toggles `config.window_pinned`
+- Pin state is saved immediately through `save_config`
+- When pinned, the shell remains visible on blur and the backend applies `always_on_top`
+- Settings exposes the same preference as a switch in the "Window behavior" section
 
 **Settings panel**
-- Glassmorphic overlay rendered absolutely over the popup (`z-50`)
-- Fields: Provider (dropdown: DeepSeek / OpenRouter / Ollama), API Key (password input with show/hide toggle, hidden for Ollama), Model (dropdown populated from `config.available_models`), Hotkey (live capture widget — listens to `keydown`, formats `CmdOrCtrl+T`-style string, and rejects bare single-key bindings)
-- Save button with spring bounce animation; shows "Settings saved" briefly on success
-- Panel opened via tray `show-settings` event or programmatically; closed by `Esc` or the close button
+- Overlay panel mounted above the translation window when `visible === true`
+- Sections for window behavior, provider, plaintext API-key warning, API key entry, dynamic model list, and live hotkey capture
+- Provider switch invokes `get_provider_defaults` and updates `api_base_url`, `available_models`, and `model`
+- Save action invokes `save_config`, emits `onsaved`, shows transient success state, and preserves inline hotkey validation errors
 
-**Request cancellation**
-- Cancel button (× icon, 20×20 px) appears in the `TranslationPopup` header next to the status indicator during `loading` and `streaming` states
-- Styled with `hover:text-aura-error` and `hover:bg-aura-error/10` transitions for visual feedback
-- On click: invokes `cancel_translate` with the current request ID; transitions to `result` (if partial text exists) or `idle` (if no text arrived)
-- New translations also cancel any in-flight request before starting
+**Notifications and daemon feedback**
+- `NotificationCenter` stacks up to 3 active notifications
+- `hotkey-conflict` becomes both an inline settings warning and a dismissible toast
+- `daemon-error` events surface backend problems such as tray or window failures
+- Translation failures are normalized with `formatTranslationError()` before being shown
 
-**Loading timeout**
-- A 20-second `setTimeout` starts when `appState` enters `'loading'`
-- If no current-request `translation-chunk` event arrives within 20 seconds, `appState` transitions to `'error'` with message "No response from API (timeout)"
-- The timeout is cleared when the first current-request chunk arrives, when current-request `translation-done` fires, when current-request `translation-error` fires, or on dismiss
+**Resize affordances**
+- Eight invisible edge and corner handles are rendered from `RESIZE_HANDLES`
+- Mouse down on a handle calls `getCurrentWindow().startResizeDragging(direction)`
+- Window resizing is enabled by Tauri config rather than by in-app layout controls
 
 **Design system**
-- Color tokens: `aura-accent (#7c6aef)`, `aura-glass (rgba(255,255,255,0.05))`, `aura-border (rgba(255,255,255,0.07))`, `aura-text (#e8e6f0)`, `aura-error (#f87171)`, `aura-success (#4ade80)`
-- Fonts: `Outfit` (display/headings), `DM Sans` (body text), both via Google Fonts
-- Keyframe animations: `shimmer` (skeleton), `pulse-glow` (skeleton), `fade-in-up` (settings panel, streaming text)
-- Scrollbar: 4 px wide, transparent track, `rgba(255,255,255,0.1)` thumb
-- Window is `overflow: hidden` with `user-select: none` globally; `select-text` class re-enables selection on source/result text
+- Tailwind CSS v4 theme tokens live in `ui/app.css`
+- Accent palette is light-mode first: `aura-accent (#2b86ff)`, muted borders, slate text tones, white glass surfaces
+- Fonts: `Outfit` for display text and `DM Sans` for body text
+- Shared keyframes: `shimmer`, `pulse-glow`, and `fade-in-up`
 
 ## Architecture
 
-Single-route SvelteKit application using Svelte 5 runes API (`$state`, `$props`, `$effect`). No stores or reactive contexts — state is passed as props from the orchestrator page downward to components.
+Single-route SvelteKit application using Svelte 5 runes and callback props. State lives at the route level and flows downward into presentational components.
 
 ### Orchestrator (`ui/routes/`)
 
 - `+page.svelte`
-  - Owns all `$state` variables: `appState`, `sourceText`, `translatedText`, `errorMessage`, `showSettings`, `sourceLang`, `targetLang`, `config`, `currentRequestId`, `loadingTimeoutId`.
-  - Owns the two `Spring` instances for popup animation.
-  - `loadConfig()`: invokes `get_config` and syncs `config`, `sourceLang`, `targetLang`.
-  - `startTranslation()`: increments `currentRequestId`, resets text/error state, sets `appState = 'loading'`, starts loading timeout, invokes `translate_text` with text, language pair, API key, model, request ID, base URL, and provider.
-  - `cancelCurrentTranslation()`: invokes `cancel_translate` with the current request ID and clears the loading timeout.
-  - `handleCancel()`: calls `cancelCurrentTranslation()`, then transitions to `result` (if partial text) or `idle`.
-  - `dismiss()`: clears loading timeout, springs out → 220 ms timeout → resets state → `appWindow.hide()`.
-  - `handleKeydown(e)`: routes `Esc` to close Settings or dismiss.
-  - `handleLanguageChange(source, target)`: updates state; if currently loading or streaming, cancels and retranslates immediately.
-  - Registers Tauri event listeners in `onMount`: `trigger-translate`, `translation-chunk`, `translation-done`, `translation-error`, `translation-retry`, `window-blur`, `show-settings`, `hotkey-conflict`.
-  - `translation-chunk`, `translation-done`, `translation-error`, and `translation-retry` listeners ignore payloads whose `request_id` does not match `currentRequestId`, preventing stale events from cancelled requests from corrupting the UI.
-  - Surfaces `hotkey-conflict` and `daemon-error` as visible notifications rather than leaving them in developer logs only.
+  - Owns all shell state, request IDs, notifications, and the in-memory `config`
+  - `loadConfig()`: invokes `get_config` and applies the returned config
+  - `startTranslation()`: validates API-key requirements, increments the request ID, clears prior output, sets `appState = 'loading'`, starts the timeout, and invokes `translate_text`
+  - `cancelCurrentTranslation()`: invokes `cancel_translate` for the current request ID and clears the timeout
+  - `handleLanguageChange()`: updates language state and retriggers translation when needed
+  - `handlePinnedChange()`: persists `window_pinned` immediately and reverts local state if the save fails
+  - `dismiss()`: cancels active work, animates out, resets shell state, and hides the Tauri window
+  - Registers 10 listeners: `trigger-translate`, `translation-chunk`, `translation-done`, `translation-error`, `translation-retry`, `window-blur`, `show-settings`, `hotkey-conflict`, `hotkey-registered`, and `daemon-error`
+  - Calls `mark_ui_ready` after mount so the Rust backend can wait for the frontend before emitting events into a newly created window
 
 ### Components (`ui/lib/`)
 
 - `TranslationPopup.svelte`
-  - Props: `viewState`, `sourceText`, `translatedText`, `errorMessage`, `hotkeyLabel`, `sourceLang`, `targetLang`, `onLanguageChange`, `oncancel`.
-  - Renders the glassmorphic card with backdrop blur (`28px`), box-shadow stack, and drag region.
-  - Delegates loading state to `SkeletonLoader` and language UI to `LanguageSelector`.
-  - Renders a cancel button (× icon) in the header bar during `loading` and `streaming` states; fires `oncancel` on click.
-  - Displays the currently configured hotkey in the idle-state hint text.
-  - `copyResult()`: calls `writeText(translatedText)` from `@tauri-apps/plugin-clipboard-manager`; spring-bounces the copy button.
+  - Renders the main translation card, source preview, footer, pin button, cancel button, close button, copy button, and inline view-state messaging
+  - Accepts `windowPinned`, `onTogglePinned`, `oncancel`, and `ondismiss` in addition to translation props
+  - Uses a `Spring` for copy-button bounce feedback
 
 - `LanguageSelector.svelte`
-  - Props: `sourceLang`, `targetLang`, `onchange(source, target)`.
-  - `LANGUAGES` constant: array of 11 `{ code, label, flag }` objects.
-  - `swap()`: blocked when `sourceLang === 'auto'`; accumulates rotation count for the spring animation.
+  - Owns the source/target toolbar and animated swap button
+  - Emits `onchange(source, target)` back to the route
 
 - `SkeletonLoader.svelte`
-  - Stateless. Renders 4 `div.skeleton-bar` elements with fixed widths and staggered `animation-delay` offsets (`0ms`, `120ms`, `240ms`, `360ms`).
+  - Stateless four-line shimmer placeholder
 
 - `SettingsPanel.svelte`
-  - Props: `visible`, `onclose`.
-  - `$effect`: calls `loadConfig()` whenever `visible` becomes `true`.
-  - `handleHotkeyKeydown(e)`: requires at least one modifier plus an alphanumeric key before updating `config.hotkey`; otherwise shows inline guidance.
-  - `saveConfig()`: invokes `save_config` with the local `config` object; spring-bounces the save button.
-  - Rendered only when `visible === true` (Svelte `{#if}` block — full DOM teardown on hide).
+  - Loads config on open with `get_config`
+  - Shows provider-aware fields and a pin-window switch
+  - Captures hotkeys with modifier enforcement and letter/digit restriction
+  - Emits `onsaved(config)` after successful persistence
+
+- `NotificationCenter.svelte`
+  - Renders stacked alert cards with severity accents and dismiss actions
+
+- `notifications.ts`
+  - Defines `AppNotification`, notification factories, error formatting, and the plaintext API-key warning predicate
+
+- `windowBehavior.ts`
+  - Exports `RESIZE_HANDLES` and `shouldDismissOnBlur(showSettings, windowPinned)`
 
 ### Design System (`ui/`)
 
-- `app.css`: Tailwind v4 `@theme` block defining all `aura-*` color and font tokens; global reset; scrollbar styles; keyframe animations; `.skeleton-bar` utility class.
-- `app.html`: HTML shell with `%sveltekit.head%` and `%sveltekit.body%` placeholders; no `<meta charset>` or viewport tag (Tauri window, not a browser tab).
+- `app.css`
+  - Theme tokens, font imports, scrollbar treatment, shell gradients, and skeleton animation rules
+- `app.html`
+  - SvelteKit HTML shell used by the Tauri webview
 
-### Integration Points
+## Integration Points
 
 - `ui/routes/+page.svelte`
-  - `invoke('get_config') -> AppConfig`: called in `loadConfig()`.
-  - `invoke('save_config', { config })`: called in `SettingsPanel.saveConfig()` via the orchestrator.
-  - `invoke('translate_text', { text, sourceLang, targetLang, apiKey, model, requestId, apiBaseUrl, provider })`: called in `startTranslation()` on every `trigger-translate` event and on mid-stream language switch.
-  - `invoke('cancel_translate', { requestId })`: called in `cancelCurrentTranslation()` on user cancel, language switch mid-stream, or new trigger while streaming.
-  - `listen('trigger-translate')`, `listen('translation-chunk')`, `listen('translation-done')`, `listen('translation-error')`, `listen('translation-retry')`, `listen('window-blur')`, `listen('show-settings')`, `listen('hotkey-conflict')`, and `listen('daemon-error')`: all registered in `onMount`.
-  - `getCurrentWindow().hide()`: called in the dismiss timeout.
+  - `invoke('get_config')`
+  - `invoke('save_config', { config })`
+  - `invoke('translate_text', { text, sourceLang, targetLang, apiKey, model, requestId, apiBaseUrl, provider })`
+  - `invoke('cancel_translate', { requestId })`
+  - `invoke('mark_ui_ready')`
+  - `listen('trigger-translate')`
+  - `listen('translation-chunk')`
+  - `listen('translation-done')`
+  - `listen('translation-error')`
+  - `listen('translation-retry')`
+  - `listen('window-blur')`
+  - `listen('show-settings')`
+  - `listen('hotkey-conflict')`
+  - `listen('hotkey-registered')`
+  - `listen('daemon-error')`
+  - `getCurrentWindow().hide()`
+  - `getCurrentWindow().startResizeDragging(direction)`
 
 - `ui/lib/TranslationPopup.svelte`
-  - `writeText(translatedText)` from `@tauri-apps/plugin-clipboard-manager`: clipboard write on copy button click.
+  - `writeText(translatedText)` from `@tauri-apps/plugin-clipboard-manager`
 
 ## Current Limitations
 
-- **No translation history** — each trigger replaces the previous result; there is no session-level history panel.
-- **`appWindow.hide()` can fail silently** — the `catch` block in `dismiss()` only logs to `console.error`; a failed hide is not surfaced to the user.
-- **Settings panel is DOM-destroyed on close** — using `{#if visible}` means every open/close cycle re-mounts and re-loads config; a `visibility: hidden` approach would avoid the config round-trip.
-- **`window-blur` dismiss race** — rapid state transitions (e.g., blur event arriving during the dismiss animation) can cause double-dismiss attempts.
+- **Retry state is not visibly surfaced**: `translation-retry` is only logged with `console.warn`; the UI does not yet show a retry badge or progress state.
+- **Settings still remount on every open**: `{#if visible}` causes the panel to reload config and reset local UI state on each open/close cycle.
+- **Dismiss uses fixed animation timing**: the 220 ms hide delay is hardcoded rather than derived from spring completion.
+- **Copy failures stay in developer logs**: clipboard write failures are only logged to `console.error`; the user does not get a notification.
+- **No session history**: each new translation replaces the previous visible result.
 
 ## Future Directions
 
-- Replace `{#if visible}` in `SettingsPanel` with `display: none` to preserve the mounted component across open/close cycles.
-- Add a collapsible translation history panel showing the last N source/result pairs within a session.
-- Surface `translation-retry` as a visible "retrying…" indicator badge in the status bar.
-- Add keyboard navigation shortcuts within the popup (e.g., `Tab` to cycle focus, `Enter` to copy).
-- Support right-to-left layout for Arabic and Hebrew target languages.
+- Add a visible retry indicator sourced from `translation-retry`.
+- Preserve `SettingsPanel` mount state while hidden instead of tearing it down with `{#if}`.
+- Add session-level history and quick replay for recent translations.
+- Add keyboard focus management for the full popup, not only `Esc` dismissal.
+- Surface clipboard-copy failures and resize failures through the notification system.

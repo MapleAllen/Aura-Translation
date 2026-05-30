@@ -2,160 +2,177 @@
 
 ## Objective
 
-Evolve the Daemon Core from a hardcoded, single-hotkey, cleartext-config MVP into a fully configurable, secure, and multi-monitor-aware system service. The end state is a daemon that reads its hotkey binding from config at startup, stores secrets in the OS keychain, detects hotkey conflicts gracefully, anchors the popup to the active monitor and tray edge, and exposes a robust surface for future plugin-style feature extension — all without disrupting the existing frontend event contract.
-
-Throughout every phase, two non-negotiable constraints must hold: (1) the application must remain deployable from a single Rust/Svelte codebase to **Windows, macOS, and Linux** without platform-specific forks, and (2) **production release** idle resource consumption must stay within **≤20 MB RAM** and installer size should stay under **10 MB** so the daemon imposes minimal background tax on the user's machine. The latest verified Windows release executable is approximately 11.9 MB, so executable-size reduction is a separate optimization track. Development-only `[dev-dependencies]` (e.g., `wiremock-rs`, `tracing-subscriber`) are stripped from release builds and are exempt from this budget.
+Evolve the Daemon Core into a robust desktop service layer that can safely create its UI on demand, keep runtime preferences synchronized with the frontend, and remain resilient when hotkey registration, tray setup, or window creation fail. The target state is a daemon that stays lightweight, supports pinned always-on-top behavior, chooses the right monitor intelligently, and surfaces operational failures without requiring developer logs.
 
 ## Design Principles
 
-- **Hotkey registration must be driven by config.** The `AppConfig.hotkey` field must be the single source of truth; no key combination may be hardcoded in `lib.rs` after Phase 2.
-- **Secrets should prefer the OS keychain.** Where available, read and write the API key via the OS keychain rather than plaintext `config.json`. However, keychain integration libraries bring native cross-platform dependencies (DPAPI, Security.framework, libsecret) that can push the binary above the 10 MB target; weigh this cost before adding the dependency. If the keychain is unavailable (headless CI, sandboxed environment, or binary-size constraints), fall back to plaintext storage with a one-time UI warning.
-- **User-visible errors must be emitted as Tauri events.** Daemon failures (hotkey conflict, keychain error, tray build failure) must reach the frontend as named events, not silent `eprintln!` calls or Rust panics.
-- **Window positioning logic is owned by Rust.** The frontend must not calculate its own position; it receives a pre-computed `LogicalPosition` from the daemon.
-- **Config save must be atomic.** Write to a `.tmp` file and rename-into-place to prevent corruption on crash.
-- **The event contract is stable.** `trigger-translate`, `window-blur`, and `show-settings` event names and payload types must not change.
-- **Resource budget is a production invariant.** No phase may introduce a `[dependencies]` entry that raises **release-build** idle RSS above 20 MB or materially increases installer size. Prefer native OS APIs and avoid bundling additional runtimes. `[dev-dependencies]` used only in tests or build tooling are exempt from this constraint.
+- **Backend owns desktop semantics.** Window creation, placement, pinning, and hotkey lifecycle live in Rust, not in the web UI.
+- **Frontend readiness must be explicit.** Lazily created windows must not receive events before the webview is ready to consume them.
+- **Config is live state.** Saved preferences should update existing runtime objects immediately where feasible.
+- **Error surfaces are structured.** User-relevant daemon failures should be emitted as named payloads, not only logged.
+- **Fallbacks must be safe.** When hotkey registration fails, restore a known-good shortcut or surface a hard failure clearly.
+- **Keep the idle footprint low.** New features should preserve the app's daemon-first resource profile.
 
 ---
 
-## Phase 1: MVP Hardening — DONE
+## Phase 1: Tray, Hotkey, and Config Foundation - DONE
 
 Status: **Done**
 
 Goals:
 
-- Ship a working daemon with tray, hotkey, and config persistence.
+- Ship a runnable tray daemon with config-backed startup behavior.
 
 Completed work:
 
-- Implemented `run()` in `src-tauri/src/lib.rs` with builder-level plugin registration.
-- Registered `Ctrl+T` (`CONTROL + Code::KeyT`) as a global shortcut.
-- Implemented clipboard read, window positioning (440×360, bottom-right), and `trigger-translate` event emission.
-- Built tray menu with Settings and Quit items; wired `show-settings` and `app.exit(0)`.
-- Implemented `window-blur` forwarding from `WindowEvent::Focused(false)`.
-- Implemented `AppConfig` in `config.rs` with `load()` / `save()` and defaults.
-- Exposed `get_config` and `save_config` Tauri commands.
-- Added shared `reqwest::Client` and `CancellationRegistry` as managed `tauri::State` resources (required by Translation Engine Phase 2).
-- Registered `translate::translate_text` and `translate::cancel_translate` in `generate_handler!`.
+- Built the Tauri bootstrap in `lib.rs`.
+- Added the tray menu with Settings and Quit.
+- Added startup config loading and persistence.
+- Registered translation commands and shared backend state.
+- Added blur-event forwarding to the frontend.
 
 ---
 
-## Phase 2: Dynamic Hotkey Registration — DONE
+## Phase 2: Dynamic Hotkey Registration - DONE
 
 Status: **Done**
 
 Goals:
 
-- Make the registered hotkey reflect the `AppConfig.hotkey` field, not a hardcoded key combination.
+- Make hotkeys configurable and safe to update at runtime.
 
 Completed work:
 
-- Implemented `parse_hotkey(s: &str) -> Result<Shortcut, String>` in `src-tauri/src/hotkey.rs` covering `Ctrl`, `Alt`, `Shift`, `CmdOrCtrl` modifiers and all alpha/digit key codes.
-- On startup (`setup` closure): loads `AppConfig.hotkey`, parses it, and registers the shortcut; falls back to `CmdOrCtrl+T` on parse or registration failure.
-- On `save_config` command: unregisters all shortcuts, parses the new `config.hotkey`, and registers it immediately without requiring a restart.
-- Hotkey parsing now rejects bare single-key bindings; release builds require at least one modifier plus a letter or digit.
-- Emits `hotkey-registered` event on success.
-- Emits `hotkey-conflict` event on registration failure; falls back to `CmdOrCtrl+T` if re-registration fails.
-- Settings UI (`SettingsPanel.svelte`) includes a live hotkey capture widget (`<input>` with `keydown` listener that formats `CmdOrCtrl+T`-style strings).
-- Unit-test coverage for `parse_hotkey` added: valid combos, unknown modifiers, unsupported keys, empty input.
-
-### Hotkey String Format
-
-Use Electron-compatible accelerator strings: `"CmdOrCtrl+T"`, `"Alt+Shift+T"`, etc. The `parse_hotkey` function maps these to `tauri_plugin_global_shortcut::Modifiers` and `Code` values.
+- Implemented `parse_hotkey()` for Electron-style accelerators.
+- Registered startup hotkeys from `AppConfig.hotkey`.
+- Re-registered hotkeys in `save_config`.
+- Added fallback registration to `CmdOrCtrl+T`.
+- Added `hotkey-conflict` and `hotkey-registered` events.
+- Added hotkey parser tests.
 
 ---
 
-## Phase 3: Secure API Key Storage — NOT STARTED
+## Phase 3: Lazy Main Window & UI Readiness Handshake - DONE
 
-Status: **Not Started**
-
-Goals:
-
-- Move the API key out of plaintext `config.json` into the OS keychain.
-
-Remaining features:
-
-- Add `tauri-plugin-stronghold` or the `keyring` crate as a dependency.
-- Define a new `get_api_key() -> Result<String, String>` Tauri command that reads from the OS keychain using service name `"aura-translation"` and account name `"deepseek-api-key"`.
-- Define a new `save_api_key(key: String) -> Result<(), String>` Tauri command that writes to the keychain.
-- Remove `api_key` from `AppConfig` and `config.json`; pass the API key directly from the frontend via `get_api_key()` before invoking `translate_text`.
-- Update `SettingsPanel.svelte` to call `get_api_key` on open and `save_api_key` on save, separately from `save_config`.
-- On first launch, if no keychain entry exists, return an empty string so the UI prompts the user to configure.
-
----
-
-## Phase 4: Multi-Monitor & Tray Edge Awareness — NOT STARTED
-
-Status: **Not Started**
+Status: **Done**
 
 Goals:
 
-- Open the popup near the actual tray icon, regardless of monitor configuration or taskbar position.
-
-Remaining features:
-
-- Detect the monitor containing the cursor at hotkey time using `app.cursor_position()` and `app.available_monitors()`.
-- Calculate the bottom-right anchor relative to the detected monitor's work area (excluding the taskbar).
-- Detect taskbar edge (top/bottom/left/right) using the monitor's work area vs. full size delta.
-- Anchor the popup to the correct edge: bottom-right for bottom taskbar, top-right for top taskbar, bottom-right (shifted) for left/right taskbar.
-- Add `window_offset_x: i32` and `window_offset_y: i32` fields to `AppConfig` with defaults `16` and `60` for user-adjustable margins.
-
----
-
-## Phase 5: Atomic Config Save & Error Surface — PARTIAL
-
-Status: **Partial (atomic save, daemon-error events, and frontend error surface done; lifecycle logging still pending)**
-
-Goals:
-
-- Harden config persistence and make daemon errors visible to the user.
+- Avoid startup window cost while keeping event delivery reliable.
 
 Completed work:
 
-- Replaced `fs::write` in `AppConfig::save` with write-to-`.tmp`-then-`fs::rename` for crash-safe atomicity.
-- Updated `save_config` so config changes are atomic from the user's perspective: if hotkey parsing or registration fails, no new config is written; if disk persistence fails after hotkey registration, the previous hotkey is restored.
-- Replaced fallible setup-path panics for tray and startup hotkey issues with emitted `daemon-error` events.
-- Added frontend listeners in `+page.svelte` that surface `daemon-error` and `hotkey-conflict` through the notification layer and inline Settings warnings.
-- Removed the unused opener plugin and tightened the Rust release profile (`lto`, `strip`, `opt-level = "s"`) as part of the installer-size optimization track.
-
-Remaining features:
-
-- Log all daemon lifecycle events (startup, hotkey registration, config load/save, tray creation) to a rotating `aura-translation.log` file in the app data directory using the `tracing` crate.
+- Switched the main window to `create: false`.
+- Added `ensure_main_window()` using `WebviewWindowBuilder::from_config`.
+- Added `UiReadyState` and the `mark_ui_ready` Tauri command.
+- Added `wait_for_ui_ready()` before emitting `trigger-translate` and `show-settings`.
+- Attached blur listeners to lazily created windows.
 
 ---
 
-## Phase 6: Testing Strategy — PARTIAL
+## Phase 4: Live Window Preferences - DONE
+
+Status: **Done**
+
+Goals:
+
+- Let backend window behavior track frontend preference changes without restart.
+
+Completed work:
+
+- Added `window_pinned` to `AppConfig`.
+- Applied pin state to existing windows with `set_always_on_top`.
+- Synced live window preferences after successful config saves.
+- Supported shared shell behavior for transient and pinned usage modes.
+
+---
+
+## Phase 5: Error Surface & Save Safety - PARTIAL
 
 Status: **Partial**
 
 Goals:
 
-- Establish regression coverage for config parsing, hotkey string parsing, and positioning logic.
-
-Remaining features:
-
-- Add unit tests for `AppConfig::load`: missing file (should return defaults), malformed JSON (should return defaults), valid JSON with all fields, valid JSON with missing fields (partial forward-compatibility).
-- Add unit tests for `AppConfig::save`: verify the output file matches the expected JSON schema.
-- Add unit tests for window positioning: given a mock monitor size + scale factor + taskbar edge, verify the computed `LogicalPosition` is within the expected quadrant.
+- Make daemon failures diagnosable without corrupting runtime state.
 
 Completed work:
 
-- Added unit tests for `parse_hotkey`, including valid combos, unknown modifiers, unsupported keys, empty input, and bare single-key rejection.
-- Added `AppConfig` regression coverage for defaults, backward-compatible deserialization of legacy configs, and full round-trip serialization.
+- Added atomic config save via temp file + rename.
+- Added structured `daemon-error` emissions for tray, window, readiness, restore, and pinning failures.
+- Restored previous hotkeys when re-registration fails.
+
+Remaining features:
+
+- Route startup config read/parse failures through `daemon-error` instead of `eprintln!`.
+- Add persistent daemon lifecycle logging.
+- Decide whether non-recoverable backend errors should ever force app exit instead of surfacing in-UI.
 
 ---
 
+## Phase 6: Monitor & Tray-Aware Positioning - NOT STARTED
+
+Status: **Not Started**
+
+Goals:
+
+- Open the window near the user's active desktop context instead of a generic fallback position.
+
+Remaining features:
+
+- Detect the monitor containing the cursor when the hotkey fires.
+- Distinguish taskbar edge and work-area geometry.
+- Add user-configurable offsets in `AppConfig`.
+- Add regression coverage for placement math across common monitor layouts.
+
+---
+
+## Phase 7: Secret Storage - NOT STARTED
+
+Status: **Not Started**
+
+Goals:
+
+- Move provider credentials out of plaintext config when practical.
+
+Remaining features:
+
+- Evaluate OS keychain integration and its binary-size cost.
+- Split API-key storage from `AppConfig`.
+- Add dedicated backend commands for saving and retrieving secrets.
+- Preserve an explicit fallback strategy when keychain APIs are unavailable.
+
+---
+
+## Phase 8: Testing Strategy - PARTIAL
+
+Status: **Partial**
+
+Goals:
+
+- Keep daemon-level behavior stable as window lifecycle and config shape evolve.
+
+Completed work:
+
+- Added `hotkey.rs` parser coverage for valid combos, invalid modifiers, empty input, and unsupported keys.
+- Added `config.rs` coverage for defaults, backward-compatible deserialization, and full round-trip serialization.
+
+Remaining features:
+
+- Add tests for `AppConfig::load()` failure paths and disk persistence.
+- Add tests for window positioning math.
+- Add tests for `save_config()` hotkey rollback behavior.
+- Add tests or harnesses around the UI-ready wait path.
+
 ## Implementation Rules
 
-- Do not hardcode any key combination in `lib.rs` after Phase 2 — all hotkey data must come from `AppConfig`.
-- After Phase 3, prefer keychain storage for `api_key` over plaintext `config.json`. If adding keychain dependencies materially increases release size or startup footprint, retain plaintext storage with a clearly documented warning in the Settings UI.
-- After Phase 5 (error surface) is complete, all daemon errors that affect the user must be emitted as named Tauri events (`daemon-error`), not `eprintln!`. Before Phase 5, `eprintln!` with a `// TODO: emit daemon-error` comment is an acceptable placeholder — do not build the full event infrastructure prematurely.
-- Do not use `?` in the `setup` closure for non-fatal errors — emit `daemon-error` and return `Ok(())` to prevent a startup panic.
-- After Phase 4, prefer cursor-detected monitor positioning (`cursor_position()` + `available_monitors()`). Fall back to `primary_monitor()` when cursor position is unavailable (Wayland without pointer permissions, or single-monitor setups where they are equivalent). Do not remove the fallback path.
+- Do not emit frontend-facing events into a lazily created window before `mark_ui_ready` has completed.
+- Do not change pin state in the frontend without persisting or reverting it.
+- Do not silently drop hotkey-registration failures.
+- Do not reintroduce eager window creation unless startup measurements justify it.
+- Do not add monitor-placement heuristics to the frontend.
 
 ## Open Questions
 
-- **Hotkey capture UI:** Should the Settings panel use a `keydown` listener to capture hotkey combinations, or a text field with format validation? A capture widget is more user-friendly but requires preventing the hotkey from firing while the field is focused. Decide before Phase 2.
-- **Keychain fallback:** If the OS keychain is unavailable (e.g., headless CI, sandboxed environment), should the app fall back to plaintext storage with a warning, or refuse to save? Decide before Phase 3.
-- **Tray left-click behavior:** Should left-clicking the tray icon toggle the popup, open Settings, or do nothing? This affects Phase 5 event routing. Decide before Phase 5.
-- **Log rotation policy:** Should the log file rotate daily, on size (e.g., 1 MB max), or both? Decide before Phase 5.
+- **Tray left-click behavior:** Should a tray click toggle the shell, open Settings, or remain inert?
+- **Readiness signaling:** Is the polling-based `UiReadyState` sufficient, or should it become an event-driven handshake?
+- **Secret storage fallback:** If keychain support increases binary size too much, is plaintext-with-warning an acceptable long-term compromise?

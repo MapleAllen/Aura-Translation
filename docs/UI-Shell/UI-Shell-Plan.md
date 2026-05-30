@@ -2,159 +2,157 @@
 
 ## Objective
 
-Evolve the UI Shell from a single-state popup into a polished, production-grade desktop widget that feels like a natural extension of the host operating system — not a browser tab. The end state is a popup that: (1) springs open with a physically-grounded haptic overshoot, (2) supports in-flight cancellation and live language switching, (3) offers a configurable hotkey binding, (4) maintains a session-level history panel, and (5) is fully navigable by keyboard — all while remaining sub-second in perceived response time, consuming ≤20 MB idle RAM, and never adding a Taskbar or Dock footprint. Every structural animation must be driven by spring physics, not linear easing.
+Evolve the UI Shell into a production-grade desktop translator that can fluidly switch between two usage modes: quick ephemeral lookup and pinned side-by-side reading. The end state is a shell that opens instantly, survives backend warnings gracefully, supports pinned always-on-top comparison, exposes clear configuration controls, and remains resilient under retries, cancellations, and repeated open/close cycles.
 
 ## Design Principles
 
-- **State machine is the source of truth.** `appState` drives all conditional rendering; no component may alter its own visibility based on internal flags that conflict with `appState`.
-- **Spring physics preferred.** Prefer `svelte/motion.Spring` for the popup entry/exit so the damping can be tuned low enough to allow a brief overshoot past `scale(1.0)` — this haptic "pop" is a core product requirement, not an aesthetic preference. CSS `transition` is acceptable for structural animations where overshoot is not needed (springs run JS per frame and are not inherently lighter than GPU-composited CSS transitions); CSS `transition` is the correct choice for hover micro-interactions (color, border).
-- **Props flow down, events flow up.** Components receive state as props and emit changes via callback props (`onLanguageChange`, `onclose`); no component imports or writes to global state.
-- **Config round-trips are avoided where obvious.** Cache `get_config` results in orchestrator state for the duration of a trigger cycle; do not call it in a loop. Re-reads for post-save verification are acceptable — a single IPC call to a local JSON file costs < 1 ms and is not a bottleneck.
-- **Text selectability is intentional.** Only source text and result text carry `select-text`; the rest of the UI is `user-select: none`.
-- **Errors are never silent.** Every `catch` block that handles a Tauri API call must either surface an `errorMessage` state or emit a `console.error` with a structured context object.
-- **RTL-safe layout from Phase 3.** All flex layouts must use `gap` + `align-items` rather than margin hacks so that RTL language support can be added without layout surgery.
+- **Request-scoped state is mandatory.** Every backend event must be filtered by `request_id` before mutating visible UI state.
+- **Pinned mode changes behavior, not structure.** The same window should serve transient translation, pinned comparison, and settings workflows.
+- **Frontend config is a cached mirror.** The shell may cache config locally, but Rust remains the source of truth.
+- **Notifications carry operational failures.** User-visible daemon and translation failures must surface through the notification layer, not only developer logs.
+- **Structural motion stays spring-based.** Popup show/hide behavior should keep using springs; micro-interactions may use CSS transitions.
+- **Desktop density beats decorative space.** The shell should prefer compact, legible controls and preserve room for source and translated text.
 
 ---
 
-## Phase 1: MVP Polish — DONE
+## Phase 1: Core Popup Lifecycle - DONE
 
 Status: **Done**
 
 Goals:
 
-- Ship the complete glassmorphic popup with spring animation, streaming text, skeleton loader, language selector, copy button, and settings panel.
+- Ship the main translation popup and its request lifecycle.
 
 Completed work:
 
-- Implemented `+page.svelte` as the lifecycle orchestrator; it now owns the popup state machine, notifications, and ten Tauri event listeners.
-- Implemented `Spring`-based scale/opacity popup animation (scale `0.92→1`, opacity `0→1`), anchored bottom-right.
-- Implemented `appState` union (`idle | loading | streaming | result | error`) driving conditional rendering.
-- Implemented `TranslationPopup.svelte` with drag region, status indicator, source text box, divider, content area, and copy footer.
-- Implemented `SkeletonLoader.svelte` with 4 shimmer bars and staggered animation delays.
-- Implemented `LanguageSelector.svelte` with 11 languages, swap button with rotation spring, and `auto` guard.
-- Implemented `SettingsPanel.svelte` with API key (password + toggle), model dropdown, hotkey display, and save button with spring bounce.
-- Defined Aura design token system in `app.css` via Tailwind v4 `@theme`.
-- Wired `Esc` dismiss, `window-blur` auto-dismiss (suppressed during Settings), and `show-settings` tray event.
+- Implemented `+page.svelte` as the route-level orchestrator.
+- Implemented `idle | loading | streaming | result | error` state handling.
+- Implemented spring-based popup show and hide transitions.
+- Implemented `SkeletonLoader`, `TranslationPopup`, and `LanguageSelector`.
+- Wired translation events, `Esc` dismissal, and loading timeout handling.
 
 ---
 
-## Phase 2: Cancellation & Mid-Stream Controls — DONE
+## Phase 2: Mid-Stream Control Surface - DONE
 
 Status: **Done**
 
 Goals:
 
-- Allow the user to cancel an in-progress translation and start a new one.
+- Let users interrupt or redirect an in-flight request without closing the shell.
 
 Completed work:
 
-- Added a cancel button (× icon) in the `TranslationPopup` header area, visible in `loading` and `streaming` states; styled with `hover:text-aura-error` transition.
-- Added `oncancel` callback prop to `TranslationPopup`; wired to `handleCancel()` in the orchestrator.
-- On cancel click: invokes `cancel_translate({ requestId })` (Rust Phase 2), then transitions `appState` to `result` if partial text exists, or `idle` if no text arrived.
-- Added a monotonically incrementing `currentRequestId` counter in the orchestrator; passed to `invoke('translate_text', …)` on every new translation.
-- Added a 20-second loading timeout in `+page.svelte`: if `appState === 'loading'` after 20 s with no `translation-chunk` event, sets `appState = 'error'` and `errorMessage = 'No response from API (timeout)'`.
-- Timeout is cleared on first current-request chunk, on current-request `translation-done`, on current-request `translation-error`, and on dismiss.
-- On language change while `loading` or `streaming`: invokes `cancelCurrentTranslation()`, resets state, then calls `startTranslation()` immediately with the new language pair.
-- Extracted `startTranslation()` as a reusable function for both trigger and mid-stream language switch flows.
-- Guarded `translation-chunk`, `translation-done`, `translation-error`, and `translation-retry` listeners by `request_id === currentRequestId` to prevent stale events from cancelled requests from corrupting the display.
-- New triggers cancel any in-flight translation before starting a new one.
+- Added request-scoped `currentRequestId` handling.
+- Added cancel action in the popup header.
+- Added 20-second first-token timeout protection.
+- Added mid-stream language switching by cancel-and-restart.
+- Ignored stale translation events from cancelled requests.
 
 ---
 
-## Phase 3: Dynamic Config & Model List — DONE
+## Phase 3: Dynamic Settings & Provider Sync - DONE
 
 Status: **Done**
 
 Goals:
 
-- Remove all hardcoded strings from the Settings panel and replace them with data from `AppConfig`.
+- Make settings backend-driven instead of static frontend strings.
 
 Completed work:
 
-- Replaced hardcoded `<option>` elements in `SettingsPanel.svelte` with a `{#each config.available_models}` loop.
-- Replaced the static hotkey `<kbd>` display with a live binding capture widget (`<input>` with `keydown` listener that formats modifier+key into `CmdOrCtrl+T`-style string; uses `e.preventDefault()` + `e.stopImmediatePropagation()` to prevent global shortcuts while focused).
-- Hardened the hotkey capture widget so bare single-key bindings are rejected inline; only modifier + letter/digit combinations are accepted.
-- Added a `Provider` dropdown that auto-populates `api_base_url` and `available_models` on change by invoking Rust `get_provider_defaults`, keeping provider defaults centralized in `config.rs`.
-- API base URL is configurable via `config.api_base_url` (defaults populated from provider selection).
+- Populated models from `config.available_models`.
+- Added provider selector backed by `get_provider_defaults`.
+- Added live hotkey capture with modifier and key validation.
+- Added plaintext API-key warning for authenticated providers.
+- Added save success and save failure feedback in the settings overlay.
 
 ---
 
-## Phase 4: History Panel — NOT STARTED
+## Phase 4: Pinned Window & Operational Feedback - DONE
+
+Status: **Done**
+
+Goals:
+
+- Support side-by-side comparison and visible daemon feedback without leaving the main shell.
+
+Completed work:
+
+- Added `window_pinned` UI controls in both the popup header and Settings panel.
+- Added immediate pin persistence through `save_config`.
+- Suppressed blur dismissal when the shell is pinned.
+- Added `NotificationCenter` with daemon, hotkey-conflict, and translation-failure notifications.
+- Added `mark_ui_ready` startup handshake so lazily created windows can safely receive events.
+- Added close action in the header separate from translation cancel.
+
+---
+
+## Phase 5: Resizable Desktop Shell - DONE
+
+Status: **Done**
+
+Goals:
+
+- Allow the shell window to scale beyond the original fixed popup size.
+
+Completed work:
+
+- Enabled `resizable: true` in Tauri window config with min dimensions.
+- Added eight invisible edge and corner resize handles in the frontend.
+- Wired `startResizeDragging(direction)` to those handles.
+- Expanded the shell layout to support larger source/result areas without breaking density.
+
+---
+
+## Phase 6: History & Extended Keyboard UX - NOT STARTED
 
 Status: **Not Started**
 
 Goals:
 
-- Let the user review and reuse translations from the current session.
+- Improve recall, keyboard-only operation, and repeat workflows.
 
 Remaining features:
 
-- Add a `history: Array<{ sourceText, translatedText, sourceLang, targetLang, timestamp }>` array to the orchestrator state, capped at 20 items.
-- Append a history entry whenever `appState` transitions to `result`.
-- Add a history toggle button in the `TranslationPopup` header (clock icon); toggles a `showHistory` boolean.
-- Render the history as a scrollable list within the popup content area when `showHistory === true`, replacing the current content area.
-- Each history item is clickable; clicking restores `sourceText` and `translatedText` to the displayed values (read-only replay, not a re-translation).
-- Add a "clear history" button at the top of the history panel.
-- History is in-memory only — it does not persist across restarts.
+- Add in-memory translation history with restore/replay actions.
+- Add keyboard traversal for icon buttons, pin toggle, language controls, and copy action.
+- Add focus trapping or predictable tab order when Settings is open.
+- Add optional shortcuts for copy, pin toggle, and language swap.
 
 ---
 
-## Phase 5: Accessibility & RTL Support — NOT STARTED
-
-Status: **Not Started**
-
-Goals:
-
-- Make the popup usable via keyboard alone and correctly render RTL target languages.
-
-Remaining features:
-
-- Add `tabIndex` and `aria-label` attributes to remaining icon-only interactive elements; the settings close button and API-key visibility toggle now have explicit `aria-label` attributes.
-- Add keyboard navigation: `Tab` cycles through interactive elements within the popup; `Enter` activates the focused button.
-- Detect RTL target languages (Arabic) and apply `dir="rtl"` to the result text container.
-- Apply `text-align: right` and `font-size: 0.9em` (Arabic script optical size adjustment) to the result text when target is RTL.
-- Replace `{#if visible}` in `SettingsPanel.svelte` with `display: none` (`class:hidden`) to avoid remounting the component on every open/close.
-
----
-
-## Phase 6: Testing Strategy — PARTIAL
+## Phase 7: Testing Strategy - PARTIAL
 
 Status: **Partial**
 
 Goals:
 
-- Establish regression coverage for state transitions, event handling, and component rendering.
-
-Remaining features:
-
-- Add Vitest unit tests for `LanguageSelector.svelte`: verify swap is blocked when `sourceLang === 'auto'`; verify correct `onchange` calls for both selects.
-- Add Vitest unit tests for `+page.svelte` state machine: mock Tauri event listeners and verify state transitions for all five events.
-- Add a Playwright integration test (via webapp-testing skill) for the full translate flow: trigger → loading → streaming → result → copy.
-- Add a Playwright test for dismiss: trigger → streaming → press Esc → window hidden.
-- Add a Playwright test for settings: open via tray → change API key → save → reload and verify.
+- Keep the shell stable across state, settings, and window-behavior changes.
 
 Completed work:
 
-- Added Vitest coverage for `SettingsPanel.svelte` covering the plaintext API key warning, inline hotkey conflict rendering, bare single-key hotkey rejection, and modifier-based hotkey capture.
-- Added Vitest coverage for `TranslationPopup.svelte` confirming the idle-state hint reflects the configured hotkey.
+- Added `SettingsPanel.svelte` tests for plaintext API-key warning, hotkey validation, hotkey capture, and window pin persistence.
+- Added `TranslationPopup.svelte` tests for configured hotkey rendering and pin-button behavior.
+- Added `windowBehavior.ts` tests for blur-dismiss logic.
 
----
+Remaining features:
+
+- Add tests for `+page.svelte` request lifecycle and notification behavior.
+- Add tests for stale-event rejection across rapid request changes.
+- Add integration coverage for resize handles and dismiss timing.
+- Add end-to-end coverage for tray-triggered translation and settings opening.
 
 ## Implementation Rules
 
-- Prefer merging `{#if viewState === 'streaming'}` and `{#if viewState === 'result'}` into a single `{#if streaming || result}` branch to avoid template duplication — the compiled Svelte output is identical either way, so this is a code-style preference, not a performance constraint.
-- Do not add CSS `transition` to elements that also use a `Spring` — double animation causes visual jitter.
-- Do not call `invoke('get_config')` more than once per translation trigger — cache in orchestrator state.
-- Do not leave verbose debug logging in production paths. Use `console.warn` / `console.error` for meaningful diagnostics. Guard development-only `console.log` calls behind a `DEV` flag or remove them before merging — `console.log` and `console.error` have identical runtime cost; the concern is noisy output, not resource usage.
-- Do not mutate `translatedText` directly from multiple event handlers without guarding `appState` — check `appState !== 'error'` before appending chunks.
+- Do not mutate visible translation state from unscoped backend events.
+- Do not let pinned mode bypass config persistence; the backend must know the active preference.
+- Do not add duplicate error surfaces for the same event; toast plus inline warning is acceptable only when the contexts differ.
+- Do not tie resize behavior to CSS-only handles; native window dragging must remain the source of truth.
+- Do not add new global state containers unless route-local state becomes demonstrably unmanageable.
 
 ## Open Questions
 
-- **History persistence:** Should translation history survive a window hide/show cycle (in-memory) or also survive a process restart (disk)? In-memory is simpler; disk requires a new Tauri command. Decide before Phase 4.
-- **RTL font:** Arabic script renders poorly with DM Sans at small sizes. Should a separate Arabic-optimized font (e.g., Noto Sans Arabic) be loaded conditionally? Decide before Phase 5.
-- **Settings remount cost:** Does the `{#if visible}` teardown + `get_config` round-trip cause a perceptible flash when opening Settings on slow machines? Measure before deciding to change to `display: none` in Phase 5.
-
-## Resolved Questions
-
-- **Cancel UX:** Resolved in Phase 2: cancelling preserves partial translated text and transitions to `result` state; if no text has arrived, transitions to `idle`.
-- **Mid-stream language switch:** Resolved in Phase 2: changing language while streaming cancels the current request and immediately starts a new translation with the updated language pair.
+- **History semantics:** Should restoring a history item be read-only, or should it optionally re-run translation with the current provider and model?
+- **Retry messaging:** Should the shell show a subtle background retry badge or a more explicit blocking state while the backend retries?
+- **Pinned persistence:** Should pin state be global across launches, or should the app optionally remember it per session only?
