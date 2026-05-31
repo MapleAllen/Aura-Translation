@@ -54,7 +54,13 @@ Ship a Windows-first two-window desktop shell where translation feels immediate 
 - Paste-back temporarily swaps the text clipboard, sends `Ctrl+V` to the original Windows app, and then restores the previous text clipboard when possible.
 - This flow stays opt-in from the translation bubble and does not change the existing copy-first workflow.
 
-### Phase 8: Remaining Enhancements - NOT STARTED
+### Phase 8: Pinned Draft Composer - DONE
+
+- Pinned mode now upgrades the source preview into a lightweight draft composer.
+- Users can edit source text inline and press `Ctrl+Enter` or click `Translate edits` to reuse the current translation session flow.
+- The draft stays inside the translation window instead of pushing this workflow into Settings.
+
+### Phase 9: Remaining Enhancements - NOT STARTED
 
 - Add explicit retry state UI instead of console-only retry logging.
 - Add more keyboard-only controls inside both windows.

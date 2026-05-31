@@ -5,6 +5,7 @@
   type Props = {
     viewState: 'idle' | 'loading' | 'streaming' | 'result' | 'error';
     sourceText: string;
+    draftSourceText: string;
     sourceLangLabel: string;
     targetLangLabel: string;
     providerLabel: string;
@@ -12,8 +13,13 @@
     retryAttempt: number | null;
     translatedText: string;
     errorMessage: string;
+    showComposer: boolean;
+    hasDraftChanges: boolean;
     canPasteBack: boolean;
     windowPinned: boolean;
+    ondraftsourcechange?: (value: string) => void;
+    ontranslatedraft?: () => void;
+    onresetdraft?: () => void;
     onTogglePinned?: (windowPinned: boolean) => void;
     onretry?: () => void;
     oncancel?: () => void;
@@ -25,6 +31,7 @@
   let {
     viewState,
     sourceText,
+    draftSourceText,
     sourceLangLabel,
     targetLangLabel,
     providerLabel,
@@ -32,8 +39,13 @@
     retryAttempt,
     translatedText,
     errorMessage,
+    showComposer,
+    hasDraftChanges,
     canPasteBack,
     windowPinned,
+    ondraftsourcechange,
+    ontranslatedraft,
+    onresetdraft,
     onTogglePinned,
     onretry,
     oncancel,
@@ -96,7 +108,7 @@
         <span>{windowPinned ? 'Pinned' : 'Pin'}</span>
       </button>
 
-      {#if sourceText && !isBusy}
+      {#if sourceText && !isBusy && !showComposer}
         <button
           class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-accent"
           onclick={() => onretry?.()}
@@ -163,7 +175,7 @@
 
   <div class="flex min-h-0 flex-1 items-stretch px-5 py-5" data-tauri-drag-region>
     <div class="flex w-full min-h-0 flex-col">
-      {#if sourceText}
+      {#if sourceText || showComposer}
         <div class="mb-4 space-y-2">
           <div class="flex flex-wrap gap-2">
             <span class="rounded-full border border-aura-border/80 bg-white/84 px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] text-aura-text-dim">
@@ -179,17 +191,66 @@
             {/if}
           </div>
 
-          <div class="rounded-[14px] border border-aura-border bg-white/68 px-4 py-3">
-            <p class="text-[10px] font-display font-semibold uppercase tracking-[0.18em] text-aura-text-muted">
-              Source
-            </p>
-            <p
-              class="mt-2 text-[13px] leading-6 text-aura-text-dim"
-              style="display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2;"
-            >
-              {sourceText}
-            </p>
-          </div>
+          {#if showComposer}
+            <div class="rounded-[14px] border border-aura-border bg-white/68 px-4 py-3">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p class="text-[10px] font-display font-semibold uppercase tracking-[0.18em] text-aura-text-muted">
+                    Draft
+                  </p>
+                  <p class="mt-1 text-[11px] leading-relaxed text-aura-text-muted">
+                    Edit the source here and press Ctrl+Enter to re-translate without leaving Aura.
+                  </p>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                  {#if hasDraftChanges}
+                    <button
+                      class="rounded-full border border-aura-border bg-white px-3 py-1.5 text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
+                      type="button"
+                      onclick={() => onresetdraft?.()}
+                    >
+                      Reset
+                    </button>
+                  {/if}
+
+                  <button
+                    class="rounded-full border border-aura-accent/30 bg-aura-accent-soft px-3 py-1.5 text-[11px] font-medium text-aura-accent transition-colors duration-150 hover:border-aura-accent hover:bg-aura-accent hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    type="button"
+                    onclick={() => ontranslatedraft?.()}
+                    disabled={!draftSourceText.trim() || isBusy}
+                  >
+                    Translate edits
+                  </button>
+                </div>
+              </div>
+
+              <textarea
+                value={draftSourceText}
+                oninput={(event) => ondraftsourcechange?.((event.currentTarget as HTMLTextAreaElement).value)}
+                onkeydown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                    event.preventDefault();
+                    ontranslatedraft?.();
+                  }
+                }}
+                placeholder="Type or revise source text here."
+                class="mt-3 min-h-[104px] w-full resize-none rounded-[12px] border border-aura-border bg-white px-3 py-3 text-[13px] leading-6 text-aura-text outline-none transition-colors duration-150 placeholder:text-aura-text-muted focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
+              ></textarea>
+            </div>
+          {:else}
+            <div class="rounded-[14px] border border-aura-border bg-white/68 px-4 py-3">
+              <p class="text-[10px] font-display font-semibold uppercase tracking-[0.18em] text-aura-text-muted">
+                Source
+              </p>
+              <p
+                class="mt-2 text-[13px] leading-6 text-aura-text-dim"
+                style="display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2;"
+              >
+                {sourceText}
+              </p>
+            </div>
+          {/if}
         </div>
       {/if}
 
@@ -199,7 +260,9 @@
           data-tauri-drag-region
         >
           <p class="max-w-[250px] text-sm leading-relaxed text-aura-text-dim" data-tauri-drag-region>
-            Copy text to translate. Use the hotkey to recall the last result anytime.
+            {showComposer
+              ? 'Type or paste source text into the draft area, then press Ctrl+Enter to translate.'
+              : 'Copy text to translate. Use the hotkey to recall the last result anytime.'}
           </p>
         </div>
       {:else if viewState === 'loading'}

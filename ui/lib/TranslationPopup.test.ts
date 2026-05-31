@@ -7,6 +7,7 @@ describe('TranslationPopup', () => {
     render(TranslationPopup, {
       viewState: 'idle',
       sourceText: '',
+      draftSourceText: '',
       sourceLangLabel: '',
       targetLangLabel: '',
       providerLabel: '',
@@ -14,8 +15,13 @@ describe('TranslationPopup', () => {
       retryAttempt: null,
       translatedText: '',
       errorMessage: '',
+      showComposer: false,
+      hasDraftChanges: false,
       canPasteBack: false,
       windowPinned: false,
+      ondraftsourcechange: vi.fn(),
+      ontranslatedraft: vi.fn(),
+      onresetdraft: vi.fn(),
       onTogglePinned: vi.fn(),
       onretry: vi.fn(),
       oncancel: vi.fn(),
@@ -33,6 +39,7 @@ describe('TranslationPopup', () => {
     render(TranslationPopup, {
       viewState: 'result',
       sourceText: 'Hello world',
+      draftSourceText: 'Hello world',
       sourceLangLabel: 'English',
       targetLangLabel: 'Chinese',
       providerLabel: 'DeepSeek',
@@ -40,8 +47,13 @@ describe('TranslationPopup', () => {
       retryAttempt: null,
       translatedText: 'Hello world translated',
       errorMessage: '',
+      showComposer: false,
+      hasDraftChanges: false,
       canPasteBack: true,
       windowPinned: false,
+      ondraftsourcechange: vi.fn(),
+      ontranslatedraft: vi.fn(),
+      onresetdraft: vi.fn(),
       onTogglePinned,
       onretry: vi.fn(),
       oncancel: vi.fn(),
@@ -63,6 +75,7 @@ describe('TranslationPopup', () => {
     render(TranslationPopup, {
       viewState: 'error',
       sourceText: 'Retry this translation',
+      draftSourceText: 'Retry this translation',
       sourceLangLabel: 'English',
       targetLangLabel: 'Chinese',
       providerLabel: 'OpenRouter',
@@ -70,8 +83,13 @@ describe('TranslationPopup', () => {
       retryAttempt: 2,
       translatedText: '',
       errorMessage: 'Translation failed.',
+      showComposer: false,
+      hasDraftChanges: false,
       canPasteBack: false,
       windowPinned: false,
+      ondraftsourcechange: vi.fn(),
+      ontranslatedraft: vi.fn(),
+      onresetdraft: vi.fn(),
       onTogglePinned: vi.fn(),
       onretry,
       oncancel: vi.fn(),
@@ -94,6 +112,7 @@ describe('TranslationPopup', () => {
     render(TranslationPopup, {
       viewState: 'result',
       sourceText: 'Paste this back',
+      draftSourceText: 'Paste this back',
       sourceLangLabel: 'English',
       targetLangLabel: 'Chinese',
       providerLabel: 'DeepSeek',
@@ -101,8 +120,13 @@ describe('TranslationPopup', () => {
       retryAttempt: null,
       translatedText: '把这个贴回去',
       errorMessage: '',
+      showComposer: false,
+      hasDraftChanges: false,
       canPasteBack: true,
       windowPinned: false,
+      ondraftsourcechange: vi.fn(),
+      ontranslatedraft: vi.fn(),
+      onresetdraft: vi.fn(),
       onTogglePinned: vi.fn(),
       onretry: vi.fn(),
       oncancel: vi.fn(),
@@ -113,5 +137,48 @@ describe('TranslationPopup', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /paste translation back/i }));
     expect(onpasteback).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a pinned draft composer with translate and reset actions', async () => {
+    const ondraftsourcechange = vi.fn();
+    const ontranslatedraft = vi.fn();
+    const onresetdraft = vi.fn();
+
+    render(TranslationPopup, {
+      viewState: 'result',
+      sourceText: 'Original text',
+      draftSourceText: 'Edited text',
+      sourceLangLabel: 'English',
+      targetLangLabel: 'Chinese',
+      providerLabel: 'DeepSeek',
+      modelLabel: 'deepseek-chat',
+      retryAttempt: null,
+      translatedText: '编辑后的翻译',
+      errorMessage: '',
+      showComposer: true,
+      hasDraftChanges: true,
+      canPasteBack: false,
+      windowPinned: true,
+      ondraftsourcechange,
+      ontranslatedraft,
+      onresetdraft,
+      onTogglePinned: vi.fn(),
+      onretry: vi.fn(),
+      oncancel: vi.fn(),
+      ondismiss: vi.fn(),
+      oncopy: vi.fn(),
+      onpasteback: vi.fn(),
+    });
+
+    await fireEvent.input(screen.getByPlaceholderText(/type or revise source text here/i), {
+      target: { value: 'Edited again' },
+    });
+    expect(ondraftsourcechange).toHaveBeenCalledWith('Edited again');
+
+    await fireEvent.click(screen.getByRole('button', { name: /translate edits/i }));
+    expect(ontranslatedraft).toHaveBeenCalledTimes(1);
+
+    await fireEvent.click(screen.getByRole('button', { name: /reset/i }));
+    expect(onresetdraft).toHaveBeenCalledTimes(1);
   });
 });

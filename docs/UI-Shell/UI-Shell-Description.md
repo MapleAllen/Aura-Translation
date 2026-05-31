@@ -33,6 +33,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - The window auto-sizes to loading, streaming, result, and error states while unpinned.
 - When unpinned, the backend repositions the bubble above the cursor and clamps it to the current monitor work area.
 - When pinned, the bubble stops auto-hiding on blur and persists its dragged size and position.
+- When pinned, the source preview becomes a lightweight draft composer so the user can edit source text in place and re-translate with `Ctrl+Enter`.
 - On Windows, the translation bubble can paste the latest translated text back into the original source app when Aura captured that source window at trigger time.
 
 ### Settings window behavior
@@ -60,7 +61,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 
 - `ui/lib/TranslationPopup.svelte`
   - renders the minimal floating translation bubble
-  - exposes pin, retry, paste-back, copy, cancel, and close controls
+  - exposes pin, retry, paste-back, copy, cancel, close, and pinned-mode draft editing controls
 
 - `ui/lib/SettingsPanel.svelte`
   - renders the dedicated settings form

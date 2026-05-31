@@ -10,6 +10,7 @@ A lightweight cross-platform desktop translator that runs as a tray daemon. Trig
 - **Bidirectional language pairs**: 11 languages with one-click swap.
 - **Floating translation bubble**: Minimal translator appears near the cursor and auto-sizes to the translated text.
 - **Pinned comparison mode**: Pin the bubble to keep it visible, draggable, and position-persistent.
+- **Pinned draft composer**: In pinned mode, revise the source text inline and press `Ctrl+Enter` to re-translate without leaving Aura.
 - **Separate settings tool window**: Provider, language pair, hotkey, Aura mode, and pin behavior live in a dedicated movable window.
 - **Named translation profiles**: Save multiple provider and language setups, then switch them from Settings or the tray menu.
 - **Paste back to the source app**: On Windows, send the latest translated text back to the original app and restore the previous text clipboard afterward.
@@ -87,7 +88,7 @@ npm run tauri dev
 3. If Aura mode is disabled, press your configured hotkey (default `CmdOrCtrl+T`) to translate the current clipboard text.
 4. Use the paste-back action in the translation bubble when you want Aura to return the translated text to the original Windows app.
 5. Press the hotkey again to recall or hide the last translation bubble, or left-click the tray icon to reopen the latest result when Aura is in the background.
-6. Pin the bubble to keep it visible while you read other pages.
+6. Pin the bubble to keep it visible while you read other pages, or to revise the source draft inline and re-translate with `Ctrl+Enter`.
 
 ## Build for Production
 

@@ -63,6 +63,7 @@
   let lastRequestConfig = $state<AppConfig | null>(null);
   let pasteBackStatus = $state<PasteBackStatus>({ supported: false, available: false });
   let retryAttempt = $state<number | null>(null);
+  let draftSourceText = $state('');
 
   function pushNotification(notification: AppNotification) {
     notifications = [notification, ...notifications.filter((item) => item.scope !== notification.scope)]
@@ -155,8 +156,13 @@
     clearLoadingTimeout();
   }
 
-  async function startTranslation(requestConfig: AppConfig | null = lastRequestConfig) {
-    if (!requestConfig || !translatedTextTriggerText.trim()) {
+  async function startTranslation(
+    requestConfig: AppConfig | null = lastRequestConfig ?? config,
+    textOverride?: string,
+  ) {
+    const requestText = (textOverride ?? draftSourceText ?? translatedTextTriggerText).trim();
+
+    if (!requestConfig || !requestText) {
       showTranslationFailure('No translation request is available to retry yet.');
       return;
     }
@@ -169,6 +175,8 @@
     lastRequestConfig = cloneAppConfig(requestConfig);
     currentRequestId += 1;
     const requestId = currentRequestId;
+    translatedTextTriggerText = requestText;
+    draftSourceText = requestText;
     translatedText = '';
     errorMessage = '';
     retryAttempt = null;
@@ -179,7 +187,7 @@
 
     try {
       await invoke('translate_text', {
-        text: translatedTextTriggerText,
+        text: requestText,
         sourceLang: requestConfig.source_lang,
         targetLang: requestConfig.target_lang,
         apiKey: requestConfig.api_key,
@@ -206,12 +214,16 @@
   }
 
   async function retryTranslation() {
-    if (!translatedTextTriggerText.trim() || !lastRequestConfig) return;
+    if (!draftSourceText.trim()) return;
 
     await cancelCurrentTranslation();
     currentRequestId += 1;
     showBubble();
-    await startTranslation(cloneAppConfig(lastRequestConfig));
+    await startTranslation(cloneAppConfig(lastRequestConfig ?? config), draftSourceText);
+  }
+
+  function resetDraftSource() {
+    draftSourceText = translatedTextTriggerText;
   }
 
   async function handlePinnedChange(nextPinned: boolean) {
@@ -377,6 +389,7 @@
           currentRequestId += 1;
 
           translatedTextTriggerText = text;
+          draftSourceText = text;
           showBubble();
           await refreshPasteBackStatus();
           const loadedConfig = await loadConfig();
@@ -525,6 +538,7 @@
       <TranslationPopup
         viewState={appState}
         sourceText={translatedTextTriggerText}
+        draftSourceText={draftSourceText}
         sourceLangLabel={lastRequestConfig ? languageLabel(lastRequestConfig.source_lang) : ''}
         targetLangLabel={lastRequestConfig ? languageLabel(lastRequestConfig.target_lang) : ''}
         providerLabel={lastRequestConfig ? providerLabel(lastRequestConfig.provider) : ''}
@@ -532,8 +546,15 @@
         {retryAttempt}
         {translatedText}
         {errorMessage}
+        showComposer={config.window_pinned}
+        hasDraftChanges={draftSourceText.trim() !== translatedTextTriggerText.trim()}
         canPasteBack={pasteBackStatus.supported && pasteBackStatus.available}
         windowPinned={config.window_pinned}
+        ondraftsourcechange={(value) => {
+          draftSourceText = value;
+        }}
+        ontranslatedraft={retryTranslation}
+        onresetdraft={resetDraftSource}
         onTogglePinned={handlePinnedChange}
         onretry={retryTranslation}
         oncancel={handleCancel}
