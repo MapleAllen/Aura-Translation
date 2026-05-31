@@ -127,20 +127,21 @@ Remaining features:
 
 ---
 
-## Phase 7: Secret Storage - NOT STARTED
+## Phase 7: Secret Storage - DONE
 
-Status: **Not Started**
+Status: **Done**
 
 Goals:
 
 - Move provider credentials out of plaintext config when practical.
 
-Remaining features:
+Completed work:
 
-- Evaluate OS keychain integration and its binary-size cost.
-- Split API-key storage from `AppConfig`.
-- Add dedicated backend commands for saving and retrieving secrets.
-- Preserve an explicit fallback strategy when keychain APIs are unavailable.
+- Added `api_key_storage` to `AppConfig` and stopped persisting API keys into `config.json` while system storage mode is active.
+- Added a dedicated `secrets.rs` layer for provider-scoped secret load/save/delete operations.
+- Migrated legacy plaintext API keys into the system credential store on first startup when supported.
+- Added `load_provider_api_key` so Settings can restore a provider-specific key without reusing the previous provider's value.
+- Preserved an explicit plaintext fallback mode for unsupported builds or deliberate local fallback.
 
 ---
 

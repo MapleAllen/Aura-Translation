@@ -58,8 +58,9 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 - Lets the frontend decide whether blur should dismiss the shell based on settings visibility and pin state
 
 **Config persistence**
-- `AppConfig` fields: `api_key`, `model`, `source_lang`, `target_lang`, `hotkey`, `window_pinned`, `provider`, `api_base_url`, `available_models`
+- `AppConfig` fields: `api_key`, `api_key_storage`, `model`, `source_lang`, `target_lang`, `hotkey`, `window_pinned`, `provider`, `api_base_url`, `available_models`
 - Config path: `{config_dir}/aura-translation/config.json`
+- Provider API keys default to the system credential store on supported desktop builds; `config.json` keeps an explicit plaintext fallback mode only when the user selects it
 - Defaults are provider-aware through custom `Deserialize`
 - Saves are atomic from the filesystem perspective: write to `config.json.tmp`, then rename into place
 
@@ -76,6 +77,7 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 **Exposed Tauri commands**
 - `get_config() -> AppConfig`
 - `get_provider_defaults(provider) -> ProviderDefaults`
+- `load_provider_api_key(provider) -> Result<String, String>`
 - `mark_ui_ready()`
 - `save_config(config: AppConfig) -> Result<(), String>`
 - `translate_text(...)`
@@ -93,13 +95,18 @@ Single Tauri application bootstrap in `lib.rs` with companion modules for config
   - `wait_for_ui_ready()`: polls `UiReadyState` until the frontend reports readiness or timeout expires
   - `prepare_main_window()`: applies pinning preferences and positions the window
   - `show_translation_window()` / `show_settings_window()`: show the window and emit frontend events after readiness
-  - `save_config()`: hotkey-safe config persistence and live pin-state sync
+  - `save_config()`: hotkey-safe config persistence, secret storage coordination, and live pin-state sync
 
 - `config.rs`
   - `Provider`: `DeepSeek | OpenRouter | Ollama`
   - `Provider::default_base_url()` / `default_models()`
   - `AppConfig`: provider-aware config model with custom deserialization defaults
   - `AppConfig::load()` / `save()`
+
+- `secrets.rs`
+  - system credential store integration for supported desktop builds
+  - one-time migration of legacy plaintext keys
+  - provider-scoped secret load/save/delete helpers used by config persistence
 
 - `hotkey.rs`
   - `parse_hotkey()`: parses Electron-style accelerator strings requiring at least one modifier plus an alphanumeric key

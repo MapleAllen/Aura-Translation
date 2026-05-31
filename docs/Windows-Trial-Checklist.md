@@ -43,19 +43,20 @@ Complete these checks on the installed build:
 1. Confirm the tray icon appears after launch.
 2. Left-click the tray icon and confirm it recalls **Settings** when setup is incomplete, or the latest translation bubble when Aura is already configured.
 3. Right-click the tray icon and open **Settings**.
-4. Switch to `DeepSeek` or `OpenRouter` and confirm the plaintext API key warning is visible.
-5. Enter an invalid API key and confirm the translation failure is visible in the popup and notification layer.
-6. Enter a valid API key, copy source text, and trigger the hotkey.
-7. Confirm the translation streams and finishes successfully.
-8. Hide the translation bubble, trigger another translation, and confirm Windows shows a native background notification when the hidden request finishes, fails, or retries.
-9. Change the hotkey to an in-use shortcut and confirm the conflict appears both in the notification layer and inline in Settings.
-10. Try capturing a bare single-key hotkey such as `T` and confirm the Settings UI rejects it before save.
-11. Restore a valid hotkey and confirm the warning clears after save.
+4. Switch to `DeepSeek` or `OpenRouter` and confirm Settings shows the system credential storage note by default.
+5. Change API key storage to **Plaintext config fallback** and confirm the warning becomes visible.
+6. Enter an invalid API key and confirm the translation failure is visible in the popup and notification layer.
+7. Enter a valid API key, copy source text, and trigger the hotkey.
+8. Confirm the translation streams and finishes successfully.
+9. Hide the translation bubble, trigger another translation, and confirm Windows shows a native background notification when the hidden request finishes, fails, or retries.
+10. Change the hotkey to an in-use shortcut and confirm the conflict appears both in the notification layer and inline in Settings.
+11. Try capturing a bare single-key hotkey such as `T` and confirm the Settings UI rejects it before save.
+12. Restore a valid hotkey and confirm the warning clears after save.
 
 ## Notes
 
 - This trial gate is Windows-only.
 - OpenRouter remains supported but is not a blocking smoke gate for this release.
-- API keys are intentionally still stored in plaintext `config.json` for this trial; that is why the warning must remain visible in Settings.
+- API keys now default to the Windows credential store; plaintext `config.json` storage remains available only as an explicit fallback mode in Settings.
 - Hotkeys for this release must include at least one modifier key plus a letter or digit.
 - Release builds rely on the Rust release profile in `src-tauri/Cargo.toml` (`lto`, `strip`, `opt-level = "s"`) to stay within the installer-size target.

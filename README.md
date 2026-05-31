@@ -74,7 +74,7 @@ npm run tauri dev
 2. Choose a provider: DeepSeek, OpenRouter, or local Ollama.
 3. Enter an API key for DeepSeek or OpenRouter. Ollama does not require one.
 4. Pick your default language pair, hotkey, and whether Aura mode should auto-translate copied text.
-5. Save the settings. Preferences are stored in `{OS config dir}/aura-translation/config.json`.
+5. Save the settings. Aura stores preferences in `{OS config dir}/aura-translation/config.json`, and keeps API keys in the system credential store by default with an explicit plaintext fallback if you choose it.
 
 ### Usage
 

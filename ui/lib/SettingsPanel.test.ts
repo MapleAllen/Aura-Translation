@@ -10,6 +10,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 const baseConfig = {
   api_key: 'sk-test',
+  api_key_storage: 'system',
   model: 'deepseek-chat',
   source_lang: 'auto',
   target_lang: 'Chinese',
@@ -75,21 +76,23 @@ describe('SettingsPanel', () => {
             ok: true,
             message: `Provider test succeeded for ${payload?.config?.provider ?? 'deepseek'}.`,
           });
+        case 'load_provider_api_key':
+          return Promise.resolve('sk-loaded');
         default:
           return Promise.resolve(undefined);
       }
     });
   });
 
-  it('shows plaintext API key warning and inline hotkey conflict for authenticated providers', async () => {
+  it('shows secure API key storage note and inline hotkey conflict for authenticated providers', async () => {
     render(SettingsPanel, {
       visible: true,
       onclose: () => {},
       hotkeyConflictMessage: 'Could not register "Alt+Shift+T": already in use.',
     });
 
-    expect(await screen.findByTestId('plaintext-api-key-warning')).toHaveTextContent(
-      'stored in plaintext',
+    expect(await screen.findByTestId('system-api-key-storage-note')).toHaveTextContent(
+      'OS credential store',
     );
     expect(screen.getByTestId('runtime-status-card')).toHaveTextContent('Aura is ready to translate');
     expect(screen.getByTestId('hotkey-conflict-inline')).toHaveTextContent(
@@ -99,13 +102,14 @@ describe('SettingsPanel', () => {
     expect(invokeMock).toHaveBeenCalledWith('get_runtime_status');
   });
 
-  it('hides plaintext API key warning for ollama', async () => {
+  it('hides API key storage messaging for ollama', async () => {
     invokeMock.mockImplementation((command: string, payload?: { provider?: string }) => {
       switch (command) {
         case 'get_config':
           return Promise.resolve({
             ...baseConfig,
             api_key: '',
+            api_key_storage: 'system',
             model: 'qwen2.5',
             provider: 'ollama',
             api_base_url: 'http://localhost:11434',
@@ -140,7 +144,32 @@ describe('SettingsPanel', () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId('plaintext-api-key-warning')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('system-api-key-storage-note')).not.toBeInTheDocument();
     });
+  });
+
+  it('switches to plaintext fallback storage and saves the selection', async () => {
+    render(SettingsPanel, {
+      visible: true,
+      onclose: () => {},
+      hotkeyConflictMessage: '',
+    });
+
+    const storageSelect = await screen.findByLabelText(/api key storage/i);
+    await fireEvent.change(storageSelect, { target: { value: 'plaintext_fallback' } });
+
+    expect(screen.getByTestId('plaintext-api-key-warning')).toHaveTextContent(
+      'written to the local Aura config',
+    );
+
+    await fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      'save_config',
+      expect.objectContaining({
+        config: expect.objectContaining({ api_key_storage: 'plaintext_fallback' }),
+      }),
+    );
   });
 
   it('rejects bare single-key hotkeys during capture', async () => {
@@ -299,5 +328,23 @@ describe('SettingsPanel', () => {
     expect(await screen.findByTestId('provider-probe-message')).toHaveTextContent(
       'Provider test succeeded',
     );
+  });
+
+  it('loads the stored provider key when switching providers', async () => {
+    render(SettingsPanel, {
+      visible: true,
+      onclose: () => {},
+      hotkeyConflictMessage: '',
+    });
+
+    const providerSelect = await screen.findByDisplayValue('DeepSeek (api.deepseek.com)');
+    await fireEvent.change(providerSelect, { target: { value: 'openrouter' } });
+
+    expect(invokeMock).toHaveBeenCalledWith('load_provider_api_key', {
+      provider: 'openrouter',
+    });
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('sk-loaded')).toBeInTheDocument();
+    });
   });
 });

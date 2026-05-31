@@ -6,9 +6,12 @@
   import { invoke } from '@tauri-apps/api/core';
   import LanguageSelector from './LanguageSelector.svelte';
   import SetupStatusCard from './SetupStatusCard.svelte';
-  import type { AppConfig, Provider } from './appConfig';
+  import type { ApiKeyStorage, AppConfig, Provider } from './appConfig';
   import { cloneAppConfig, createDefaultAppConfig } from './appConfig';
-  import { shouldShowPlaintextApiKeyWarning } from './notifications';
+  import {
+    shouldShowPlaintextApiKeyWarning,
+    usesSystemCredentialStorage,
+  } from './notifications';
   import type { ProviderProbeResult, RuntimeStatus } from './runtimeStatus';
 
   const PROVIDER_OPTIONS: { value: Provider; label: string }[] = [
@@ -64,6 +67,9 @@
         invoke<RuntimeStatus>('get_runtime_status'),
       ]);
       config = cloneAppConfig(loaded);
+      if (config.api_key_storage === 'legacy_plaintext') {
+        config.api_key_storage = 'plaintext_fallback';
+      }
       runtimeStatus = nextRuntimeStatus;
     } catch (e) {
       panelErrorMessage = 'Failed to load settings from the local Aura config.';
@@ -77,11 +83,17 @@
     saveErrorMessage = '';
     probeResult = null;
     try {
-      const defaults = await invoke<ProviderDefaults>('get_provider_defaults', {
-        provider: newProvider,
-      });
+      const [defaults, storedApiKey] = await Promise.all([
+        invoke<ProviderDefaults>('get_provider_defaults', {
+          provider: newProvider,
+        }),
+        newProvider === 'ollama'
+          ? Promise.resolve('')
+          : invoke<string>('load_provider_api_key', { provider: newProvider }),
+      ]);
       config.api_base_url = defaults.base_url;
       config.available_models = defaults.models;
+      config.api_key = storedApiKey;
       if (!defaults.models.includes(config.model)) {
         config.model = defaults.models[0];
       }
@@ -375,25 +387,57 @@
         </select>
       </section>
 
-      {#if shouldShowPlaintextApiKeyWarning(config.provider)}
-        <div
-          class="rounded-lg border border-[#e6c683] bg-[#fff7e4] px-4 py-3"
-          data-testid="plaintext-api-key-warning"
-        >
-          <p class="text-xs leading-relaxed text-[#8a6226]">
-            API keys are stored in plaintext in the local Aura config on this machine. Use a trial or low-permission key when possible.
-          </p>
-        </div>
-      {/if}
-
       {#if config.provider !== 'ollama'}
+        <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+          <div>
+            <label class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted" for="api-key-storage">
+              API Key Storage
+            </label>
+            <p class="mt-1 text-xs text-aura-text-dim">
+              Choose whether Aura stores the selected provider key in the system credential store or keeps an explicit plaintext fallback in `config.json`.
+            </p>
+          </div>
+          <select
+            id="api-key-storage"
+            bind:value={config.api_key_storage}
+            class="w-full cursor-pointer rounded-lg border border-aura-border bg-white px-3 py-2.5 text-sm text-aura-text outline-none transition-all duration-200 hover:border-aura-border-accent focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
+          >
+            <option value="system">System credential store (recommended)</option>
+            <option value="plaintext_fallback">Plaintext config fallback</option>
+          </select>
+        </section>
+
+        {#if shouldShowPlaintextApiKeyWarning(config.provider, config.api_key_storage)}
+          <div
+            class="rounded-lg border border-[#e6c683] bg-[#fff7e4] px-4 py-3"
+            data-testid="plaintext-api-key-warning"
+          >
+            <p class="text-xs leading-relaxed text-[#8a6226]">
+              API keys in plaintext fallback mode are written to the local Aura config on this machine. Use a trial or low-permission key when possible.
+            </p>
+          </div>
+        {:else if usesSystemCredentialStorage(config.api_key_storage)}
+          <div
+            class="rounded-lg border border-aura-border bg-aura-surface-soft px-4 py-3"
+            data-testid="system-api-key-storage-note"
+          >
+            <p class="text-xs leading-relaxed text-aura-text-dim">
+              API keys in system mode are stored in the OS credential store instead of `config.json`.
+            </p>
+          </div>
+        {/if}
+
         <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
           <div>
             <label class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted" for="api-key">
               API Key
             </label>
             <p class="mt-1 text-xs text-aura-text-dim">
-              Stored locally for the selected provider.
+              {#if usesSystemCredentialStorage(config.api_key_storage)}
+                Stored in the system credential store for the selected provider.
+              {:else}
+                Stored in the local Aura config for the selected provider.
+              {/if}
             </p>
           </div>
           <div class="relative">

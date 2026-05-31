@@ -2,6 +2,7 @@ mod aura_guard;
 mod config;
 mod hotkey;
 mod readiness;
+mod secrets;
 mod translate;
 
 use config::{AppConfig, Provider, WindowPlacement};
@@ -109,6 +110,11 @@ fn get_provider_defaults(provider: Provider) -> ProviderDefaults {
 }
 
 #[tauri::command]
+fn load_provider_api_key(provider: Provider) -> Result<String, String> {
+    secrets::load_provider_api_key(&provider)
+}
+
+#[tauri::command]
 fn get_runtime_status(state: State<'_, ConfigState>) -> readiness::RuntimeStatus {
     readiness::build_runtime_status(&state.read().unwrap())
 }
@@ -116,9 +122,10 @@ fn get_runtime_status(state: State<'_, ConfigState>) -> readiness::RuntimeStatus
 #[tauri::command]
 async fn probe_provider(
     client: State<'_, reqwest::Client>,
-    config: AppConfig,
+    mut config: AppConfig,
 ) -> Result<readiness::ProviderProbeResult, String> {
     let client = client.inner().clone();
+    secrets::hydrate_api_key(&mut config)?;
     Ok(readiness::probe_provider(&client, &config).await)
 }
 
@@ -198,16 +205,17 @@ fn save_config(
 ) -> Result<(), String> {
     let old_config = state.read().unwrap().clone();
     let old_hotkey = old_config.hotkey.clone();
+    let mut next_config = config;
 
-    if old_hotkey == config.hotkey {
-        persist_config_and_sync(&app, &state, &config)?;
+    if old_hotkey == next_config.hotkey {
+        persist_config_and_sync(&app, &state, &old_config, &mut next_config)?;
         return Ok(());
     }
 
-    let new_shortcut = match hotkey::parse_hotkey(&config.hotkey) {
+    let new_shortcut = match hotkey::parse_hotkey(&next_config.hotkey) {
         Ok(shortcut) => shortcut,
         Err(parse_err) => {
-            emit_hotkey_conflict(&app, &config.hotkey, parse_err.clone());
+            emit_hotkey_conflict(&app, &next_config.hotkey, parse_err.clone());
             return Err(format!("Hotkey save rejected: {}", parse_err));
         }
     };
@@ -218,7 +226,7 @@ fn save_config(
             "hotkey-unregister-failed",
             format!(
                 "Failed to unregister the previous hotkey before saving '{}': {}",
-                config.hotkey, e
+                next_config.hotkey, e
             ),
             true,
         );
@@ -226,18 +234,18 @@ fn save_config(
     }
 
     if let Err(e) = app.global_shortcut().register(new_shortcut) {
-        emit_hotkey_conflict(&app, &config.hotkey, e.to_string());
+        emit_hotkey_conflict(&app, &next_config.hotkey, e.to_string());
         restore_previous_hotkey(&app, &old_hotkey);
         return Err(format!("Hotkey save rejected: {}", e));
     }
 
-    if let Err(e) = config.save() {
+    if let Err(e) = persist_config_and_sync(&app, &state, &old_config, &mut next_config) {
         emit_daemon_error(
             &app,
-            "config-save-failed",
+            "config-or-secret-save-failed",
             format!(
-                "Failed to persist config after registering hotkey '{}': {}",
-                config.hotkey, e
+                "Failed to persist config or API key state after registering hotkey '{}': {}",
+                next_config.hotkey, e
             ),
             false,
         );
@@ -248,7 +256,7 @@ fn save_config(
                 "hotkey-unregister-after-save-failure",
                 format!(
                     "Failed to unregister the new hotkey '{}' after a config save failure: {}",
-                    config.hotkey, unregister_err
+                    next_config.hotkey, unregister_err
                 ),
                 false,
             );
@@ -258,10 +266,7 @@ fn save_config(
         return Err(format!("Failed to save config: {}", e));
     }
 
-    *state.write().unwrap() = config.clone();
-    sync_existing_windows(&app, &config);
-    emit_config_updated(&app, &config);
-    emit_hotkey_registered(&app, &config.hotkey);
+    emit_hotkey_registered(&app, &next_config.hotkey);
     Ok(())
 }
 
@@ -274,8 +279,10 @@ fn save_config(_app: AppHandle, config: AppConfig) -> Result<(), String> {
 fn persist_config_and_sync(
     app: &AppHandle,
     state: &State<'_, ConfigState>,
-    config: &AppConfig,
+    old_config: &AppConfig,
+    config: &mut AppConfig,
 ) -> Result<(), String> {
+    secrets::persist_api_key(config, old_config)?;
     config.save()?;
     *state.write().unwrap() = config.clone();
     sync_existing_windows(app, config);
@@ -285,6 +292,25 @@ fn persist_config_and_sync(
 
 fn current_config(app: &AppHandle) -> AppConfig {
     app.state::<ConfigState>().read().unwrap().clone()
+}
+
+fn initialize_config_secrets(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<ConfigState>();
+    let mut config = state.read().unwrap().clone();
+    let migrated = secrets::migrate_legacy_plaintext_key(&mut config)?;
+    secrets::hydrate_api_key(&mut config)?;
+
+    if migrated {
+        config.save()?;
+    }
+
+    *state.write().unwrap() = config.clone();
+
+    if migrated {
+        emit_config_updated(app, &config);
+    }
+
+    Ok(())
 }
 
 fn emit_config_updated(app: &AppHandle, config: &AppConfig) {
@@ -1104,6 +1130,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             get_provider_defaults,
+            load_provider_api_key,
             get_runtime_status,
             probe_provider,
             mark_ui_ready,
@@ -1115,6 +1142,10 @@ pub fn run() {
             translate::cancel_translate
         ])
         .setup(|app| {
+            if let Err(err) = initialize_config_secrets(app.app_handle()) {
+                emit_daemon_error(app.app_handle(), "secret-storage-init-failed", err, true);
+            }
+
             if let Err(err) = build_tray(app.app_handle()) {
                 emit_daemon_error(app.app_handle(), "tray-build-failed", err, false);
             }

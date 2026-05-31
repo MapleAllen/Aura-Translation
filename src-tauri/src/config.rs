@@ -40,11 +40,37 @@ impl Provider {
             ],
         }
     }
+
+    pub fn requires_api_key(&self) -> bool {
+        !matches!(self, Provider::Ollama)
+    }
+
+    pub fn secret_account_name(&self) -> &'static str {
+        match self {
+            Provider::DeepSeek => "provider:deepseek",
+            Provider::OpenRouter => "provider:openrouter",
+            Provider::Ollama => "provider:ollama",
+        }
+    }
 }
 
 impl Default for Provider {
     fn default() -> Self {
         Provider::DeepSeek
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ApiKeyStorage {
+    System,
+    PlaintextFallback,
+    LegacyPlaintext,
+}
+
+impl Default for ApiKeyStorage {
+    fn default() -> Self {
+        ApiKeyStorage::System
     }
 }
 
@@ -57,10 +83,13 @@ pub struct WindowPlacement {
     pub monitor: Option<String>,
 }
 
-/// Application configuration stored as plaintext JSON.
+/// Application configuration stored as JSON preferences.
+/// Provider API keys use the system credential store by default and only fall back
+/// to plaintext JSON when the user explicitly selects that storage mode.
 #[derive(Debug, Clone, Serialize)]
 pub struct AppConfig {
     pub api_key: String,
+    pub api_key_storage: ApiKeyStorage,
     pub model: String,
     pub source_lang: String,
     pub target_lang: String,
@@ -95,6 +124,7 @@ impl<'de> Deserialize<'de> for AppConfig {
         struct Helper {
             #[serde(default)]
             api_key: String,
+            api_key_storage: Option<ApiKeyStorage>,
             #[serde(default)]
             model: String,
             #[serde(default = "default_source_lang")]
@@ -146,9 +176,17 @@ impl<'de> Deserialize<'de> for AppConfig {
         } else {
             helper.model
         };
+        let api_key_storage = helper.api_key_storage.unwrap_or_else(|| {
+            if helper.api_key.trim().is_empty() {
+                ApiKeyStorage::System
+            } else {
+                ApiKeyStorage::LegacyPlaintext
+            }
+        });
 
         Ok(AppConfig {
             api_key: helper.api_key,
+            api_key_storage,
             model,
             source_lang: helper.source_lang,
             target_lang: helper.target_lang,
@@ -172,6 +210,7 @@ impl Default for AppConfig {
         let available_models = provider.default_models();
         Self {
             api_key: String::new(),
+            api_key_storage: ApiKeyStorage::System,
             model: "deepseek-chat".to_string(),
             source_lang: "auto".to_string(),
             target_lang: "Chinese".to_string(),
@@ -233,8 +272,51 @@ impl AppConfig {
 
     /// Save config to disk atomically via write-then-rename.
     pub fn save(&self) -> Result<(), String> {
+        #[derive(Serialize)]
+        struct PersistedConfig<'a> {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            api_key: Option<&'a str>,
+            api_key_storage: ApiKeyStorage,
+            model: &'a str,
+            source_lang: &'a str,
+            target_lang: &'a str,
+            hotkey: &'a str,
+            aura_mode_enabled: bool,
+            aura_guard_enabled: bool,
+            window_pinned: bool,
+            provider: &'a Provider,
+            api_base_url: &'a str,
+            available_models: &'a [String],
+            settings_window_placement: &'a Option<WindowPlacement>,
+            pinned_translation_placement: &'a Option<WindowPlacement>,
+        }
+
+        let persisted = PersistedConfig {
+            api_key: if matches!(
+                self.api_key_storage,
+                ApiKeyStorage::PlaintextFallback | ApiKeyStorage::LegacyPlaintext
+            ) {
+                Some(self.api_key.as_str())
+            } else {
+                None
+            },
+            api_key_storage: self.api_key_storage.clone(),
+            model: &self.model,
+            source_lang: &self.source_lang,
+            target_lang: &self.target_lang,
+            hotkey: &self.hotkey,
+            aura_mode_enabled: self.aura_mode_enabled,
+            aura_guard_enabled: self.aura_guard_enabled,
+            window_pinned: self.window_pinned,
+            provider: &self.provider,
+            api_base_url: &self.api_base_url,
+            available_models: &self.available_models,
+            settings_window_placement: &self.settings_window_placement,
+            pinned_translation_placement: &self.pinned_translation_placement,
+        };
+
         let path = Self::config_path();
-        let content = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+        let content = serde_json::to_string_pretty(&persisted).map_err(|e| e.to_string())?;
         let tmp_path = path.with_extension("json.tmp");
         fs::write(&tmp_path, content).map_err(|e| e.to_string())?;
         fs::rename(&tmp_path, &path).map_err(|e| e.to_string())?;
@@ -252,6 +334,7 @@ mod tests {
         assert_eq!(c.model, "deepseek-chat");
         assert_eq!(c.hotkey, "CmdOrCtrl+T");
         assert_eq!(c.api_base_url, "https://api.deepseek.com");
+        assert_eq!(c.api_key_storage, ApiKeyStorage::System);
         assert!(!c.aura_mode_enabled);
         assert!(c.aura_guard_enabled);
         assert!(!c.window_pinned);
@@ -271,6 +354,7 @@ mod tests {
         }"#;
         let config: AppConfig = serde_json::from_str(legacy_json).expect("should parse");
         assert_eq!(config.provider, Provider::DeepSeek);
+        assert_eq!(config.api_key_storage, ApiKeyStorage::LegacyPlaintext);
         assert_eq!(config.api_base_url, "https://api.deepseek.com");
         assert!(!config.aura_mode_enabled);
         assert!(config.aura_guard_enabled);
@@ -284,6 +368,7 @@ mod tests {
     fn full_config_round_trips() {
         let original = AppConfig {
             api_key: "sk-abc".to_string(),
+            api_key_storage: ApiKeyStorage::PlaintextFallback,
             model: "mistral".to_string(),
             source_lang: "English".to_string(),
             target_lang: "Japanese".to_string(),
@@ -312,6 +397,7 @@ mod tests {
         let json = serde_json::to_string(&original).unwrap();
         let restored: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.provider, Provider::Ollama);
+        assert_eq!(restored.api_key_storage, ApiKeyStorage::PlaintextFallback);
         assert!(restored.aura_mode_enabled);
         assert!(!restored.aura_guard_enabled);
         assert!(restored.window_pinned);
@@ -341,5 +427,71 @@ mod tests {
             Provider::Ollama.default_base_url(),
             "http://localhost:11434"
         );
+    }
+
+    #[test]
+    fn system_storage_save_omits_plaintext_api_key() {
+        let config = AppConfig {
+            api_key: "sk-test".to_string(),
+            api_key_storage: ApiKeyStorage::System,
+            ..AppConfig::default()
+        };
+
+        let json = serde_json::to_string(&config).expect("config should serialize for frontend");
+        assert!(json.contains("\"api_key\""));
+
+        #[derive(Serialize)]
+        struct Persisted<'a> {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            api_key: Option<&'a str>,
+            api_key_storage: ApiKeyStorage,
+        }
+
+        let persisted = Persisted {
+            api_key: if matches!(
+                config.api_key_storage,
+                ApiKeyStorage::PlaintextFallback | ApiKeyStorage::LegacyPlaintext
+            ) {
+                Some(config.api_key.as_str())
+            } else {
+                None
+            },
+            api_key_storage: config.api_key_storage.clone(),
+        };
+        let persisted_json =
+            serde_json::to_string(&persisted).expect("persisted config serializes");
+        assert!(!persisted_json.contains("sk-test"));
+    }
+
+    #[test]
+    fn plaintext_fallback_save_keeps_api_key() {
+        let config = AppConfig {
+            api_key: "sk-test".to_string(),
+            api_key_storage: ApiKeyStorage::PlaintextFallback,
+            ..AppConfig::default()
+        };
+
+        #[derive(Serialize)]
+        struct Persisted<'a> {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            api_key: Option<&'a str>,
+            api_key_storage: ApiKeyStorage,
+        }
+
+        let persisted = Persisted {
+            api_key: if matches!(
+                config.api_key_storage,
+                ApiKeyStorage::PlaintextFallback | ApiKeyStorage::LegacyPlaintext
+            ) {
+                Some(config.api_key.as_str())
+            } else {
+                None
+            },
+            api_key_storage: config.api_key_storage.clone(),
+        };
+        let persisted_json =
+            serde_json::to_string(&persisted).expect("persisted config serializes");
+        assert!(persisted_json.contains("sk-test"));
+        assert!(persisted_json.contains("plaintext_fallback"));
     }
 }

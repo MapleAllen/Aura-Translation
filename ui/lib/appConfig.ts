@@ -1,4 +1,5 @@
 export type Provider = 'deepseek' | 'openrouter' | 'ollama';
+export type ApiKeyStorage = 'system' | 'plaintext_fallback' | 'legacy_plaintext';
 
 export type WindowPlacement = {
   x: number;
@@ -10,6 +11,7 @@ export type WindowPlacement = {
 
 export type AppConfig = {
   api_key: string;
+  api_key_storage: ApiKeyStorage;
   model: string;
   source_lang: string;
   target_lang: string;
@@ -27,6 +29,7 @@ export type AppConfig = {
 export function createDefaultAppConfig(): AppConfig {
   return {
     api_key: '',
+    api_key_storage: 'system',
     model: 'deepseek-chat',
     source_lang: 'auto',
     target_lang: 'Chinese',

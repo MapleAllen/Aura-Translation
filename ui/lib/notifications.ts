@@ -25,6 +25,7 @@ export type AuraGuardBlockedPayload = {
 };
 
 type Provider = 'deepseek' | 'openrouter' | 'ollama';
+type ApiKeyStorage = 'system' | 'plaintext_fallback' | 'legacy_plaintext';
 
 let notificationCounter = 0;
 
@@ -119,6 +120,13 @@ export function formatTranslationError(input: unknown): string {
   return message;
 }
 
-export function shouldShowPlaintextApiKeyWarning(provider: Provider) {
-  return provider !== 'ollama';
+export function shouldShowPlaintextApiKeyWarning(
+  provider: Provider,
+  storage: ApiKeyStorage,
+) {
+  return provider !== 'ollama' && storage !== 'system';
+}
+
+export function usesSystemCredentialStorage(storage: ApiKeyStorage) {
+  return storage === 'system';
 }

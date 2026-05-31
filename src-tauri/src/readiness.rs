@@ -272,10 +272,12 @@ fn authorization_header(api_key: &str) -> Result<(HeaderName, HeaderValue), Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ApiKeyStorage;
 
     fn deepseek_config() -> AppConfig {
         AppConfig {
             api_key: "sk-test".to_string(),
+            api_key_storage: ApiKeyStorage::System,
             model: "deepseek-chat".to_string(),
             source_lang: "auto".to_string(),
             target_lang: "Chinese".to_string(),
