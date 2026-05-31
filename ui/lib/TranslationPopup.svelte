@@ -4,10 +4,17 @@
    */
   type Props = {
     viewState: 'idle' | 'loading' | 'streaming' | 'result' | 'error';
+    sourceText: string;
+    sourceLangLabel: string;
+    targetLangLabel: string;
+    providerLabel: string;
+    modelLabel: string;
+    retryAttempt: number | null;
     translatedText: string;
     errorMessage: string;
     windowPinned: boolean;
     onTogglePinned?: (windowPinned: boolean) => void;
+    onretry?: () => void;
     oncancel?: () => void;
     ondismiss?: () => void;
     oncopy?: () => void;
@@ -15,10 +22,17 @@
 
   let {
     viewState,
+    sourceText,
+    sourceLangLabel,
+    targetLangLabel,
+    providerLabel,
+    modelLabel,
+    retryAttempt,
     translatedText,
     errorMessage,
     windowPinned,
     onTogglePinned,
+    onretry,
     oncancel,
     ondismiss,
     oncopy,
@@ -50,6 +64,8 @@
     >
       {#if viewState === 'loading'}
         Connecting
+      {:else if retryAttempt !== null}
+        Retry {retryAttempt}
       {:else if viewState === 'streaming'}
         Streaming
       {:else if viewState === 'error'}
@@ -75,6 +91,19 @@
         <span class="h-2.5 w-2.5 rounded-full bg-current"></span>
         <span>{windowPinned ? 'Pinned' : 'Pin'}</span>
       </button>
+
+      {#if sourceText && !isBusy}
+        <button
+          class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-accent"
+          onclick={() => onretry?.()}
+          aria-label="Retry translation"
+          type="button"
+        >
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992V4.356m-.937 4.992A9 9 0 1 0 6.75 18.75" />
+          </svg>
+        </button>
+      {/if}
 
       {#if translatedText && !isBusy}
         <button
@@ -116,34 +145,66 @@
   </div>
 
   <div class="flex min-h-0 flex-1 items-stretch px-5 py-5" data-tauri-drag-region>
-    {#if viewState === 'idle'}
-      <div
-        class="flex min-h-[96px] w-full items-center justify-center rounded-[14px] border border-dashed border-aura-border bg-white/62 px-5 text-center"
-        data-tauri-drag-region
-      >
-        <p class="max-w-[250px] text-sm leading-relaxed text-aura-text-dim" data-tauri-drag-region>
-          Copy text to translate. Use the hotkey to recall the last result anytime.
-        </p>
-      </div>
-    {:else if viewState === 'loading'}
-      <div class="flex min-h-[96px] w-full items-center justify-center" data-tauri-drag-region>
-        <div class="flex items-center gap-3 rounded-full border border-aura-border bg-white/78 px-4 py-2.5 text-sm text-aura-text-dim">
-          <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-aura-accent"></span>
-          <span>Translating…</span>
+    <div class="flex w-full min-h-0 flex-col">
+      {#if sourceText}
+        <div class="mb-4 space-y-2">
+          <div class="flex flex-wrap gap-2">
+            <span class="rounded-full border border-aura-border/80 bg-white/84 px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] text-aura-text-dim">
+              {sourceLangLabel} to {targetLangLabel}
+            </span>
+            <span class="rounded-full border border-aura-border/80 bg-white/84 px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] text-aura-text-dim">
+              {providerLabel} · {modelLabel}
+            </span>
+            {#if retryAttempt !== null}
+              <span class="rounded-full border border-aura-accent/25 bg-aura-accent-soft px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] text-aura-accent">
+                Retry {retryAttempt}/3
+              </span>
+            {/if}
+          </div>
+
+          <div class="rounded-[14px] border border-aura-border bg-white/68 px-4 py-3">
+            <p class="text-[10px] font-display font-semibold uppercase tracking-[0.18em] text-aura-text-muted">
+              Source
+            </p>
+            <p
+              class="mt-2 text-[13px] leading-6 text-aura-text-dim"
+              style="display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2;"
+            >
+              {sourceText}
+            </p>
+          </div>
         </div>
-      </div>
-    {:else if viewState === 'streaming' || viewState === 'result'}
-      <div class="w-full overflow-y-auto pr-1">
-        <p class="select-text whitespace-pre-wrap text-[15px] leading-7 text-aura-text">
-          {translatedText}{#if viewState === 'streaming'}<span class="ml-0.5 inline-block h-5 w-0.5 animate-pulse bg-aura-accent align-text-bottom"></span>{/if}
-        </p>
-      </div>
-    {:else}
-      <div class="flex min-h-[96px] w-full items-center justify-center text-center">
-        <p class="max-w-[260px] text-sm leading-relaxed text-aura-error/90">
-          {errorMessage || 'Translation failed.'}
-        </p>
-      </div>
-    {/if}
+      {/if}
+
+      {#if viewState === 'idle'}
+        <div
+          class="flex min-h-[96px] w-full items-center justify-center rounded-[14px] border border-dashed border-aura-border bg-white/62 px-5 text-center"
+          data-tauri-drag-region
+        >
+          <p class="max-w-[250px] text-sm leading-relaxed text-aura-text-dim" data-tauri-drag-region>
+            Copy text to translate. Use the hotkey to recall the last result anytime.
+          </p>
+        </div>
+      {:else if viewState === 'loading'}
+        <div class="flex min-h-[96px] w-full flex-1 items-center justify-center" data-tauri-drag-region>
+          <div class="flex items-center gap-3 rounded-full border border-aura-border bg-white/78 px-4 py-2.5 text-sm text-aura-text-dim">
+            <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-aura-accent"></span>
+            <span>{retryAttempt !== null ? `Retrying request (${retryAttempt}/3)...` : 'Translating...'}</span>
+          </div>
+        </div>
+      {:else if viewState === 'streaming' || viewState === 'result'}
+        <div class="w-full min-h-0 flex-1 overflow-y-auto pr-1">
+          <p class="select-text whitespace-pre-wrap text-[15px] leading-7 text-aura-text">
+            {translatedText}{#if viewState === 'streaming'}<span class="ml-0.5 inline-block h-5 w-0.5 animate-pulse bg-aura-accent align-text-bottom"></span>{/if}
+          </p>
+        </div>
+      {:else}
+        <div class="flex min-h-[96px] w-full flex-1 items-center justify-center text-center">
+          <p class="max-w-[260px] text-sm leading-relaxed text-aura-error/90">
+            {errorMessage || 'Translation failed.'}
+          </p>
+        </div>
+      {/if}
+    </div>
   </div>
 </div>

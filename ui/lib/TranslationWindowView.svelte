@@ -6,6 +6,7 @@
   import { onMount, tick } from 'svelte';
   import type { AppConfig } from './appConfig';
   import { cloneAppConfig, createDefaultAppConfig } from './appConfig';
+  import { LANGUAGES } from './languages';
   import NotificationCenter from './NotificationCenter.svelte';
   import TranslationPopup from './TranslationPopup.svelte';
   import {
@@ -47,6 +48,14 @@
     message: string;
   };
 
+  type TranslationRetryPayload = {
+    request_id: number;
+    attempt: number;
+  };
+
+  let lastRequestConfig = $state<AppConfig | null>(null);
+  let retryAttempt = $state<number | null>(null);
+
   function pushNotification(notification: AppNotification) {
     notifications = [notification, ...notifications.filter((item) => item.scope !== notification.scope)]
       .slice(0, 3);
@@ -56,10 +65,26 @@
     notifications = notifications.filter((item) => item.id !== id);
   }
 
+  function languageLabel(code: string) {
+    return LANGUAGES.find((language) => language.code === code)?.label ?? code;
+  }
+
+  function providerLabel(provider: AppConfig['provider']) {
+    switch (provider) {
+      case 'deepseek':
+        return 'DeepSeek';
+      case 'openrouter':
+        return 'OpenRouter';
+      case 'ollama':
+        return 'Ollama';
+    }
+  }
+
   async function loadConfig() {
     try {
       const loaded = await invoke<AppConfig>('get_config');
       config = cloneAppConfig(loaded);
+      return config;
     } catch (e) {
       console.error('Failed to load config:', e);
       pushNotification(
@@ -69,6 +94,7 @@
           recoverable: true,
         }),
       );
+      return null;
     }
   }
 
@@ -95,6 +121,7 @@
   function showTranslationFailure(rawMessage: unknown) {
     const message = formatTranslationError(rawMessage);
     clearLoadingTimeout();
+    retryAttempt = null;
     appState = 'error';
     errorMessage = message;
     pushNotification(createTranslationErrorNotification(message));
@@ -111,16 +138,23 @@
     clearLoadingTimeout();
   }
 
-  async function startTranslation() {
-    if (config.provider !== 'ollama' && !config.api_key) {
+  async function startTranslation(requestConfig: AppConfig | null = lastRequestConfig) {
+    if (!requestConfig || !translatedTextTriggerText.trim()) {
+      showTranslationFailure('No translation request is available to retry yet.');
+      return;
+    }
+
+    if (requestConfig.provider !== 'ollama' && !requestConfig.api_key) {
       showTranslationFailure('No API key configured. Right-click the tray icon -> Settings.');
       return;
     }
 
+    lastRequestConfig = cloneAppConfig(requestConfig);
     currentRequestId += 1;
     const requestId = currentRequestId;
     translatedText = '';
     errorMessage = '';
+    retryAttempt = null;
     appState = 'loading';
 
     startLoadingTimeout();
@@ -129,13 +163,13 @@
     try {
       await invoke('translate_text', {
         text: translatedTextTriggerText,
-        sourceLang: config.source_lang,
-        targetLang: config.target_lang,
-        apiKey: config.api_key,
-        model: config.model,
+        sourceLang: requestConfig.source_lang,
+        targetLang: requestConfig.target_lang,
+        apiKey: requestConfig.api_key,
+        model: requestConfig.model,
         requestId,
-        apiBaseUrl: config.api_base_url,
-        provider: config.provider,
+        apiBaseUrl: requestConfig.api_base_url,
+        provider: requestConfig.provider,
       });
     } catch (e) {
       if (isCurrentRequest(requestId) && errorMessage === '') {
@@ -149,8 +183,18 @@
   async function handleCancel() {
     await cancelCurrentTranslation();
     currentRequestId += 1;
+    retryAttempt = null;
     appState = translatedText ? 'result' : 'idle';
     scheduleAutoSize();
+  }
+
+  async function retryTranslation() {
+    if (!translatedTextTriggerText.trim() || !lastRequestConfig) return;
+
+    await cancelCurrentTranslation();
+    currentRequestId += 1;
+    showBubble();
+    await startTranslation(cloneAppConfig(lastRequestConfig));
   }
 
   async function handlePinnedChange(nextPinned: boolean) {
@@ -298,8 +342,10 @@
 
           translatedTextTriggerText = text;
           showBubble();
-          await loadConfig();
-          await startTranslation();
+          const loadedConfig = await loadConfig();
+          if (!loadedConfig) return;
+          lastRequestConfig = cloneAppConfig(loadedConfig);
+          await startTranslation(loadedConfig);
         }),
       );
 
@@ -318,6 +364,7 @@
             appState = 'streaming';
             clearLoadingTimeout();
           }
+          retryAttempt = null;
           if (appState === 'streaming') {
             translatedText += event.payload.content;
             scheduleAutoSize();
@@ -330,6 +377,7 @@
           if (!isCurrentRequest(event.payload.request_id)) return;
 
           clearLoadingTimeout();
+          retryAttempt = null;
           if (appState === 'loading' || appState === 'streaming') {
             appState = translatedText ? 'result' : 'idle';
             scheduleAutoSize();
@@ -341,6 +389,14 @@
         await listen<TranslationErrorPayload>('translation-error', (event) => {
           if (!isCurrentRequest(event.payload.request_id)) return;
           showTranslationFailure(event.payload.message);
+          scheduleAutoSize();
+        }),
+      );
+
+      unlisteners.push(
+        await listen<TranslationRetryPayload>('translation-retry', (event) => {
+          if (!isCurrentRequest(event.payload.request_id)) return;
+          retryAttempt = event.payload.attempt;
           scheduleAutoSize();
         }),
       );
@@ -424,10 +480,17 @@
     <div bind:this={popupElement} class="h-full w-full">
       <TranslationPopup
         viewState={appState}
+        sourceText={translatedTextTriggerText}
+        sourceLangLabel={lastRequestConfig ? languageLabel(lastRequestConfig.source_lang) : ''}
+        targetLangLabel={lastRequestConfig ? languageLabel(lastRequestConfig.target_lang) : ''}
+        providerLabel={lastRequestConfig ? providerLabel(lastRequestConfig.provider) : ''}
+        modelLabel={lastRequestConfig?.model ?? ''}
+        {retryAttempt}
         {translatedText}
         {errorMessage}
         windowPinned={config.window_pinned}
         onTogglePinned={handlePinnedChange}
+        onretry={retryTranslation}
         oncancel={handleCancel}
         ondismiss={dismiss}
         oncopy={copyResult}
