@@ -45,7 +45,6 @@ Ship a Windows-first two-window desktop shell where translation feels immediate 
 ### Phase 6: Remaining Enhancements - NOT STARTED
 
 - Add explicit retry state UI instead of console-only retry logging.
-- Add multi-entry translation history beyond the single retained result.
 - Add more keyboard-only controls inside both windows.
 - Evaluate replacing clipboard polling with a native message-based clipboard listener.
 

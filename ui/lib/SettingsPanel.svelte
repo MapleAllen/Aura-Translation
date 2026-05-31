@@ -4,6 +4,7 @@
    */
   import { Spring } from 'svelte/motion';
   import { invoke } from '@tauri-apps/api/core';
+  import HistoryList from './HistoryList.svelte';
   import LanguageSelector from './LanguageSelector.svelte';
   import SetupStatusCard from './SetupStatusCard.svelte';
   import type { ApiKeyStorage, AppConfig, Provider } from './appConfig';
@@ -13,6 +14,7 @@
     usesSystemCredentialStorage,
   } from './notifications';
   import type { ProviderProbeResult, RuntimeStatus } from './runtimeStatus';
+  import type { TranslationHistoryEntry } from './translationHistory';
 
   const PROVIDER_OPTIONS: { value: Provider; label: string }[] = [
     { value: 'deepseek', label: 'DeepSeek (api.deepseek.com)' },
@@ -44,6 +46,7 @@
   let panelErrorMessage = $state('');
   let hotkeyInputMessage = $state('');
   let isCapturingHotkey = $state(false);
+  let historyEntries = $state<TranslationHistoryEntry[]>([]);
   let runtimeStatus = $state<RuntimeStatus | null>(null);
   let probeResult = $state<ProviderProbeResult | null>(null);
 
@@ -62,17 +65,19 @@
     saveErrorMessage = '';
     probeResult = null;
     try {
-      const [loaded, nextRuntimeStatus] = await Promise.all([
+      const [loaded, nextRuntimeStatus, nextHistoryEntries] = await Promise.all([
         invoke<AppConfig>('get_config'),
         invoke<RuntimeStatus>('get_runtime_status'),
+        invoke<TranslationHistoryEntry[]>('get_translation_history'),
       ]);
       config = cloneAppConfig(loaded);
       if (config.api_key_storage === 'legacy_plaintext') {
         config.api_key_storage = 'plaintext_fallback';
       }
       runtimeStatus = nextRuntimeStatus;
+      historyEntries = nextHistoryEntries;
     } catch (e) {
-      panelErrorMessage = 'Failed to load settings from the local Aura config.';
+      panelErrorMessage = 'Failed to load settings or translation history from the desktop backend.';
       console.error('Failed to load config:', { error: e });
     }
   }
@@ -100,6 +105,45 @@
     } catch (e) {
       panelErrorMessage = 'Failed to load provider defaults from the desktop backend.';
       console.error('Failed to fetch provider defaults:', e);
+    }
+  }
+
+  async function copyHistoryResult(translatedText: string) {
+    try {
+      await invoke('copy_result_to_clipboard', { text: translatedText });
+    } catch (e) {
+      panelErrorMessage = 'Failed to copy the saved translation result.';
+      console.error('Failed to copy history result:', { error: e });
+    }
+  }
+
+  async function retryHistoryEntry(entryId: string) {
+    try {
+      await invoke('replay_translation_history_entry', { entryId });
+    } catch (e) {
+      panelErrorMessage = 'Failed to retry the selected history entry.';
+      console.error('Failed to replay history entry:', { error: e });
+    }
+  }
+
+  async function deleteHistoryEntry(entryId: string) {
+    try {
+      historyEntries = await invoke<TranslationHistoryEntry[]>(
+        'delete_translation_history_entry',
+        { entryId },
+      );
+    } catch (e) {
+      panelErrorMessage = 'Failed to delete the selected history entry.';
+      console.error('Failed to delete history entry:', { error: e });
+    }
+  }
+
+  async function clearHistoryEntries() {
+    try {
+      historyEntries = await invoke<TranslationHistoryEntry[]>('clear_translation_history');
+    } catch (e) {
+      panelErrorMessage = 'Failed to clear translation history.';
+      console.error('Failed to clear history:', { error: e });
     }
   }
 
@@ -535,6 +579,14 @@
           </div>
         {/if}
       </section>
+
+      <HistoryList
+        entries={historyEntries}
+        oncopy={copyHistoryResult}
+        onretry={retryHistoryEntry}
+        ondelete={deleteHistoryEntry}
+        onclear={clearHistoryEntries}
+      />
     </div>
 
     <div class="border-t border-aura-border px-5 py-4">

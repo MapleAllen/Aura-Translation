@@ -11,6 +11,7 @@ A lightweight cross-platform desktop translator that runs as a tray daemon. Trig
 - **Floating translation bubble**: Minimal translator appears near the cursor and auto-sizes to the translated text.
 - **Pinned comparison mode**: Pin the bubble to keep it visible, draggable, and position-persistent.
 - **Separate settings tool window**: Provider, language pair, hotkey, Aura mode, and pin behavior live in a dedicated movable window.
+- **Recent translation history**: Settings keeps the latest 50 successful or failed requests with copy, retry, delete, and clear actions.
 - **System tray daemon**: Runs silently in the background with no taskbar footprint.
 - **Tray recall and background alerts**: Left-click the tray icon to reopen the latest result or setup window, and get native notifications when hidden requests retry, fail, or finish.
 - **Adaptive dismiss**: Press `Esc` to close; blur hides the translation bubble by default, while pinned mode stays visible.

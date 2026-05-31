@@ -49,6 +49,21 @@ const needsSetupStatus = {
   ],
 };
 
+const baseHistoryEntries = [
+  {
+    id: 'history-1',
+    source_text: 'Hello world',
+    translated_text: '你好，世界',
+    error_message: null,
+    source_lang: 'English',
+    target_lang: 'Chinese',
+    provider: 'deepseek',
+    model: 'deepseek-chat',
+    status: 'success',
+    created_at_ms: 1_717_171_717_000,
+  },
+];
+
 describe('SettingsPanel', () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -58,6 +73,8 @@ describe('SettingsPanel', () => {
           return Promise.resolve(baseConfig);
         case 'get_runtime_status':
           return Promise.resolve(readyStatus);
+        case 'get_translation_history':
+          return Promise.resolve(baseHistoryEntries);
         case 'get_provider_defaults':
           if (payload?.provider === 'ollama') {
             return Promise.resolve({
@@ -78,6 +95,12 @@ describe('SettingsPanel', () => {
           });
         case 'load_provider_api_key':
           return Promise.resolve('sk-loaded');
+        case 'replay_translation_history_entry':
+          return Promise.resolve(undefined);
+        case 'delete_translation_history_entry':
+          return Promise.resolve([]);
+        case 'clear_translation_history':
+          return Promise.resolve([]);
         default:
           return Promise.resolve(undefined);
       }
@@ -98,8 +121,10 @@ describe('SettingsPanel', () => {
     expect(screen.getByTestId('hotkey-conflict-inline')).toHaveTextContent(
       'Could not register "Alt+Shift+T"',
     );
+    expect(screen.getByTestId('history-list')).toHaveTextContent('Hello world');
     expect(invokeMock).toHaveBeenCalledWith('get_config');
     expect(invokeMock).toHaveBeenCalledWith('get_runtime_status');
+    expect(invokeMock).toHaveBeenCalledWith('get_translation_history');
   });
 
   it('hides API key storage messaging for ollama', async () => {
@@ -120,6 +145,8 @@ describe('SettingsPanel', () => {
             ...readyStatus,
             summary: 'Aura is ready to translate with Ollama and model qwen2.5.',
           });
+        case 'get_translation_history':
+          return Promise.resolve(baseHistoryEntries);
         case 'get_provider_defaults':
           if (payload?.provider === 'ollama') {
             return Promise.resolve({
@@ -290,6 +317,8 @@ describe('SettingsPanel', () => {
           });
         case 'get_runtime_status':
           return Promise.resolve(needsSetupStatus);
+        case 'get_translation_history':
+          return Promise.resolve(baseHistoryEntries);
         default:
           return Promise.resolve(undefined);
       }
@@ -346,5 +375,54 @@ describe('SettingsPanel', () => {
     await waitFor(() => {
       expect(screen.getByDisplayValue('sk-loaded')).toBeInTheDocument();
     });
+  });
+
+  it('retries, copies, deletes, and clears history entries', async () => {
+    render(SettingsPanel, {
+      visible: true,
+      onclose: () => {},
+      hotkeyConflictMessage: '',
+    });
+
+    expect(await screen.findByTestId('history-list')).toHaveTextContent('Hello world');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(invokeMock).toHaveBeenCalledWith('replay_translation_history_entry', {
+      entryId: 'history-1',
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    expect(invokeMock).toHaveBeenCalledWith('copy_result_to_clipboard', {
+      text: '你好，世界',
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(invokeMock).toHaveBeenCalledWith('delete_translation_history_entry', {
+      entryId: 'history-1',
+    });
+
+    invokeMock.mockImplementation((command: string) => {
+      switch (command) {
+        case 'get_config':
+          return Promise.resolve(baseConfig);
+        case 'get_runtime_status':
+          return Promise.resolve(readyStatus);
+        case 'get_translation_history':
+          return Promise.resolve(baseHistoryEntries);
+        case 'clear_translation_history':
+          return Promise.resolve([]);
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+
+    render(SettingsPanel, {
+      visible: true,
+      onclose: () => {},
+      hotkeyConflictMessage: '',
+    });
+
+    await fireEvent.click(await screen.findByRole('button', { name: /clear all/i }));
+    expect(invokeMock).toHaveBeenCalledWith('clear_translation_history');
   });
 });

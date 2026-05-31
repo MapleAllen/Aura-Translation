@@ -1,5 +1,6 @@
 mod aura_guard;
 mod config;
+mod history;
 mod hotkey;
 mod readiness;
 mod secrets;
@@ -36,6 +37,7 @@ const TRANSLATION_EDGE_MARGIN: f64 = 14.0;
 const TRANSLATION_CURSOR_GAP: f64 = 18.0;
 
 type ConfigState = Arc<RwLock<AppConfig>>;
+type HistoryState = Arc<Mutex<history::TranslationHistoryStore>>;
 type UiReadyState = Arc<RwLock<HashSet<String>>>;
 type RuntimeState = Arc<Mutex<AppRuntimeState>>;
 
@@ -112,6 +114,50 @@ fn get_provider_defaults(provider: Provider) -> ProviderDefaults {
 #[tauri::command]
 fn load_provider_api_key(provider: Provider) -> Result<String, String> {
     secrets::load_provider_api_key(&provider)
+}
+
+#[tauri::command]
+async fn get_translation_history(
+    state: State<'_, HistoryState>,
+) -> Result<Vec<history::TranslationHistoryEntry>, String> {
+    let history_state = state.inner().clone();
+    let entries = history_state.lock().await.list();
+    Ok(entries)
+}
+
+#[tauri::command]
+async fn delete_translation_history_entry(
+    state: State<'_, HistoryState>,
+    entry_id: String,
+) -> Result<Vec<history::TranslationHistoryEntry>, String> {
+    let history_state = state.inner().clone();
+    let entries = history_state.lock().await.delete(&entry_id)?;
+    Ok(entries)
+}
+
+#[tauri::command]
+async fn clear_translation_history(
+    state: State<'_, HistoryState>,
+) -> Result<Vec<history::TranslationHistoryEntry>, String> {
+    let history_state = state.inner().clone();
+    let entries = history_state.lock().await.clear()?;
+    Ok(entries)
+}
+
+#[tauri::command]
+async fn replay_translation_history_entry(
+    app: AppHandle,
+    state: State<'_, HistoryState>,
+    entry_id: String,
+) -> Result<(), String> {
+    let history_state = state.inner().clone();
+    let entry = history_state
+        .lock()
+        .await
+        .find(&entry_id)
+        .ok_or_else(|| format!("History entry '{}' was not found.", entry_id))?;
+    trigger_translation(app, entry.source_text).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1098,6 +1144,7 @@ pub fn run() {
     let http_client = reqwest::Client::new();
     let cancel_registry: CancellationRegistry = Arc::new(Mutex::new(HashMap::new()));
     let config_state: ConfigState = Arc::new(RwLock::new(AppConfig::load()));
+    let history_state: HistoryState = Arc::new(Mutex::new(history::TranslationHistoryStore::load()));
     let ui_ready_state: UiReadyState = Arc::new(RwLock::new(HashSet::new()));
     let runtime_state: RuntimeState = Arc::new(Mutex::new(AppRuntimeState::default()));
 
@@ -1105,6 +1152,7 @@ pub fn run() {
         .manage(http_client)
         .manage(cancel_registry)
         .manage(config_state.clone())
+        .manage(history_state)
         .manage(ui_ready_state)
         .manage(runtime_state)
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -1131,6 +1179,10 @@ pub fn run() {
             get_config,
             get_provider_defaults,
             load_provider_api_key,
+            get_translation_history,
+            delete_translation_history_entry,
+            clear_translation_history,
+            replay_translation_history_entry,
             get_runtime_status,
             probe_provider,
             mark_ui_ready,

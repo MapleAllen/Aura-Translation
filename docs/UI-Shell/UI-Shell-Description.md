@@ -63,7 +63,11 @@ Tauri creates the hidden translation window during startup and lazily creates th
 
 - `ui/lib/SettingsPanel.svelte`
   - renders the dedicated settings form
-  - now includes default language pair and Aura mode configuration in addition to provider, API key, model, hotkey, and pin behavior
+  - now includes default language pair and Aura mode configuration in addition to provider, API key, model, hotkey, pin behavior, and recent translation history actions
+
+- `ui/lib/HistoryList.svelte`
+  - renders the recent translation history list inside Settings
+  - exposes copy, retry, delete, and clear actions for the latest 50 history entries
 
 - `ui/lib/windowPlacement.ts`
   - converts current window physical geometry into logical coordinates and persists them through the backend
@@ -89,6 +93,10 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - `invoke('copy_result_to_clipboard', { text })`
 - `invoke('translate_text', { ... })`
 - `invoke('cancel_translate', { requestId })`
+- `invoke('get_translation_history')`
+- `invoke('delete_translation_history_entry', { entryId })`
+- `invoke('clear_translation_history')`
+- `invoke('replay_translation_history_entry', { entryId })`
 - `invoke('mark_ui_ready')`
 - `listen('trigger-translate')`
 - `listen('show-existing-translation')`
@@ -106,10 +114,10 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - Aura mode is Windows-only; other platforms still rely on the manual hotkey flow.
 - Clipboard auto-trigger intentionally ignores repeated copies of identical text until a different text arrives or the user uses the hotkey fallback.
 - The cursor-near bubble uses cursor position rather than exact cross-application text selection bounds.
-- Translation history beyond the single retained result is still not implemented.
+- Translation history is currently managed from Settings only; the tray still does not expose recent entries directly.
 
 ## Future Directions
 
 - Replace polling-based Aura mode with a native clipboard listener if lower-latency behavior becomes necessary.
-- Add optional translation history and replay in the settings or tray experience.
+- Add recent history access directly from the tray experience.
 - Surface retry state inside the translation bubble instead of logging retries only.

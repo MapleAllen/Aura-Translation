@@ -88,6 +88,11 @@ struct TranslationRequest<'a> {
     provider: &'a Provider,
 }
 
+struct StreamCompletion {
+    translated_text: String,
+    cancelled: bool,
+}
+
 trait TranslationEventSink {
     fn emit_chunk(&mut self, request_id: u64, content: String);
     fn emit_done(&mut self, request_id: u64);
@@ -213,6 +218,7 @@ fn summarize_notification_message(message: &str) -> String {
 pub async fn translate_text(
     app: AppHandle,
     client: State<'_, Client>,
+    history: State<'_, crate::HistoryState>,
     registry: State<'_, CancellationRegistry>,
     text: String,
     source_lang: String,
@@ -257,7 +263,41 @@ pub async fn translate_text(
         reg.remove(&request_id);
     }
 
-    result
+    match &result {
+        Ok(completion) if !completion.cancelled && !completion.translated_text.is_empty() => {
+            if let Err(err) = record_history_success(
+                history.inner().clone(),
+                &text,
+                &completion.translated_text,
+                &source_lang,
+                &target_lang,
+                &provider,
+                &model,
+            )
+            .await
+            {
+                eprintln!("Failed to record translation history: {}", err);
+            }
+        }
+        Err(message) => {
+            if let Err(err) = record_history_error(
+                history.inner().clone(),
+                &text,
+                message,
+                &source_lang,
+                &target_lang,
+                &provider,
+                &model,
+            )
+            .await
+            {
+                eprintln!("Failed to record translation history: {}", err);
+            }
+        }
+        _ => {}
+    }
+
+    result.map(|_| ())
 }
 
 /// Internal streaming logic, separated to cleanly handle cancellation cleanup.
@@ -268,10 +308,11 @@ async fn translate_stream_with_sink<S: TranslationEventSink>(
     request: TranslationRequest<'_>,
     request_id: u64,
     retry_config: RetryConfig,
-) -> Result<(), String> {
+) -> Result<StreamCompletion, String> {
     let body = build_chat_request_body(&request);
     let url = build_chat_completions_url(request.api_base_url);
     let mut received_output = false;
+    let mut translated_text = String::new();
 
     let response = {
         let mut attempt = 0;
@@ -295,7 +336,10 @@ async fn translate_stream_with_sink<S: TranslationEventSink>(
             let outcome = tokio::select! {
                 _ = &mut cancel_rx => {
                     sink.emit_done(request_id);
-                    return Ok(());
+                    return Ok(StreamCompletion {
+                        translated_text,
+                        cancelled: true,
+                    });
                 }
                 result = http_request.send() => result,
             };
@@ -340,7 +384,10 @@ async fn translate_stream_with_sink<S: TranslationEventSink>(
             tokio::select! {
                 _ = &mut cancel_rx => {
                     sink.emit_done(request_id);
-                    return Ok(());
+                    return Ok(StreamCompletion {
+                        translated_text,
+                        cancelled: true,
+                    });
                 }
                 _ = tokio::time::sleep(tokio::time::Duration::from_millis(delay)) => {}
             }
@@ -357,7 +404,10 @@ async fn translate_stream_with_sink<S: TranslationEventSink>(
             // Check for cancellation signal
             _ = &mut cancel_rx => {
                 sink.emit_done(request_id);
-                return Ok(());
+                return Ok(StreamCompletion {
+                    translated_text,
+                    cancelled: true,
+                });
             }
             // Process next SSE chunk
             chunk_opt = stream.next() => {
@@ -393,11 +443,15 @@ async fn translate_stream_with_sink<S: TranslationEventSink>(
                                     if received_output {
                                         sink.notify_background_success();
                                     }
-                                    return Ok(());
+                                    return Ok(StreamCompletion {
+                                        translated_text,
+                                        cancelled: false,
+                                    });
                                 }
                                 Ok(SseLine::Chunks(contents)) => {
                                     for content in contents {
                                         received_output = true;
+                                        translated_text.push_str(&content);
                                         sink.emit_chunk(request_id, content);
                                     }
                                 }
@@ -415,12 +469,53 @@ async fn translate_stream_with_sink<S: TranslationEventSink>(
                         if received_output {
                             sink.notify_background_success();
                         }
-                        return Ok(());
+                        return Ok(StreamCompletion {
+                            translated_text,
+                            cancelled: false,
+                        });
                     }
                 }
             }
         }
     }
+}
+
+async fn record_history_success(
+    history_state: crate::HistoryState,
+    source_text: &str,
+    translated_text: &str,
+    source_lang: &str,
+    target_lang: &str,
+    provider: &Provider,
+    model: &str,
+) -> Result<(), String> {
+    history_state.lock().await.record_success(
+        source_text,
+        translated_text,
+        source_lang,
+        target_lang,
+        provider,
+        model,
+    )
+}
+
+async fn record_history_error(
+    history_state: crate::HistoryState,
+    source_text: &str,
+    error_message: &str,
+    source_lang: &str,
+    target_lang: &str,
+    provider: &Provider,
+    model: &str,
+) -> Result<(), String> {
+    history_state.lock().await.record_error(
+        source_text,
+        error_message,
+        source_lang,
+        target_lang,
+        provider,
+        model,
+    )
 }
 
 fn build_chat_request_body(request: &TranslationRequest<'_>) -> serde_json::Value {
@@ -632,7 +727,7 @@ mod tests {
         provider: &Provider,
         api_key: &str,
         retry_config: RetryConfig,
-    ) -> Result<(), String> {
+    ) -> Result<StreamCompletion, String> {
         let (_cancel_tx, cancel_rx) = oneshot::channel();
         translate_stream_with_sink(
             sink,
