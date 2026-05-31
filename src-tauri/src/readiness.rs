@@ -281,6 +281,7 @@ mod tests {
             target_lang: "Chinese".to_string(),
             hotkey: "CmdOrCtrl+T".to_string(),
             aura_mode_enabled: false,
+            aura_guard_enabled: true,
             window_pinned: false,
             provider: Provider::DeepSeek,
             api_base_url: "https://api.deepseek.com".to_string(),

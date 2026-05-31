@@ -1,3 +1,4 @@
+mod aura_guard;
 mod config;
 mod hotkey;
 mod readiness;
@@ -71,6 +72,11 @@ struct DaemonErrorPayload {
     code: String,
     message: String,
     recoverable: bool,
+}
+
+#[derive(Clone, Serialize)]
+struct AuraGuardBlockedPayload {
+    reason: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -295,6 +301,15 @@ fn emit_daemon_error(
             code: code.into(),
             message: message.into(),
             recoverable,
+        },
+    );
+}
+
+fn emit_aura_guard_blocked(app: &AppHandle, reason: impl Into<String>) {
+    let _ = app.emit(
+        "aura-guard-blocked",
+        AuraGuardBlockedPayload {
+            reason: reason.into(),
         },
     );
 }
@@ -899,6 +914,13 @@ fn spawn_clipboard_monitor(app: &AppHandle) {
                 let trimmed = text.trim().to_string();
                 if trimmed.is_empty() {
                     continue;
+                }
+
+                if config.aura_guard_enabled {
+                    if let Some(block) = aura_guard::detect_sensitive_clipboard(&trimmed) {
+                        emit_aura_guard_blocked(&app_handle, block.reason);
+                        continue;
+                    }
                 }
 
                 let mut runtime = runtime_state.lock().await;

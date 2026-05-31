@@ -15,6 +15,7 @@ export type AppConfig = {
   target_lang: string;
   hotkey: string;
   aura_mode_enabled: boolean;
+  aura_guard_enabled: boolean;
   window_pinned: boolean;
   provider: Provider;
   api_base_url: string;
@@ -31,6 +32,7 @@ export function createDefaultAppConfig(): AppConfig {
     target_lang: 'Chinese',
     hotkey: 'CmdOrCtrl+T',
     aura_mode_enabled: false,
+    aura_guard_enabled: true,
     window_pinned: false,
     provider: 'deepseek',
     api_base_url: 'https://api.deepseek.com',

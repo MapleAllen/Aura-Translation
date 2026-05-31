@@ -281,6 +281,42 @@
         <div class="flex items-center justify-between gap-4">
           <div>
             <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
+              Sensitive clipboard guard
+            </p>
+            <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
+              Skip likely passwords, tokens, and long credential-like strings before Aura mode sends anything to a provider.
+            </p>
+          </div>
+          <button
+            class={`flex h-7 w-12 items-center rounded-full border px-1 transition-all duration-150 ${
+              config.aura_guard_enabled
+                ? 'border-aura-accent bg-aura-accent text-white'
+                : 'border-aura-border bg-white text-aura-text-muted'
+            }`}
+            role="switch"
+            aria-checked={config.aura_guard_enabled}
+            aria-label="Sensitive clipboard guard"
+            type="button"
+            onclick={() => (config.aura_guard_enabled = !config.aura_guard_enabled)}
+          >
+            <span
+              class={`h-5 w-5 rounded-full bg-current transition-transform duration-150 ${
+                config.aura_guard_enabled ? 'translate-x-5' : 'translate-x-0'
+              }`}
+              style={config.aura_guard_enabled ? 'color: white;' : 'color: rgba(138, 150, 166, 0.75);'}
+            ></span>
+          </button>
+        </div>
+
+        <div class="rounded-md border border-aura-border/80 bg-aura-surface-soft px-3 py-2 text-xs leading-relaxed text-aura-text-dim">
+          This guard only affects automatic Aura mode clipboard translations. Manual hotkey translations still use the text you explicitly trigger.
+        </div>
+      </section>
+
+      <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
               Window behavior
             </p>
             <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">

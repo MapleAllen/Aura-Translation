@@ -10,10 +10,12 @@
   import NotificationCenter from './NotificationCenter.svelte';
   import TranslationPopup from './TranslationPopup.svelte';
   import {
+    createAuraGuardNotification,
     createDaemonErrorNotification,
     createTranslationErrorNotification,
     formatTranslationError,
     type AppNotification,
+    type AuraGuardBlockedPayload,
     type DaemonErrorPayload,
   } from './notifications';
   import { RESIZE_HANDLES, shouldDismissOnBlur, type ResizeDirection } from './windowBehavior';
@@ -413,6 +415,12 @@
         await listen<DaemonErrorPayload>('daemon-error', (event) => {
           pushNotification(createDaemonErrorNotification(event.payload));
           console.error('Daemon error:', event.payload);
+        }),
+      );
+
+      unlisteners.push(
+        await listen<AuraGuardBlockedPayload>('aura-guard-blocked', (event) => {
+          pushNotification(createAuraGuardNotification(event.payload.reason));
         }),
       );
 

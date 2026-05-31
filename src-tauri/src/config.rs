@@ -67,6 +67,8 @@ pub struct AppConfig {
     pub hotkey: String,
     /// Whether clipboard changes should trigger translation automatically on Windows.
     pub aura_mode_enabled: bool,
+    /// Whether Aura mode should skip clipboard text that looks like credentials.
+    pub aura_guard_enabled: bool,
     /// Whether the translation window should stay pinned above other windows.
     pub window_pinned: bool,
     /// The active translation provider.
@@ -103,6 +105,8 @@ impl<'de> Deserialize<'de> for AppConfig {
             hotkey: String,
             #[serde(default)]
             aura_mode_enabled: bool,
+            #[serde(default = "default_aura_guard_enabled")]
+            aura_guard_enabled: bool,
             #[serde(default)]
             window_pinned: bool,
             #[serde(default)]
@@ -121,6 +125,9 @@ impl<'de> Deserialize<'de> for AppConfig {
         }
         fn default_hotkey() -> String {
             "CmdOrCtrl+T".to_string()
+        }
+        fn default_aura_guard_enabled() -> bool {
+            true
         }
 
         let helper = Helper::deserialize(deserializer)?;
@@ -147,6 +154,7 @@ impl<'de> Deserialize<'de> for AppConfig {
             target_lang: helper.target_lang,
             hotkey: helper.hotkey,
             aura_mode_enabled: helper.aura_mode_enabled,
+            aura_guard_enabled: helper.aura_guard_enabled,
             window_pinned: helper.window_pinned,
             provider,
             api_base_url,
@@ -169,6 +177,7 @@ impl Default for AppConfig {
             target_lang: "Chinese".to_string(),
             hotkey: "CmdOrCtrl+T".to_string(),
             aura_mode_enabled: false,
+            aura_guard_enabled: true,
             window_pinned: false,
             provider,
             api_base_url,
@@ -244,6 +253,7 @@ mod tests {
         assert_eq!(c.hotkey, "CmdOrCtrl+T");
         assert_eq!(c.api_base_url, "https://api.deepseek.com");
         assert!(!c.aura_mode_enabled);
+        assert!(c.aura_guard_enabled);
         assert!(!c.window_pinned);
         assert!(!c.available_models.is_empty());
         assert!(c.settings_window_placement.is_none());
@@ -263,6 +273,7 @@ mod tests {
         assert_eq!(config.provider, Provider::DeepSeek);
         assert_eq!(config.api_base_url, "https://api.deepseek.com");
         assert!(!config.aura_mode_enabled);
+        assert!(config.aura_guard_enabled);
         assert!(!config.window_pinned);
         assert!(config.settings_window_placement.is_none());
         assert!(config.pinned_translation_placement.is_none());
@@ -278,6 +289,7 @@ mod tests {
             target_lang: "Japanese".to_string(),
             hotkey: "Alt+Shift+T".to_string(),
             aura_mode_enabled: true,
+            aura_guard_enabled: false,
             window_pinned: true,
             provider: Provider::Ollama,
             api_base_url: "http://localhost:11434".to_string(),
@@ -301,6 +313,7 @@ mod tests {
         let restored: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.provider, Provider::Ollama);
         assert!(restored.aura_mode_enabled);
+        assert!(!restored.aura_guard_enabled);
         assert!(restored.window_pinned);
         assert_eq!(restored.api_base_url, "http://localhost:11434");
         assert_eq!(restored.available_models, vec!["mistral", "llama3"]);

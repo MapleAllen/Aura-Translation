@@ -20,6 +20,10 @@ export type HotkeyConflictPayload = {
   error: string;
 };
 
+export type AuraGuardBlockedPayload = {
+  reason: string;
+};
+
 type Provider = 'deepseek' | 'openrouter' | 'ollama';
 
 let notificationCounter = 0;
@@ -59,6 +63,16 @@ export function createTranslationErrorNotification(message: string): AppNotifica
     kind: 'error',
     title: 'Translation failed',
     message,
+    scope: 'global',
+  };
+}
+
+export function createAuraGuardNotification(reason: string): AppNotification {
+  return {
+    id: nextNotificationId('aura-guard'),
+    kind: 'warning',
+    title: 'Sensitive clipboard skipped',
+    message: reason,
     scope: 'global',
   };
 }

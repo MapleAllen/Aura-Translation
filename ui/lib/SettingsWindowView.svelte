@@ -7,9 +7,11 @@
   import NotificationCenter from './NotificationCenter.svelte';
   import SettingsPanel from './SettingsPanel.svelte';
   import {
+    createAuraGuardNotification,
     createDaemonErrorNotification,
     createHotkeyConflictNotification,
     type AppNotification,
+    type AuraGuardBlockedPayload,
     type DaemonErrorPayload,
     type HotkeyConflictPayload,
   } from './notifications';
@@ -86,6 +88,12 @@
       unlisteners.push(
         await listen<DaemonErrorPayload>('daemon-error', (event) => {
           pushNotification(createDaemonErrorNotification(event.payload));
+        }),
+      );
+
+      unlisteners.push(
+        await listen<AuraGuardBlockedPayload>('aura-guard-blocked', (event) => {
+          pushNotification(createAuraGuardNotification(event.payload.reason));
         }),
       );
 

@@ -15,6 +15,7 @@ const baseConfig = {
   target_lang: 'Chinese',
   hotkey: 'CmdOrCtrl+T',
   aura_mode_enabled: false,
+  aura_guard_enabled: true,
   window_pinned: false,
   provider: 'deepseek',
   api_base_url: 'https://api.deepseek.com',
@@ -223,6 +224,29 @@ describe('SettingsPanel', () => {
       'save_config',
       expect.objectContaining({
         config: expect.objectContaining({ aura_mode_enabled: true }),
+      }),
+    );
+  });
+
+  it('loads and saves the sensitive clipboard guard preference', async () => {
+    render(SettingsPanel, {
+      visible: true,
+      onclose: () => {},
+      hotkeyConflictMessage: '',
+    });
+
+    const guardSwitch = await screen.findByRole('switch', { name: /sensitive clipboard guard/i });
+    expect(guardSwitch).toHaveAttribute('aria-checked', 'true');
+
+    await fireEvent.click(guardSwitch);
+    expect(guardSwitch).toHaveAttribute('aria-checked', 'false');
+
+    await fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      'save_config',
+      expect.objectContaining({
+        config: expect.objectContaining({ aura_guard_enabled: false }),
       }),
     );
   });
