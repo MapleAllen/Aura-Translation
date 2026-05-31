@@ -4,6 +4,7 @@
    */
   import { Spring } from 'svelte/motion';
   import { invoke } from '@tauri-apps/api/core';
+  import LanguageSelector from './LanguageSelector.svelte';
   import type { AppConfig, Provider } from './appConfig';
   import { cloneAppConfig, createDefaultAppConfig } from './appConfig';
   import { shouldShowPlaintextApiKeyWarning } from './notifications';
@@ -151,7 +152,7 @@
           Settings
         </h2>
         <p class="mt-1 text-xs leading-relaxed text-aura-text-dim" data-tauri-drag-region>
-          Tune provider access, shortcut capture, and how the window behaves on blur.
+          Configure languages, trigger behavior, provider access, and window memory.
         </p>
       </div>
       <button
@@ -174,13 +175,68 @@
       {/if}
 
       <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+        <div>
+          <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
+            Translation
+          </p>
+          <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
+            Choose the default language pair used for every new translation request.
+          </p>
+        </div>
+        <LanguageSelector
+          sourceLang={config.source_lang}
+          targetLang={config.target_lang}
+          onchange={(source, target) => {
+            config.source_lang = source;
+            config.target_lang = target;
+          }}
+        />
+      </section>
+
+      <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
+              Aura mode
+            </p>
+            <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
+              On Windows, automatically translate new clipboard text as soon as it changes.
+            </p>
+          </div>
+          <button
+            class={`flex h-7 w-12 items-center rounded-full border px-1 transition-all duration-150 ${
+              config.aura_mode_enabled
+                ? 'border-aura-accent bg-aura-accent text-white'
+                : 'border-aura-border bg-white text-aura-text-muted'
+            }`}
+            role="switch"
+            aria-checked={config.aura_mode_enabled}
+            aria-label="Aura mode"
+            type="button"
+            onclick={() => (config.aura_mode_enabled = !config.aura_mode_enabled)}
+          >
+            <span
+              class={`h-5 w-5 rounded-full bg-current transition-transform duration-150 ${
+                config.aura_mode_enabled ? 'translate-x-5' : 'translate-x-0'
+              }`}
+              style={config.aura_mode_enabled ? 'color: white;' : 'color: rgba(138, 150, 166, 0.75);'}
+            ></span>
+          </button>
+        </div>
+
+        <div class="rounded-md border border-aura-border/80 bg-aura-surface-soft px-3 py-2 text-xs leading-relaxed text-aura-text-dim">
+          With Aura mode off, Aura keeps the existing copy-then-hotkey workflow.
+        </div>
+      </section>
+
+      <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
         <div class="flex items-center justify-between gap-4">
           <div>
             <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
               Window behavior
             </p>
             <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-              Pin the translator when you want it to stay visible for side-by-side comparison.
+              Pin the translator when you want it to stay visible, movable, and always on top.
             </p>
           </div>
           <button
@@ -206,10 +262,10 @@
 
         <div class="grid gap-2 text-xs text-aura-text-dim sm:grid-cols-2">
           <div class="rounded-md border border-aura-border/80 bg-aura-surface-soft px-3 py-2">
-            Default: blur hides the window.
+            Unpinned: recalls near the cursor and hides on blur.
           </div>
           <div class="rounded-md border border-aura-border/80 bg-aura-surface-soft px-3 py-2">
-            Pinned: always on top and stays visible on blur.
+            Pinned: remembers its last dragged position and size.
           </div>
         </div>
       </section>
@@ -309,7 +365,7 @@
             Hotkey
           </label>
           <p class="mt-1 text-xs text-aura-text-dim">
-            Copy text first, then press your shortcut to translate.
+            Use the hotkey to translate manually, or to recall and hide the floating translation bubble.
           </p>
         </div>
         <div class="relative">

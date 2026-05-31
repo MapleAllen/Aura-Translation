@@ -48,6 +48,15 @@ impl Default for Provider {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WindowPlacement {
+    pub x: f64,
+    pub y: f64,
+    pub width: Option<f64>,
+    pub height: Option<f64>,
+    pub monitor: Option<String>,
+}
+
 /// Application configuration stored as plaintext JSON.
 #[derive(Debug, Clone, Serialize)]
 pub struct AppConfig {
@@ -56,7 +65,9 @@ pub struct AppConfig {
     pub source_lang: String,
     pub target_lang: String,
     pub hotkey: String,
-    /// Whether the window should stay pinned above other windows and remain visible on blur.
+    /// Whether clipboard changes should trigger translation automatically on Windows.
+    pub aura_mode_enabled: bool,
+    /// Whether the translation window should stay pinned above other windows.
     pub window_pinned: bool,
     /// The active translation provider.
     pub provider: Provider,
@@ -66,10 +77,13 @@ pub struct AppConfig {
     /// The ordered list of model identifiers shown in the Settings dropdown.
     /// Populated from the provider's defaults on first load.
     pub available_models: Vec<String>,
+    /// Last known placement for the settings tool window.
+    pub settings_window_placement: Option<WindowPlacement>,
+    /// Last known placement for the pinned translation window.
+    pub pinned_translation_placement: Option<WindowPlacement>,
 }
 
-// Custom Deserialize so `api_base_url` and `available_models` default to the
-// *actual* provider's values, not a static Provider::default().
+// Custom Deserialize so provider-dependent defaults keep following the selected provider.
 impl<'de> Deserialize<'de> for AppConfig {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -88,11 +102,15 @@ impl<'de> Deserialize<'de> for AppConfig {
             #[serde(default = "default_hotkey")]
             hotkey: String,
             #[serde(default)]
+            aura_mode_enabled: bool,
+            #[serde(default)]
             window_pinned: bool,
             #[serde(default)]
             provider: Provider,
             api_base_url: Option<String>,
             available_models: Option<Vec<String>>,
+            settings_window_placement: Option<WindowPlacement>,
+            pinned_translation_placement: Option<WindowPlacement>,
         }
 
         fn default_source_lang() -> String {
@@ -128,10 +146,13 @@ impl<'de> Deserialize<'de> for AppConfig {
             source_lang: helper.source_lang,
             target_lang: helper.target_lang,
             hotkey: helper.hotkey,
+            aura_mode_enabled: helper.aura_mode_enabled,
             window_pinned: helper.window_pinned,
             provider,
             api_base_url,
             available_models,
+            settings_window_placement: helper.settings_window_placement,
+            pinned_translation_placement: helper.pinned_translation_placement,
         })
     }
 }
@@ -147,10 +168,13 @@ impl Default for AppConfig {
             source_lang: "auto".to_string(),
             target_lang: "Chinese".to_string(),
             hotkey: "CmdOrCtrl+T".to_string(),
+            aura_mode_enabled: false,
             window_pinned: false,
             provider,
             api_base_url,
             available_models,
+            settings_window_placement: None,
+            pinned_translation_placement: None,
         }
     }
 }
@@ -209,8 +233,6 @@ impl AppConfig {
     }
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────────
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,13 +243,15 @@ mod tests {
         assert_eq!(c.model, "deepseek-chat");
         assert_eq!(c.hotkey, "CmdOrCtrl+T");
         assert_eq!(c.api_base_url, "https://api.deepseek.com");
+        assert!(!c.aura_mode_enabled);
         assert!(!c.window_pinned);
         assert!(!c.available_models.is_empty());
+        assert!(c.settings_window_placement.is_none());
+        assert!(c.pinned_translation_placement.is_none());
     }
 
     #[test]
     fn missing_new_fields_fall_back_to_defaults() {
-        // Simulate a pre-Phase-4 config.json that lacks the new fields
         let legacy_json = r#"{
             "api_key": "sk-test",
             "model": "deepseek-v4-flash",
@@ -238,7 +262,10 @@ mod tests {
         let config: AppConfig = serde_json::from_str(legacy_json).expect("should parse");
         assert_eq!(config.provider, Provider::DeepSeek);
         assert_eq!(config.api_base_url, "https://api.deepseek.com");
+        assert!(!config.aura_mode_enabled);
         assert!(!config.window_pinned);
+        assert!(config.settings_window_placement.is_none());
+        assert!(config.pinned_translation_placement.is_none());
         assert!(!config.available_models.is_empty());
     }
 
@@ -250,17 +277,41 @@ mod tests {
             source_lang: "English".to_string(),
             target_lang: "Japanese".to_string(),
             hotkey: "Alt+Shift+T".to_string(),
+            aura_mode_enabled: true,
             window_pinned: true,
             provider: Provider::Ollama,
             api_base_url: "http://localhost:11434".to_string(),
             available_models: vec!["mistral".to_string(), "llama3".to_string()],
+            settings_window_placement: Some(WindowPlacement {
+                x: 120.0,
+                y: 220.0,
+                width: Some(430.0),
+                height: Some(620.0),
+                monitor: Some("Monitor 1".to_string()),
+            }),
+            pinned_translation_placement: Some(WindowPlacement {
+                x: 640.0,
+                y: 160.0,
+                width: Some(360.0),
+                height: Some(260.0),
+                monitor: None,
+            }),
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.provider, Provider::Ollama);
+        assert!(restored.aura_mode_enabled);
         assert!(restored.window_pinned);
         assert_eq!(restored.api_base_url, "http://localhost:11434");
         assert_eq!(restored.available_models, vec!["mistral", "llama3"]);
+        assert_eq!(
+            restored.settings_window_placement.unwrap().width,
+            Some(430.0)
+        );
+        assert_eq!(
+            restored.pinned_translation_placement.unwrap().height,
+            Some(260.0)
+        );
     }
 
     #[test]

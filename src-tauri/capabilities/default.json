@@ -1,15 +1,19 @@
 {
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "Capability for the Aura desktop windows",
+  "windows": ["translation", "settings"],
   "permissions": [
     "core:default",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
     "core:window:allow-show",
     "core:window:allow-hide",
+    "core:window:allow-start-dragging",
     "core:window:allow-set-focus",
     "core:window:allow-set-always-on-top",
+    "core:window:allow-set-size",
+    "core:window:allow-outer-position",
+    "core:window:allow-outer-size",
     "core:window:allow-start-resize-dragging",
     "core:event:default"
   ]

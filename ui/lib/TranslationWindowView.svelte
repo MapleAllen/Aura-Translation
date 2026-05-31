@@ -1,0 +1,437 @@
+<script lang="ts">
+  import { Spring } from 'svelte/motion';
+  import { listen } from '@tauri-apps/api/event';
+  import { invoke } from '@tauri-apps/api/core';
+  import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
+  import { onMount, tick } from 'svelte';
+  import type { AppConfig } from './appConfig';
+  import { cloneAppConfig, createDefaultAppConfig } from './appConfig';
+  import NotificationCenter from './NotificationCenter.svelte';
+  import TranslationPopup from './TranslationPopup.svelte';
+  import {
+    createDaemonErrorNotification,
+    createTranslationErrorNotification,
+    formatTranslationError,
+    type AppNotification,
+    type DaemonErrorPayload,
+  } from './notifications';
+  import { RESIZE_HANDLES, shouldDismissOnBlur, type ResizeDirection } from './windowBehavior';
+  import { persistCurrentWindowPlacement } from './windowPlacement';
+
+  let appState: 'idle' | 'loading' | 'streaming' | 'result' | 'error' = $state('idle');
+  let translatedText = $state('');
+  let errorMessage = $state('');
+  let notifications = $state<AppNotification[]>([]);
+  let currentRequestId = $state(0);
+  let loadingTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let placementSaveTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let autoSizeTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let visible = $state(false);
+  let config: AppConfig = $state(createDefaultAppConfig());
+  let popupElement = $state<HTMLDivElement | null>(null);
+
+  const popupScale = new Spring(0.94, { stiffness: 0.16, damping: 0.72 });
+  const popupOpacity = new Spring(0, { stiffness: 0.18, damping: 0.82 });
+
+  type TranslationChunkPayload = {
+    request_id: number;
+    content: string;
+  };
+
+  type TranslationDonePayload = {
+    request_id: number;
+  };
+
+  type TranslationErrorPayload = {
+    request_id: number;
+    message: string;
+  };
+
+  function pushNotification(notification: AppNotification) {
+    notifications = [notification, ...notifications.filter((item) => item.scope !== notification.scope)]
+      .slice(0, 3);
+  }
+
+  function dismissNotification(id: string) {
+    notifications = notifications.filter((item) => item.id !== id);
+  }
+
+  async function loadConfig() {
+    try {
+      const loaded = await invoke<AppConfig>('get_config');
+      config = cloneAppConfig(loaded);
+    } catch (e) {
+      console.error('Failed to load config:', e);
+      pushNotification(
+        createDaemonErrorNotification({
+          code: 'config-load-failed',
+          message: 'Failed to load the local Aura config from the desktop backend.',
+          recoverable: true,
+        }),
+      );
+    }
+  }
+
+  function startLoadingTimeout() {
+    clearLoadingTimeout();
+    loadingTimeoutId = setTimeout(() => {
+      if (appState === 'loading') {
+        showTranslationFailure('No response from API (timeout)');
+      }
+    }, 20_000);
+  }
+
+  function clearLoadingTimeout() {
+    if (loadingTimeoutId !== null) {
+      clearTimeout(loadingTimeoutId);
+      loadingTimeoutId = null;
+    }
+  }
+
+  function isCurrentRequest(requestId: number) {
+    return requestId === currentRequestId;
+  }
+
+  function showTranslationFailure(rawMessage: unknown) {
+    const message = formatTranslationError(rawMessage);
+    clearLoadingTimeout();
+    appState = 'error';
+    errorMessage = message;
+    pushNotification(createTranslationErrorNotification(message));
+  }
+
+  async function cancelCurrentTranslation() {
+    if (currentRequestId > 0) {
+      try {
+        await invoke('cancel_translate', { requestId: currentRequestId });
+      } catch (e) {
+        console.error('Failed to cancel translation:', e);
+      }
+    }
+    clearLoadingTimeout();
+  }
+
+  async function startTranslation() {
+    if (config.provider !== 'ollama' && !config.api_key) {
+      showTranslationFailure('No API key configured. Right-click the tray icon -> Settings.');
+      return;
+    }
+
+    currentRequestId += 1;
+    const requestId = currentRequestId;
+    translatedText = '';
+    errorMessage = '';
+    appState = 'loading';
+
+    startLoadingTimeout();
+    scheduleAutoSize();
+
+    try {
+      await invoke('translate_text', {
+        text: translatedTextTriggerText,
+        sourceLang: config.source_lang,
+        targetLang: config.target_lang,
+        apiKey: config.api_key,
+        model: config.model,
+        requestId,
+        apiBaseUrl: config.api_base_url,
+        provider: config.provider,
+      });
+    } catch (e) {
+      if (isCurrentRequest(requestId) && errorMessage === '') {
+        showTranslationFailure(e);
+      }
+    }
+  }
+
+  let translatedTextTriggerText = $state('');
+
+  async function handleCancel() {
+    await cancelCurrentTranslation();
+    currentRequestId += 1;
+    appState = translatedText ? 'result' : 'idle';
+    scheduleAutoSize();
+  }
+
+  async function handlePinnedChange(nextPinned: boolean) {
+    if (config.window_pinned === nextPinned) return;
+
+    const previousPinned = config.window_pinned;
+    config.window_pinned = nextPinned;
+
+    try {
+      await invoke('save_config', { config: cloneAppConfig(config) });
+      if (nextPinned) {
+        await persistCurrentWindowPlacement('pinned_translation');
+      }
+    } catch (e) {
+      config.window_pinned = previousPinned;
+      console.error('Failed to save window pin state:', e);
+      pushNotification(
+        createDaemonErrorNotification({
+          code: 'window-pin-save-failed',
+          message: 'Failed to update window behavior. Try again from Settings.',
+          recoverable: true,
+        }),
+      );
+    }
+  }
+
+  async function copyResult() {
+    if (!translatedText) return;
+    try {
+      await invoke('copy_result_to_clipboard', { text: translatedText });
+    } catch (e) {
+      console.error('Failed to copy:', e);
+      pushNotification(
+        createDaemonErrorNotification({
+          code: 'clipboard-copy-failed',
+          message: 'Failed to copy the translated text to the clipboard.',
+          recoverable: true,
+        }),
+      );
+    }
+  }
+
+  function showBubble() {
+    visible = true;
+    popupScale.target = 1;
+    popupOpacity.target = 1;
+  }
+
+  async function dismiss() {
+    const appWindow = getCurrentWindow();
+    void cancelCurrentTranslation();
+    currentRequestId += 1;
+
+    if (appState === 'streaming') {
+      appState = translatedText ? 'result' : 'idle';
+    } else if (appState === 'loading') {
+      appState = translatedText ? 'result' : 'idle';
+    }
+
+    popupScale.target = 0.94;
+    popupOpacity.target = 0;
+
+    clearLoadingTimeout();
+
+    setTimeout(async () => {
+      visible = false;
+      try {
+        await appWindow.hide();
+      } catch (e) {
+        console.error('Failed to hide window:', e);
+      }
+    }, 160);
+  }
+
+  async function startResize(direction: ResizeDirection) {
+    try {
+      await getCurrentWindow().startResizeDragging(direction);
+    } catch (e) {
+      console.error('Failed to start resize drag:', e);
+    }
+  }
+
+  function schedulePinnedPlacementSave() {
+    if (!config.window_pinned) return;
+    if (placementSaveTimeoutId !== null) {
+      clearTimeout(placementSaveTimeoutId);
+    }
+    placementSaveTimeoutId = setTimeout(() => {
+      void persistCurrentWindowPlacement('pinned_translation').catch((e) => {
+        console.error('Failed to persist translation placement:', e);
+      });
+    }, 180);
+  }
+
+  async function applyAutoSize() {
+    if (!visible || config.window_pinned || !popupElement) return;
+
+    await tick();
+
+    const desiredHeight = Math.min(
+      Math.max(Math.ceil(popupElement.scrollHeight) + 2, 124),
+      460,
+    );
+
+    try {
+      await getCurrentWindow().setSize(new LogicalSize(360, desiredHeight));
+      await invoke('realign_translation_window');
+    } catch (e) {
+      console.error('Failed to auto-size translation window:', e);
+    }
+  }
+
+  function scheduleAutoSize() {
+    if (autoSizeTimeoutId !== null) {
+      clearTimeout(autoSizeTimeoutId);
+    }
+    autoSizeTimeoutId = setTimeout(() => {
+      void applyAutoSize();
+    }, 50);
+  }
+
+  $effect(() => {
+    visible;
+    appState;
+    translatedText;
+    errorMessage;
+    config.window_pinned;
+    scheduleAutoSize();
+  });
+
+  onMount(() => {
+    void loadConfig();
+
+    const appWindow = getCurrentWindow();
+    const unlisteners: Array<() => void> = [];
+
+    const register = async () => {
+      unlisteners.push(
+        await listen<string>('trigger-translate', async (event) => {
+          const text = event.payload?.trim();
+          if (!text) return;
+
+          await cancelCurrentTranslation();
+          currentRequestId += 1;
+
+          translatedTextTriggerText = text;
+          showBubble();
+          await loadConfig();
+          await startTranslation();
+        }),
+      );
+
+      unlisteners.push(
+        await listen('show-existing-translation', () => {
+          showBubble();
+          scheduleAutoSize();
+        }),
+      );
+
+      unlisteners.push(
+        await listen<TranslationChunkPayload>('translation-chunk', (event) => {
+          if (!isCurrentRequest(event.payload.request_id)) return;
+
+          if (appState === 'loading') {
+            appState = 'streaming';
+            clearLoadingTimeout();
+          }
+          if (appState === 'streaming') {
+            translatedText += event.payload.content;
+            scheduleAutoSize();
+          }
+        }),
+      );
+
+      unlisteners.push(
+        await listen<TranslationDonePayload>('translation-done', (event) => {
+          if (!isCurrentRequest(event.payload.request_id)) return;
+
+          clearLoadingTimeout();
+          if (appState === 'loading' || appState === 'streaming') {
+            appState = translatedText ? 'result' : 'idle';
+            scheduleAutoSize();
+          }
+        }),
+      );
+
+      unlisteners.push(
+        await listen<TranslationErrorPayload>('translation-error', (event) => {
+          if (!isCurrentRequest(event.payload.request_id)) return;
+          showTranslationFailure(event.payload.message);
+          scheduleAutoSize();
+        }),
+      );
+
+      unlisteners.push(
+        await listen('window-blur', () => {
+          if (shouldDismissOnBlur(false, config.window_pinned)) {
+            void dismiss();
+          }
+        }),
+      );
+
+      unlisteners.push(
+        await listen<DaemonErrorPayload>('daemon-error', (event) => {
+          pushNotification(createDaemonErrorNotification(event.payload));
+          console.error('Daemon error:', event.payload);
+        }),
+      );
+
+      unlisteners.push(
+        await listen<AppConfig>('config-updated', (event) => {
+          config = cloneAppConfig(event.payload);
+        }),
+      );
+
+      unlisteners.push(
+        await appWindow.onMoved(() => {
+          schedulePinnedPlacementSave();
+        }),
+      );
+
+      unlisteners.push(
+        await appWindow.onResized(() => {
+          if (config.window_pinned) {
+            schedulePinnedPlacementSave();
+          }
+        }),
+      );
+    };
+
+    void register();
+    void invoke('mark_ui_ready').catch((e) => {
+      console.error('Failed to mark UI as ready:', e);
+    });
+
+    return () => {
+      if (placementSaveTimeoutId !== null) clearTimeout(placementSaveTimeoutId);
+      if (autoSizeTimeoutId !== null) clearTimeout(autoSizeTimeoutId);
+      for (const unlisten of unlisteners) {
+        unlisten();
+      }
+    };
+  });
+</script>
+
+<div class="relative h-screen w-screen overflow-hidden">
+  <div class="pointer-events-none absolute inset-0 z-[80]">
+    {#each RESIZE_HANDLES as handle}
+      <button
+        class={`pointer-events-auto absolute ${handle.className}`}
+        style={`cursor: ${handle.cursor};`}
+        onmousedown={(event) => {
+          event.preventDefault();
+          void startResize(handle.direction);
+        }}
+        aria-hidden="true"
+        tabindex="-1"
+        type="button"
+      ></button>
+    {/each}
+  </div>
+
+  <div
+    class="relative h-full w-full"
+    style:transform="scale({popupScale.current})"
+    style:opacity={popupOpacity.current}
+    style="transform-origin: center bottom; will-change: transform, opacity;"
+  >
+    <NotificationCenter {notifications} ondismiss={dismissNotification} />
+
+    <div bind:this={popupElement} class="h-full w-full">
+      <TranslationPopup
+        viewState={appState}
+        {translatedText}
+        {errorMessage}
+        windowPinned={config.window_pinned}
+        onTogglePinned={handlePinnedChange}
+        oncancel={handleCancel}
+        ondismiss={dismiss}
+        oncopy={copyResult}
+      />
+    </div>
+  </div>
+</div>

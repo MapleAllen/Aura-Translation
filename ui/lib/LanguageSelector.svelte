@@ -3,6 +3,7 @@
    * LanguageSelector - Compact source/target language toolbar.
    */
   import { Spring } from 'svelte/motion';
+  import { LANGUAGES } from './languages';
 
   type Props = {
     sourceLang: string;
@@ -11,20 +12,6 @@
   };
 
   let { sourceLang, targetLang, onchange }: Props = $props();
-
-  const LANGUAGES = [
-    { code: 'auto', label: 'Auto detect' },
-    { code: 'Chinese', label: 'Chinese' },
-    { code: 'English', label: 'English' },
-    { code: 'Japanese', label: 'Japanese' },
-    { code: 'Korean', label: 'Korean' },
-    { code: 'French', label: 'French' },
-    { code: 'German', label: 'German' },
-    { code: 'Spanish', label: 'Spanish' },
-    { code: 'Russian', label: 'Russian' },
-    { code: 'Arabic', label: 'Arabic' },
-    { code: 'Portuguese', label: 'Portuguese' },
-  ];
 
   const swapRotation = new Spring(0, { stiffness: 0.3, damping: 0.65 });
   let rotationCount = $state(0);

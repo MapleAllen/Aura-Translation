@@ -12,20 +12,34 @@
   "app": {
     "windows": [
       {
-        "label": "main",
+        "label": "translation",
         "title": "Aura Translation",
-        "width": 640,
-        "height": 460,
-        "minWidth": 560,
-        "minHeight": 380,
+        "width": 360,
+        "height": 164,
+        "minWidth": 320,
+        "minHeight": 124,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": false,
         "skipTaskbar": true,
         "resizable": true,
         "create": false,
-        "visible": false,
-        "center": true
+        "visible": false
+      },
+      {
+        "label": "settings",
+        "title": "Aura Settings",
+        "width": 440,
+        "height": 640,
+        "minWidth": 400,
+        "minHeight": 560,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": false,
+        "skipTaskbar": true,
+        "resizable": true,
+        "create": false,
+        "visible": false
       }
     ],
     "security": {

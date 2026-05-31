@@ -14,10 +14,13 @@ const baseConfig = {
   source_lang: 'auto',
   target_lang: 'Chinese',
   hotkey: 'CmdOrCtrl+T',
+  aura_mode_enabled: false,
   window_pinned: false,
   provider: 'deepseek',
   api_base_url: 'https://api.deepseek.com',
   available_models: ['deepseek-chat', 'deepseek-reasoner'],
+  settings_window_placement: null,
+  pinned_translation_placement: null,
 };
 
 describe('SettingsPanel', () => {
@@ -128,5 +131,31 @@ describe('SettingsPanel', () => {
       }),
     );
     expect(onsaved).toHaveBeenCalledWith(expect.objectContaining({ window_pinned: true }));
+  });
+
+  it('loads and saves the aura mode preference', async () => {
+    invokeMock.mockResolvedValueOnce(baseConfig);
+    invokeMock.mockResolvedValueOnce(undefined);
+
+    render(SettingsPanel, {
+      visible: true,
+      onclose: () => {},
+      hotkeyConflictMessage: '',
+    });
+
+    const auraSwitch = await screen.findByRole('switch', { name: /aura mode/i });
+    expect(auraSwitch).toHaveAttribute('aria-checked', 'false');
+
+    await fireEvent.click(auraSwitch);
+    expect(auraSwitch).toHaveAttribute('aria-checked', 'true');
+
+    await fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
+
+    expect(invokeMock).toHaveBeenLastCalledWith(
+      'save_config',
+      expect.objectContaining({
+        config: expect.objectContaining({ aura_mode_enabled: true }),
+      }),
+    );
   });
 });

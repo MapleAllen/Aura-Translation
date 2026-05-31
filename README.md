@@ -4,12 +4,15 @@ A lightweight cross-platform desktop translator that runs as a tray daemon. Trig
 
 ## Features
 
-- **Zero-friction trigger**: Configurable global hotkey (default `CmdOrCtrl+T`) reads the clipboard instantly.
+- **Aura mode**: Optional Windows clipboard watcher translates fresh copied text automatically.
+- **Hotkey recall**: Configurable global hotkey (default `CmdOrCtrl+T`) still works as a manual trigger and result recall toggle.
 - **Streaming output**: Token-by-token translation via OpenAI-compatible providers.
 - **Bidirectional language pairs**: 11 languages with one-click swap.
-- **Dense desktop panel**: Compact tray-adjacent translator with optional pin mode.
+- **Floating translation bubble**: Minimal translator appears near the cursor and auto-sizes to the translated text.
+- **Pinned comparison mode**: Pin the bubble to keep it visible, draggable, and position-persistent.
+- **Separate settings tool window**: Provider, language pair, hotkey, Aura mode, and pin behavior live in a dedicated movable window.
 - **System tray daemon**: Runs silently in the background with no taskbar footprint.
-- **Adaptive dismiss**: Press `Esc` to close; blur hides it by default, while pinned mode stays visible.
+- **Adaptive dismiss**: Press `Esc` to close; blur hides the translation bubble by default, while pinned mode stays visible.
 
 ## Tech Stack
 
@@ -30,7 +33,9 @@ Aura-Translation/
 |   |-- lib/             # Svelte components and UI helpers
 |   |   |-- LanguageSelector.svelte
 |   |   |-- SettingsPanel.svelte
+|   |   |-- SettingsWindowView.svelte
 |   |   |-- SkeletonLoader.svelte
+|   |   |-- TranslationWindowView.svelte
 |   |   `-- TranslationPopup.svelte
 |   `-- routes/
 |       `-- +page.svelte
@@ -67,14 +72,15 @@ npm run tauri dev
 1. Launch the app and right-click the system tray icon, then open `Settings`.
 2. Choose a provider: DeepSeek, OpenRouter, or local Ollama.
 3. Enter an API key for DeepSeek or OpenRouter. Ollama does not require one.
-4. Save the settings. Preferences are stored in `{OS config dir}/aura-translation/config.json`.
+4. Pick your default language pair, hotkey, and whether Aura mode should auto-translate copied text.
+5. Save the settings. Preferences are stored in `{OS config dir}/aura-translation/config.json`.
 
 ### Usage
 
 1. Select any text and copy it with `Ctrl+C`.
-2. Press your configured hotkey (default `CmdOrCtrl+T`) to open the translator near the tray.
-3. Watch the translation stream in.
-4. Press `Esc` to dismiss, or pin the window to keep it visible while you read other pages.
+2. If Aura mode is enabled on Windows, the translation bubble appears near the cursor automatically.
+3. If Aura mode is disabled, press your configured hotkey (default `CmdOrCtrl+T`) to translate the current clipboard text.
+4. Press the hotkey again to recall or hide the last translation bubble, or pin the bubble to keep it visible while you read other pages.
 
 ## Build for Production
 

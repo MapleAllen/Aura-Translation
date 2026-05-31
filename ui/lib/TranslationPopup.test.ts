@@ -2,28 +2,20 @@ import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import TranslationPopup from './TranslationPopup.svelte';
 
-vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
-  writeText: vi.fn(),
-}));
-
 describe('TranslationPopup', () => {
-  it('shows the configured hotkey in the idle hint', () => {
+  it('shows the minimal idle hint', () => {
     render(TranslationPopup, {
       viewState: 'idle',
-      sourceText: '',
       translatedText: '',
       errorMessage: '',
-      hotkeyLabel: 'Alt+Shift+T',
-      sourceLang: 'auto',
-      targetLang: 'Chinese',
       windowPinned: false,
-      onLanguageChange: vi.fn(),
       onTogglePinned: vi.fn(),
       oncancel: vi.fn(),
       ondismiss: vi.fn(),
+      oncopy: vi.fn(),
     });
 
-    expect(screen.getByText(/copy text, press alt\+shift\+t/i)).toBeInTheDocument();
+    expect(screen.getByText(/copy text to translate/i)).toBeInTheDocument();
   });
 
   it('shows pin state and notifies when the user toggles it', async () => {
@@ -31,17 +23,13 @@ describe('TranslationPopup', () => {
 
     render(TranslationPopup, {
       viewState: 'result',
-      sourceText: 'Hello',
-      translatedText: '你好',
+      translatedText: '浣犲ソ',
       errorMessage: '',
-      hotkeyLabel: 'Alt+Shift+T',
-      sourceLang: 'English',
-      targetLang: 'Chinese',
       windowPinned: false,
-      onLanguageChange: vi.fn(),
       onTogglePinned,
       oncancel: vi.fn(),
       ondismiss: vi.fn(),
+      oncopy: vi.fn(),
     });
 
     const pinButton = screen.getByRole('button', { name: /pin/i });
