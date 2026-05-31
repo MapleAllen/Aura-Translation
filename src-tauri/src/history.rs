@@ -8,6 +8,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const MAX_HISTORY_ENTRIES: usize = 50;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TranslationUsage {
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub total_tokens: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum TranslationHistoryStatus {
     Success,
@@ -24,6 +31,8 @@ pub struct TranslationHistoryEntry {
     pub target_lang: String,
     pub provider: Provider,
     pub model: String,
+    #[serde(default)]
+    pub usage: Option<TranslationUsage>,
     pub status: TranslationHistoryStatus,
     pub created_at_ms: u64,
 }
@@ -77,6 +86,7 @@ impl TranslationHistoryStore {
         target_lang: &str,
         provider: &Provider,
         model: &str,
+        usage: Option<TranslationUsage>,
     ) -> Result<(), String> {
         self.insert_entry(TranslationHistoryEntry {
             id: next_history_id(),
@@ -87,6 +97,7 @@ impl TranslationHistoryStore {
             target_lang: target_lang.to_string(),
             provider: provider.clone(),
             model: model.to_string(),
+            usage,
             status: TranslationHistoryStatus::Success,
             created_at_ms: current_timestamp_ms(),
         })
@@ -100,6 +111,7 @@ impl TranslationHistoryStore {
         target_lang: &str,
         provider: &Provider,
         model: &str,
+        usage: Option<TranslationUsage>,
     ) -> Result<(), String> {
         self.insert_entry(TranslationHistoryEntry {
             id: next_history_id(),
@@ -110,6 +122,7 @@ impl TranslationHistoryStore {
             target_lang: target_lang.to_string(),
             provider: provider.clone(),
             model: model.to_string(),
+            usage,
             status: TranslationHistoryStatus::Error,
             created_at_ms: current_timestamp_ms(),
         })
@@ -196,6 +209,7 @@ mod tests {
                     "Chinese",
                     &Provider::DeepSeek,
                     "deepseek-chat",
+                    None,
                 )
                 .expect("history record should succeed");
         }
@@ -217,6 +231,7 @@ mod tests {
                 "Chinese",
                 &Provider::OpenRouter,
                 "mistral",
+                None,
             )
             .expect("history record should succeed");
         let entry_id = store.list().first().unwrap().id.clone();
@@ -232,9 +247,15 @@ mod tests {
                 "Chinese",
                 &Provider::DeepSeek,
                 "deepseek-chat",
+                Some(TranslationUsage {
+                    prompt_tokens: 12,
+                    completion_tokens: 4,
+                    total_tokens: 16,
+                }),
             )
             .expect("history record should succeed");
         assert_eq!(store.list().len(), 1);
+        assert_eq!(store.list()[0].usage.as_ref().unwrap().total_tokens, 16);
         assert!(store.clear().expect("clear should succeed").is_empty());
     }
 }

@@ -1,4 +1,4 @@
-use crate::config::Provider;
+use crate::{config::Provider, history::TranslationUsage};
 use futures_util::StreamExt;
 use reqwest::{
     header::{HeaderName, HeaderValue},
@@ -30,7 +30,9 @@ struct StreamDelta {
 
 #[derive(Debug, Deserialize)]
 struct StreamChunk {
+    #[serde(default)]
     choices: Vec<StreamChoice>,
+    usage: Option<TranslationUsage>,
 }
 
 #[derive(Clone, Serialize)]
@@ -56,11 +58,23 @@ struct TranslationRetryPayload {
     attempt: u8,
 }
 
+#[derive(Clone, Serialize)]
+struct TranslationUsagePayload {
+    request_id: u64,
+    usage: TranslationUsage,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum SseLine {
     Ignore,
     Done,
-    Chunks(Vec<String>),
+    Update(StreamUpdate),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct StreamUpdate {
+    contents: Vec<String>,
+    usage: Option<TranslationUsage>,
 }
 
 #[derive(Clone, Copy)]
@@ -91,6 +105,7 @@ struct TranslationRequest<'a> {
 struct StreamCompletion {
     translated_text: String,
     cancelled: bool,
+    usage: Option<TranslationUsage>,
 }
 
 trait TranslationEventSink {
@@ -98,6 +113,7 @@ trait TranslationEventSink {
     fn emit_done(&mut self, request_id: u64);
     fn emit_error(&mut self, request_id: u64, message: String);
     fn emit_retry(&mut self, request_id: u64, attempt: u8);
+    fn emit_usage(&mut self, _request_id: u64, _usage: TranslationUsage) {}
     fn notify_background_success(&mut self) {}
     fn notify_background_error(&mut self, _message: &str) {}
     fn notify_background_retry(&mut self, _attempt: u8) {}
@@ -141,6 +157,13 @@ impl TranslationEventSink for TauriEventSink<'_> {
                 request_id,
                 attempt,
             },
+        );
+    }
+
+    fn emit_usage(&mut self, request_id: u64, usage: TranslationUsage) {
+        let _ = self.app.emit(
+            "translation-usage",
+            TranslationUsagePayload { request_id, usage },
         );
     }
 
@@ -273,6 +296,7 @@ pub async fn translate_text(
                 &target_lang,
                 &provider,
                 &model,
+                completion.usage.clone(),
             )
             .await
             {
@@ -313,6 +337,7 @@ async fn translate_stream_with_sink<S: TranslationEventSink>(
     let url = build_chat_completions_url(request.api_base_url);
     let mut received_output = false;
     let mut translated_text = String::new();
+    let mut usage: Option<TranslationUsage> = None;
 
     let response = {
         let mut attempt = 0;
@@ -339,6 +364,7 @@ async fn translate_stream_with_sink<S: TranslationEventSink>(
                     return Ok(StreamCompletion {
                         translated_text,
                         cancelled: true,
+                        usage,
                     });
                 }
                 result = http_request.send() => result,
@@ -387,6 +413,7 @@ async fn translate_stream_with_sink<S: TranslationEventSink>(
                     return Ok(StreamCompletion {
                         translated_text,
                         cancelled: true,
+                        usage,
                     });
                 }
                 _ = tokio::time::sleep(tokio::time::Duration::from_millis(delay)) => {}
@@ -407,6 +434,7 @@ async fn translate_stream_with_sink<S: TranslationEventSink>(
                 return Ok(StreamCompletion {
                     translated_text,
                     cancelled: true,
+                    usage,
                 });
             }
             // Process next SSE chunk
@@ -446,10 +474,16 @@ async fn translate_stream_with_sink<S: TranslationEventSink>(
                                     return Ok(StreamCompletion {
                                         translated_text,
                                         cancelled: false,
+                                        usage,
                                     });
                                 }
-                                Ok(SseLine::Chunks(contents)) => {
-                                    for content in contents {
+                                Ok(SseLine::Update(update)) => {
+                                    if let Some(next_usage) = update.usage {
+                                        usage = Some(next_usage.clone());
+                                        sink.emit_usage(request_id, next_usage);
+                                    }
+
+                                    for content in update.contents {
                                         received_output = true;
                                         translated_text.push_str(&content);
                                         sink.emit_chunk(request_id, content);
@@ -472,6 +506,7 @@ async fn translate_stream_with_sink<S: TranslationEventSink>(
                         return Ok(StreamCompletion {
                             translated_text,
                             cancelled: false,
+                            usage,
                         });
                     }
                 }
@@ -488,6 +523,7 @@ async fn record_history_success(
     target_lang: &str,
     provider: &Provider,
     model: &str,
+    usage: Option<TranslationUsage>,
 ) -> Result<(), String> {
     history_state.lock().await.record_success(
         source_text,
@@ -496,6 +532,7 @@ async fn record_history_success(
         target_lang,
         provider,
         model,
+        usage,
     )
 }
 
@@ -515,12 +552,13 @@ async fn record_history_error(
         target_lang,
         provider,
         model,
+        None,
     )
 }
 
 fn build_chat_request_body(request: &TranslationRequest<'_>) -> serde_json::Value {
     let system_prompt = build_system_prompt(request.source_lang, request.target_lang);
-    serde_json::json!({
+    let mut body = serde_json::json!({
         "model": request.model,
         "messages": [
             { "role": "system", "content": system_prompt },
@@ -528,7 +566,15 @@ fn build_chat_request_body(request: &TranslationRequest<'_>) -> serde_json::Valu
         ],
         "temperature": 0.3,
         "stream": true
-    })
+    });
+
+    if !matches!(request.provider, Provider::Ollama) {
+        body["stream_options"] = serde_json::json!({
+            "include_usage": true
+        });
+    }
+
+    body
 }
 
 fn build_system_prompt(source_lang: &str, target_lang: &str) -> String {
@@ -611,7 +657,10 @@ fn parse_sse_line(line: &str) -> Result<SseLine, String> {
         .filter(|content| !content.is_empty())
         .collect();
 
-    Ok(SseLine::Chunks(contents))
+    Ok(SseLine::Update(StreamUpdate {
+        contents,
+        usage: parsed.usage,
+    }))
 }
 
 /// Cancel an in-flight translation request by its ID.
@@ -649,6 +698,7 @@ mod tests {
         Done,
         Error(String),
         Retry(u8),
+        Usage(TranslationUsage),
     }
 
     #[derive(Default)]
@@ -671,6 +721,10 @@ mod tests {
 
         fn emit_retry(&mut self, _request_id: u64, attempt: u8) {
             self.events.push(CapturedEvent::Retry(attempt));
+        }
+
+        fn emit_usage(&mut self, _request_id: u64, usage: TranslationUsage) {
+            self.events.push(CapturedEvent::Usage(usage));
         }
     }
 
@@ -744,7 +798,13 @@ mod tests {
     fn parses_valid_sse_chunk() {
         let line = r#"data: {"choices":[{"delta":{"content":"hello"}}]}"#;
         let parsed = parse_sse_line(line).expect("valid SSE should parse");
-        assert_eq!(parsed, SseLine::Chunks(vec!["hello".to_string()]));
+        assert_eq!(
+            parsed,
+            SseLine::Update(StreamUpdate {
+                contents: vec!["hello".to_string()],
+                usage: None,
+            })
+        );
     }
 
     #[test]
@@ -758,11 +818,31 @@ mod tests {
         let empty = r#"data: {"choices":[{"delta":{"content":""}}]}"#;
         assert_eq!(
             parse_sse_line(empty).expect("empty content JSON is valid"),
-            SseLine::Chunks(Vec::new())
+            SseLine::Update(StreamUpdate {
+                contents: Vec::new(),
+                usage: None,
+            })
         );
         assert_eq!(
             parse_sse_line(": keep-alive").expect("comments are ignored"),
             SseLine::Ignore
+        );
+    }
+
+    #[test]
+    fn parses_usage_only_chunk() {
+        let line = r#"data: {"choices":[],"usage":{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18}}"#;
+        let parsed = parse_sse_line(line).expect("usage-only SSE should parse");
+        assert_eq!(
+            parsed,
+            SseLine::Update(StreamUpdate {
+                contents: Vec::new(),
+                usage: Some(TranslationUsage {
+                    prompt_tokens: 11,
+                    completion_tokens: 7,
+                    total_tokens: 18,
+                }),
+            })
         );
     }
 
@@ -779,7 +859,10 @@ mod tests {
         let line = line.trim();
         assert_eq!(
             parse_sse_line(line).expect("CRLF-normalized line should parse"),
-            SseLine::Chunks(vec!["ok".to_string()])
+            SseLine::Update(StreamUpdate {
+                contents: vec!["ok".to_string()],
+                usage: None,
+            })
         );
     }
 

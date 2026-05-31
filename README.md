@@ -14,6 +14,7 @@ A lightweight cross-platform desktop translator that runs as a tray daemon. Trig
 - **Separate settings tool window**: Provider, language pair, hotkey, Aura mode, and pin behavior live in a dedicated movable window.
 - **Named translation profiles**: Save multiple provider and language setups, then switch them from Settings or the tray menu.
 - **Paste back to the source app**: On Windows, send the latest translated text back to the original app and restore the previous text clipboard afterward.
+- **Token usage visibility**: Show prompt, completion, and total token counts in the translation bubble and recent history when the provider streams usage metadata.
 - **Recent translation history**: Settings keeps the latest 50 successful or failed requests with copy, retry, delete, and clear actions.
 - **System tray daemon**: Runs silently in the background with no taskbar footprint.
 - **Tray recall and background alerts**: Left-click the tray icon to reopen the latest result or setup window, and get native notifications when hidden requests retry, fail, or finish.

@@ -9,6 +9,7 @@
   import { LANGUAGES } from './languages';
   import NotificationCenter from './NotificationCenter.svelte';
   import TranslationPopup from './TranslationPopup.svelte';
+  import type { TranslationUsage } from './translationHistory';
   import {
     createAuraGuardNotification,
     createDaemonErrorNotification,
@@ -55,6 +56,11 @@
     attempt: number;
   };
 
+  type TranslationUsagePayload = {
+    request_id: number;
+    usage: TranslationUsage;
+  };
+
   type PasteBackStatus = {
     supported: boolean;
     available: boolean;
@@ -63,6 +69,7 @@
   let lastRequestConfig = $state<AppConfig | null>(null);
   let pasteBackStatus = $state<PasteBackStatus>({ supported: false, available: false });
   let retryAttempt = $state<number | null>(null);
+  let translationUsage = $state<TranslationUsage | null>(null);
   let draftSourceText = $state('');
 
   function pushNotification(notification: AppNotification) {
@@ -140,6 +147,7 @@
     const message = formatTranslationError(rawMessage);
     clearLoadingTimeout();
     retryAttempt = null;
+    translationUsage = null;
     appState = 'error';
     errorMessage = message;
     pushNotification(createTranslationErrorNotification(message));
@@ -178,6 +186,7 @@
     translatedTextTriggerText = requestText;
     draftSourceText = requestText;
     translatedText = '';
+    translationUsage = null;
     errorMessage = '';
     retryAttempt = null;
     appState = 'loading';
@@ -209,6 +218,7 @@
     await cancelCurrentTranslation();
     currentRequestId += 1;
     retryAttempt = null;
+    translationUsage = null;
     appState = translatedText ? 'result' : 'idle';
     scheduleAutoSize();
   }
@@ -453,6 +463,13 @@
       );
 
       unlisteners.push(
+        await listen<TranslationUsagePayload>('translation-usage', (event) => {
+          if (!isCurrentRequest(event.payload.request_id)) return;
+          translationUsage = event.payload.usage;
+        }),
+      );
+
+      unlisteners.push(
         await listen('window-blur', () => {
           if (shouldDismissOnBlur(false, config.window_pinned)) {
             void dismiss();
@@ -548,6 +565,7 @@
         {errorMessage}
         showComposer={config.window_pinned}
         hasDraftChanges={draftSourceText.trim() !== translatedTextTriggerText.trim()}
+        usage={translationUsage}
         canPasteBack={pasteBackStatus.supported && pasteBackStatus.available}
         windowPinned={config.window_pinned}
         ondraftsourcechange={(value) => {

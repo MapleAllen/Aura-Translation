@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { formatHistoryTimestamp, type TranslationHistoryEntry } from './translationHistory';
+  import {
+    formatHistoryTimestamp,
+    formatTokenCount,
+    type TranslationHistoryEntry,
+  } from './translationHistory';
 
   type Props = {
     entries: TranslationHistoryEntry[];
@@ -60,6 +64,11 @@
               {entry.provider} 路 {entry.model}
             </span>
             <span class="text-[11px] text-aura-text-muted">{formatHistoryTimestamp(entry.created_at_ms)}</span>
+            {#if entry.usage}
+              <span class="rounded-full border border-aura-accent/25 bg-aura-accent-soft px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] text-aura-accent">
+                {formatTokenCount(entry.usage.total_tokens)} tokens
+              </span>
+            {/if}
           </div>
 
           <div class="mt-3 grid gap-3 md:grid-cols-2">
@@ -87,6 +96,20 @@
               </p>
             </div>
           </div>
+
+          {#if entry.usage}
+            <div class="mt-3 flex flex-wrap gap-2 text-[11px] text-aura-text-muted">
+              <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
+                Input {formatTokenCount(entry.usage.prompt_tokens)}
+              </span>
+              <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
+                Output {formatTokenCount(entry.usage.completion_tokens)}
+              </span>
+              <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
+                Total {formatTokenCount(entry.usage.total_tokens)}
+              </span>
+            </div>
+          {/if}
 
           <div class="mt-3 flex flex-wrap gap-2">
             <button

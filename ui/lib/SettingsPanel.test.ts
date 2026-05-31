@@ -60,6 +60,11 @@ const baseHistoryEntries = [
     target_lang: 'Chinese',
     provider: 'deepseek',
     model: 'deepseek-chat',
+    usage: {
+      prompt_tokens: 9,
+      completion_tokens: 4,
+      total_tokens: 13,
+    },
     status: 'success',
     created_at_ms: 1_717_171_717_000,
   },

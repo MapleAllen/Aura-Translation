@@ -179,7 +179,24 @@ Completed work:
 
 ---
 
-## Phase 10: Testing Strategy - PARTIAL
+## Phase 10: Usage Visibility - DONE
+
+Status: **Done**
+
+Goals:
+
+- Surface provider-reported token usage in the live bubble and recent history without coupling Aura to provider-specific pricing rules.
+
+Completed work:
+
+- Requested stream usage metadata from compatible providers.
+- Added `translation-usage` event delivery to the frontend.
+- Persisted usage snapshots on successful history entries for later inspection in Settings.
+- Kept pricing out of scope so the UI shows usage only, not currency estimates.
+
+---
+
+## Phase 11: Testing Strategy - PARTIAL
 
 Status: **Partial**
 

@@ -85,10 +85,16 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 - `emit_daemon_error()` pushes structured `daemon-error` events to the frontend
 - Used for tray-build failures, window creation failures, UI-ready timeout, hotkey restore failures, and pin-application failures
 
+**Usage telemetry**
+- Requests now ask compatible providers to include stream usage metadata.
+- The daemon emits `translation-usage` events when prompt, completion, and total token counts arrive.
+- Successful history entries persist the usage snapshot so Settings can show token summaries later without recalculating cost.
+
 **Exposed Tauri commands**
 - `get_config() -> AppConfig`
 - `get_provider_defaults(provider) -> ProviderDefaults`
 - `load_provider_api_key(provider) -> Result<String, String>`
+- `translation-usage` event payloads when supported by the active provider stream
 - `get_paste_back_status() -> Result<PasteBackStatus, String>`
 - `paste_translation_back(text) -> Result<(), String>`
 - `get_translation_profiles() -> TranslationProfilesStore`

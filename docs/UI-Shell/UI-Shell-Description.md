@@ -61,7 +61,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 
 - `ui/lib/TranslationPopup.svelte`
   - renders the minimal floating translation bubble
-  - exposes pin, retry, paste-back, copy, cancel, close, and pinned-mode draft editing controls
+  - exposes pin, retry, paste-back, copy, cancel, close, pinned-mode draft editing controls, and token usage badges when available
 
 - `ui/lib/SettingsPanel.svelte`
   - renders the dedicated settings form
@@ -75,7 +75,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 
 - `ui/lib/HistoryList.svelte`
   - renders the recent translation history list inside Settings
-  - exposes copy, retry, delete, and clear actions for the latest 50 history entries
+  - exposes copy, retry, delete, clear, and token usage summaries for the latest 50 history entries
 
 - `ui/lib/windowPlacement.ts`
   - converts current window physical geometry into logical coordinates and persists them through the backend

@@ -2,6 +2,8 @@
   /**
    * TranslationPopup - Minimal floating translation bubble.
    */
+  import type { TranslationUsage } from './translationHistory';
+
   type Props = {
     viewState: 'idle' | 'loading' | 'streaming' | 'result' | 'error';
     sourceText: string;
@@ -15,6 +17,7 @@
     errorMessage: string;
     showComposer: boolean;
     hasDraftChanges: boolean;
+    usage: TranslationUsage | null;
     canPasteBack: boolean;
     windowPinned: boolean;
     ondraftsourcechange?: (value: string) => void;
@@ -41,6 +44,7 @@
     errorMessage,
     showComposer,
     hasDraftChanges,
+    usage,
     canPasteBack,
     windowPinned,
     ondraftsourcechange,
@@ -189,6 +193,11 @@
                 Retry {retryAttempt}/3
               </span>
             {/if}
+            {#if usage}
+              <span class="rounded-full border border-aura-accent/25 bg-aura-accent-soft px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] text-aura-accent">
+                {usage.total_tokens.toLocaleString()} tokens
+              </span>
+            {/if}
           </div>
 
           {#if showComposer}
@@ -277,6 +286,19 @@
           <p class="select-text whitespace-pre-wrap text-[15px] leading-7 text-aura-text">
             {translatedText}{#if viewState === 'streaming'}<span class="ml-0.5 inline-block h-5 w-0.5 animate-pulse bg-aura-accent align-text-bottom"></span>{/if}
           </p>
+          {#if usage}
+            <div class="mt-4 flex flex-wrap gap-2 text-[11px] text-aura-text-muted">
+              <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
+                Input {usage.prompt_tokens.toLocaleString()}
+              </span>
+              <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
+                Output {usage.completion_tokens.toLocaleString()}
+              </span>
+              <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
+                Total {usage.total_tokens.toLocaleString()}
+              </span>
+            </div>
+          {/if}
         </div>
       {:else}
         <div class="flex min-h-[96px] w-full flex-1 items-center justify-center text-center">

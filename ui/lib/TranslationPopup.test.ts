@@ -17,6 +17,7 @@ describe('TranslationPopup', () => {
       errorMessage: '',
       showComposer: false,
       hasDraftChanges: false,
+      usage: null,
       canPasteBack: false,
       windowPinned: false,
       ondraftsourcechange: vi.fn(),
@@ -49,6 +50,11 @@ describe('TranslationPopup', () => {
       errorMessage: '',
       showComposer: false,
       hasDraftChanges: false,
+      usage: {
+        prompt_tokens: 9,
+        completion_tokens: 6,
+        total_tokens: 15,
+      },
       canPasteBack: true,
       windowPinned: false,
       ondraftsourcechange: vi.fn(),
@@ -64,6 +70,7 @@ describe('TranslationPopup', () => {
 
     const pinButton = screen.getByRole('button', { name: /pin/i });
     expect(pinButton).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText(/15 tokens/i)).toBeInTheDocument();
 
     await fireEvent.click(pinButton);
     expect(onTogglePinned).toHaveBeenCalledWith(true);
@@ -85,6 +92,7 @@ describe('TranslationPopup', () => {
       errorMessage: 'Translation failed.',
       showComposer: false,
       hasDraftChanges: false,
+      usage: null,
       canPasteBack: false,
       windowPinned: false,
       ondraftsourcechange: vi.fn(),
@@ -122,6 +130,7 @@ describe('TranslationPopup', () => {
       errorMessage: '',
       showComposer: false,
       hasDraftChanges: false,
+      usage: null,
       canPasteBack: true,
       windowPinned: false,
       ondraftsourcechange: vi.fn(),
@@ -157,6 +166,7 @@ describe('TranslationPopup', () => {
       errorMessage: '',
       showComposer: true,
       hasDraftChanges: true,
+      usage: null,
       canPasteBack: false,
       windowPinned: true,
       ondraftsourcechange,
