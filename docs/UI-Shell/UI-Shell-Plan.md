@@ -42,7 +42,13 @@ Ship a Windows-first two-window desktop shell where translation feels immediate 
 - The next translation start is the only event that overwrites the visible result state.
 - Hotkey recall reopens the bubble without forcing a new translation when the clipboard text is unchanged.
 
-### Phase 6: Remaining Enhancements - NOT STARTED
+### Phase 6: Named Translation Profiles - DONE
+
+- Settings now supports creating, renaming, activating, and deleting named translation profiles.
+- The tray menu now mirrors those profiles so users can switch provider, model, and language defaults without opening Settings.
+- Profile switching intentionally leaves global hotkeys and window placement untouched.
+
+### Phase 7: Remaining Enhancements - NOT STARTED
 
 - Add explicit retry state UI instead of console-only retry logging.
 - Add more keyboard-only controls inside both windows.

@@ -90,6 +90,7 @@ pub struct WindowPlacement {
 pub struct AppConfig {
     pub api_key: String,
     pub api_key_storage: ApiKeyStorage,
+    pub active_profile_id: String,
     pub model: String,
     pub source_lang: String,
     pub target_lang: String,
@@ -125,6 +126,8 @@ impl<'de> Deserialize<'de> for AppConfig {
             #[serde(default)]
             api_key: String,
             api_key_storage: Option<ApiKeyStorage>,
+            #[serde(default = "default_active_profile_id")]
+            active_profile_id: String,
             #[serde(default)]
             model: String,
             #[serde(default = "default_source_lang")]
@@ -155,6 +158,9 @@ impl<'de> Deserialize<'de> for AppConfig {
         }
         fn default_hotkey() -> String {
             "CmdOrCtrl+T".to_string()
+        }
+        fn default_active_profile_id() -> String {
+            "default".to_string()
         }
         fn default_aura_guard_enabled() -> bool {
             true
@@ -187,6 +193,7 @@ impl<'de> Deserialize<'de> for AppConfig {
         Ok(AppConfig {
             api_key: helper.api_key,
             api_key_storage,
+            active_profile_id: helper.active_profile_id,
             model,
             source_lang: helper.source_lang,
             target_lang: helper.target_lang,
@@ -211,6 +218,7 @@ impl Default for AppConfig {
         Self {
             api_key: String::new(),
             api_key_storage: ApiKeyStorage::System,
+            active_profile_id: "default".to_string(),
             model: "deepseek-chat".to_string(),
             source_lang: "auto".to_string(),
             target_lang: "Chinese".to_string(),
@@ -277,6 +285,7 @@ impl AppConfig {
             #[serde(skip_serializing_if = "Option::is_none")]
             api_key: Option<&'a str>,
             api_key_storage: ApiKeyStorage,
+            active_profile_id: &'a str,
             model: &'a str,
             source_lang: &'a str,
             target_lang: &'a str,
@@ -301,6 +310,7 @@ impl AppConfig {
                 None
             },
             api_key_storage: self.api_key_storage.clone(),
+            active_profile_id: &self.active_profile_id,
             model: &self.model,
             source_lang: &self.source_lang,
             target_lang: &self.target_lang,
@@ -335,6 +345,7 @@ mod tests {
         assert_eq!(c.hotkey, "CmdOrCtrl+T");
         assert_eq!(c.api_base_url, "https://api.deepseek.com");
         assert_eq!(c.api_key_storage, ApiKeyStorage::System);
+        assert_eq!(c.active_profile_id, "default");
         assert!(!c.aura_mode_enabled);
         assert!(c.aura_guard_enabled);
         assert!(!c.window_pinned);
@@ -355,6 +366,7 @@ mod tests {
         let config: AppConfig = serde_json::from_str(legacy_json).expect("should parse");
         assert_eq!(config.provider, Provider::DeepSeek);
         assert_eq!(config.api_key_storage, ApiKeyStorage::LegacyPlaintext);
+        assert_eq!(config.active_profile_id, "default");
         assert_eq!(config.api_base_url, "https://api.deepseek.com");
         assert!(!config.aura_mode_enabled);
         assert!(config.aura_guard_enabled);
@@ -369,6 +381,7 @@ mod tests {
         let original = AppConfig {
             api_key: "sk-abc".to_string(),
             api_key_storage: ApiKeyStorage::PlaintextFallback,
+            active_profile_id: "focus-jp".to_string(),
             model: "mistral".to_string(),
             source_lang: "English".to_string(),
             target_lang: "Japanese".to_string(),
@@ -398,6 +411,7 @@ mod tests {
         let restored: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.provider, Provider::Ollama);
         assert_eq!(restored.api_key_storage, ApiKeyStorage::PlaintextFallback);
+        assert_eq!(restored.active_profile_id, "focus-jp");
         assert!(restored.aura_mode_enabled);
         assert!(!restored.aura_guard_enabled);
         assert!(restored.window_pinned);

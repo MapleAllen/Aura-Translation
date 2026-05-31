@@ -11,6 +11,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 const baseConfig = {
   api_key: 'sk-test',
   api_key_storage: 'system',
+  active_profile_id: 'default',
   model: 'deepseek-chat',
   source_lang: 'auto',
   target_lang: 'Chinese',
@@ -64,6 +65,24 @@ const baseHistoryEntries = [
   },
 ];
 
+const baseProfileStore = {
+  active_profile_id: 'default',
+  profiles: [
+    {
+      id: 'default',
+      name: 'Default',
+      api_key: '',
+      api_key_storage: 'system',
+      model: 'deepseek-chat',
+      source_lang: 'auto',
+      target_lang: 'Chinese',
+      provider: 'deepseek',
+      api_base_url: 'https://api.deepseek.com',
+      available_models: ['deepseek-chat', 'deepseek-reasoner'],
+    },
+  ],
+};
+
 describe('SettingsPanel', () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -75,6 +94,8 @@ describe('SettingsPanel', () => {
           return Promise.resolve(readyStatus);
         case 'get_translation_history':
           return Promise.resolve(baseHistoryEntries);
+        case 'get_translation_profiles':
+          return Promise.resolve(baseProfileStore);
         case 'get_provider_defaults':
           if (payload?.provider === 'ollama') {
             return Promise.resolve({
@@ -101,6 +122,11 @@ describe('SettingsPanel', () => {
           return Promise.resolve([]);
         case 'clear_translation_history':
           return Promise.resolve([]);
+        case 'create_translation_profile':
+        case 'rename_translation_profile':
+        case 'activate_translation_profile':
+        case 'delete_translation_profile':
+          return Promise.resolve(baseProfileStore);
         default:
           return Promise.resolve(undefined);
       }
@@ -122,9 +148,11 @@ describe('SettingsPanel', () => {
       'Could not register "Alt+Shift+T"',
     );
     expect(screen.getByTestId('history-list')).toHaveTextContent('Hello world');
+    expect(screen.getByTestId('profile-list')).toHaveTextContent('Default');
     expect(invokeMock).toHaveBeenCalledWith('get_config');
     expect(invokeMock).toHaveBeenCalledWith('get_runtime_status');
     expect(invokeMock).toHaveBeenCalledWith('get_translation_history');
+    expect(invokeMock).toHaveBeenCalledWith('get_translation_profiles');
   });
 
   it('hides API key storage messaging for ollama', async () => {
@@ -147,6 +175,8 @@ describe('SettingsPanel', () => {
           });
         case 'get_translation_history':
           return Promise.resolve(baseHistoryEntries);
+        case 'get_translation_profiles':
+          return Promise.resolve(baseProfileStore);
         case 'get_provider_defaults':
           if (payload?.provider === 'ollama') {
             return Promise.resolve({
@@ -319,6 +349,8 @@ describe('SettingsPanel', () => {
           return Promise.resolve(needsSetupStatus);
         case 'get_translation_history':
           return Promise.resolve(baseHistoryEntries);
+        case 'get_translation_profiles':
+          return Promise.resolve(baseProfileStore);
         default:
           return Promise.resolve(undefined);
       }
@@ -374,6 +406,68 @@ describe('SettingsPanel', () => {
     });
     await waitFor(() => {
       expect(screen.getByDisplayValue('sk-loaded')).toBeInTheDocument();
+    });
+  });
+
+  it('creates and renames translation profiles', async () => {
+    invokeMock.mockImplementation((command: string, payload?: { config?: typeof baseConfig; name?: string }) => {
+      switch (command) {
+        case 'get_config':
+          return Promise.resolve(baseConfig);
+        case 'get_runtime_status':
+          return Promise.resolve(readyStatus);
+        case 'get_translation_history':
+          return Promise.resolve(baseHistoryEntries);
+        case 'get_translation_profiles':
+          return Promise.resolve(baseProfileStore);
+        case 'create_translation_profile':
+          return Promise.resolve({
+            active_profile_id: 'focus-jp',
+            profiles: [
+              {
+                ...baseProfileStore.profiles[0],
+                id: 'focus-jp',
+                name: payload?.name ?? 'Focus JP',
+                target_lang: payload?.config?.target_lang ?? 'Chinese',
+              },
+              ...baseProfileStore.profiles,
+            ],
+          });
+        case 'rename_translation_profile':
+          return Promise.resolve({
+            ...baseProfileStore,
+            profiles: [{ ...baseProfileStore.profiles[0], name: payload?.name ?? 'Renamed' }],
+          });
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+
+    render(SettingsPanel, {
+      visible: true,
+      onclose: () => {},
+      hotkeyConflictMessage: '',
+    });
+
+    await fireEvent.input(await screen.findByPlaceholderText('Profile name'), {
+      target: { value: 'Focus JP' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: /save as new/i }));
+    expect(invokeMock).toHaveBeenCalledWith(
+      'create_translation_profile',
+      expect.objectContaining({
+        name: 'Focus JP',
+        config: expect.objectContaining({ active_profile_id: 'default' }),
+      }),
+    );
+
+    await fireEvent.input(screen.getByPlaceholderText('Profile name'), {
+      target: { value: 'Renamed' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: /rename active/i }));
+    expect(invokeMock).toHaveBeenCalledWith('rename_translation_profile', {
+      profileId: 'focus-jp',
+      name: 'Renamed',
     });
   });
 

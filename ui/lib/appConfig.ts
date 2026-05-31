@@ -12,6 +12,7 @@ export type WindowPlacement = {
 export type AppConfig = {
   api_key: string;
   api_key_storage: ApiKeyStorage;
+  active_profile_id: string;
   model: string;
   source_lang: string;
   target_lang: string;
@@ -30,6 +31,7 @@ export function createDefaultAppConfig(): AppConfig {
   return {
     api_key: '',
     api_key_storage: 'system',
+    active_profile_id: 'default',
     model: 'deepseek-chat',
     source_lang: 'auto',
     target_lang: 'Chinese',

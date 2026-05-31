@@ -6,6 +6,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import HistoryList from './HistoryList.svelte';
   import LanguageSelector from './LanguageSelector.svelte';
+  import ProfileManager from './ProfileManager.svelte';
   import SetupStatusCard from './SetupStatusCard.svelte';
   import type { ApiKeyStorage, AppConfig, Provider } from './appConfig';
   import { cloneAppConfig, createDefaultAppConfig } from './appConfig';
@@ -15,6 +16,7 @@
   } from './notifications';
   import type { ProviderProbeResult, RuntimeStatus } from './runtimeStatus';
   import type { TranslationHistoryEntry } from './translationHistory';
+  import type { TranslationProfilesStore } from './translationProfiles';
 
   const PROVIDER_OPTIONS: { value: Provider; label: string }[] = [
     { value: 'deepseek', label: 'DeepSeek (api.deepseek.com)' },
@@ -47,6 +49,8 @@
   let hotkeyInputMessage = $state('');
   let isCapturingHotkey = $state(false);
   let historyEntries = $state<TranslationHistoryEntry[]>([]);
+  let profileStore = $state<TranslationProfilesStore | null>(null);
+  let profileDraftName = $state('');
   let runtimeStatus = $state<RuntimeStatus | null>(null);
   let probeResult = $state<ProviderProbeResult | null>(null);
 
@@ -65,10 +69,11 @@
     saveErrorMessage = '';
     probeResult = null;
     try {
-      const [loaded, nextRuntimeStatus, nextHistoryEntries] = await Promise.all([
+      const [loaded, nextRuntimeStatus, nextHistoryEntries, nextProfileStore] = await Promise.all([
         invoke<AppConfig>('get_config'),
         invoke<RuntimeStatus>('get_runtime_status'),
         invoke<TranslationHistoryEntry[]>('get_translation_history'),
+        invoke<TranslationProfilesStore>('get_translation_profiles'),
       ]);
       config = cloneAppConfig(loaded);
       if (config.api_key_storage === 'legacy_plaintext') {
@@ -76,10 +81,20 @@
       }
       runtimeStatus = nextRuntimeStatus;
       historyEntries = nextHistoryEntries;
+      profileStore = nextProfileStore;
+      profileDraftName = getActiveProfileName(nextProfileStore);
     } catch (e) {
-      panelErrorMessage = 'Failed to load settings or translation history from the desktop backend.';
+      panelErrorMessage = 'Failed to load settings, profiles, or translation history from the desktop backend.';
       console.error('Failed to load config:', { error: e });
     }
+  }
+
+  function getActiveProfileName(store: TranslationProfilesStore | null): string {
+    if (!store) {
+      return '';
+    }
+
+    return store.profiles.find((profile) => profile.id === store.active_profile_id)?.name ?? '';
   }
 
   async function handleProviderChange(newProvider: Provider) {
@@ -144,6 +159,72 @@
     } catch (e) {
       panelErrorMessage = 'Failed to clear translation history.';
       console.error('Failed to clear history:', { error: e });
+    }
+  }
+
+  async function createProfile() {
+    if (!profileDraftName.trim()) {
+      panelErrorMessage = 'Enter a profile name before saving a new profile.';
+      return;
+    }
+
+    try {
+      profileStore = await invoke<TranslationProfilesStore>('create_translation_profile', {
+        config: cloneAppConfig(config),
+        name: profileDraftName.trim(),
+      });
+      const refreshedConfig = await invoke<AppConfig>('get_config');
+      config = cloneAppConfig(refreshedConfig);
+      profileDraftName = getActiveProfileName(profileStore);
+    } catch (e) {
+      panelErrorMessage = 'Failed to create the translation profile.';
+      console.error('Failed to create profile:', { error: e });
+    }
+  }
+
+  async function renameActiveProfile(profileId: string) {
+    if (!profileDraftName.trim()) {
+      panelErrorMessage = 'Enter a profile name before renaming the active profile.';
+      return;
+    }
+
+    try {
+      profileStore = await invoke<TranslationProfilesStore>('rename_translation_profile', {
+        profileId,
+        name: profileDraftName.trim(),
+      });
+      profileDraftName = getActiveProfileName(profileStore);
+    } catch (e) {
+      panelErrorMessage = 'Failed to rename the active translation profile.';
+      console.error('Failed to rename profile:', { error: e });
+    }
+  }
+
+  async function activateProfile(profileId: string) {
+    try {
+      profileStore = await invoke<TranslationProfilesStore>('activate_translation_profile', {
+        profileId,
+      });
+      const refreshedConfig = await invoke<AppConfig>('get_config');
+      config = cloneAppConfig(refreshedConfig);
+      profileDraftName = getActiveProfileName(profileStore);
+    } catch (e) {
+      panelErrorMessage = 'Failed to activate the selected translation profile.';
+      console.error('Failed to activate profile:', { error: e });
+    }
+  }
+
+  async function deleteProfile(profileId: string) {
+    try {
+      profileStore = await invoke<TranslationProfilesStore>('delete_translation_profile', {
+        profileId,
+      });
+      const refreshedConfig = await invoke<AppConfig>('get_config');
+      config = cloneAppConfig(refreshedConfig);
+      profileDraftName = getActiveProfileName(profileStore);
+    } catch (e) {
+      panelErrorMessage = 'Failed to delete the selected translation profile.';
+      console.error('Failed to delete profile:', { error: e });
     }
   }
 
@@ -276,6 +357,18 @@
         testing={testingProvider}
         {probeResult}
         ontest={handleProviderProbe}
+      />
+
+      <ProfileManager
+        store={profileStore}
+        draftName={profileDraftName}
+        ondraftnamechange={(value) => {
+          profileDraftName = value;
+        }}
+        oncreate={createProfile}
+        onrename={renameActiveProfile}
+        onactivate={activateProfile}
+        ondelete={deleteProfile}
       />
 
       <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">

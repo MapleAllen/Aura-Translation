@@ -278,6 +278,7 @@ mod tests {
         AppConfig {
             api_key: "sk-test".to_string(),
             api_key_storage: ApiKeyStorage::System,
+            active_profile_id: "default".to_string(),
             model: "deepseek-chat".to_string(),
             source_lang: "auto".to_string(),
             target_lang: "Chinese".to_string(),

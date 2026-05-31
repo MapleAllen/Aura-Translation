@@ -6,16 +6,19 @@ Daemon Core
 
 ## Purpose
 
-The Daemon Core is the system-facing runtime for Aura Translation. It owns startup, tray integration, global hotkey registration, lazy main-window creation, window positioning, config persistence, and the backend commands the frontend consumes. Its job is to keep the app effectively invisible until the user triggers translation or opens Settings, while still exposing enough control to support pinned-window comparison and provider-backed streaming translation.
+The Daemon Core is the system-facing runtime for Aura Translation. It owns startup, tray integration, global hotkey registration, lazy window creation, window positioning, config persistence, translation-profile switching, and the backend commands the frontend consumes. Its job is to keep the app effectively invisible until the user triggers translation or opens Settings, while still exposing enough control to support pinned-window comparison and provider-backed streaming translation.
 
 ## Current Implementation
 
-The entry point is `src-tauri/src/lib.rs::run()`, called from `main.rs`. At startup it creates four managed state objects:
+The entry point is `src-tauri/src/lib.rs::run()`, called from `main.rs`. At startup it creates multiple managed state objects:
 
 - a shared `reqwest::Client`
 - a `CancellationRegistry`
 - a `ConfigState` (`Arc<RwLock<AppConfig>>`)
-- a `UiReadyState` (`Arc<RwLock<bool>>`)
+- a `HistoryState`
+- a `ProfilesState`
+- a `UiReadyState`
+- a `RuntimeState`
 
 The Tauri builder registers the clipboard manager plugin and, on desktop targets, the global shortcut plugin with a builder-level handler. That handler reads clipboard text on shortcut press and ignores blank content. Instead of assuming the main window already exists, the daemon calls `show_translation_window()` or `show_settings_window()`, both of which ensure the `main` webview exists, apply current window preferences, show and focus the window, wait up to 5 seconds for the frontend to call `mark_ui_ready`, and only then emit the corresponding frontend event.
 
@@ -50,6 +53,7 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 - Tooltip: `Aura Translation`
 - Left click: recalls the latest translation bubble, or opens Settings when Aura still needs setup
 - Menu actions:
+  - `Profiles`: checked submenu for switching the active translation profile
   - `Settings`: opens the dedicated settings window
   - `Quit`: calls `app.exit(0)`
 
@@ -58,11 +62,12 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 - Lets the frontend decide whether blur should dismiss the shell based on settings visibility and pin state
 
 **Config persistence**
-- `AppConfig` fields: `api_key`, `api_key_storage`, `model`, `source_lang`, `target_lang`, `hotkey`, `window_pinned`, `provider`, `api_base_url`, `available_models`
+- `AppConfig` fields: `api_key`, `api_key_storage`, `active_profile_id`, `model`, `source_lang`, `target_lang`, `hotkey`, `window_pinned`, `provider`, `api_base_url`, `available_models`
 - Config path: `{config_dir}/aura-translation/config.json`
 - Provider API keys default to the system credential store on supported desktop builds; `config.json` keeps an explicit plaintext fallback mode only when the user selects it
 - Defaults are provider-aware through custom `Deserialize`
 - Saves are atomic from the filesystem perspective: write to `config.json.tmp`, then rename into place
+- Named translation profiles are stored separately in `{config_dir}/aura-translation/profiles.json`
 
 **Hotkey re-registration**
 - If `hotkey` changes, `save_config` unregisters all current shortcuts, validates and registers the new one, then persists config
@@ -78,6 +83,11 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 - `get_config() -> AppConfig`
 - `get_provider_defaults(provider) -> ProviderDefaults`
 - `load_provider_api_key(provider) -> Result<String, String>`
+- `get_translation_profiles() -> TranslationProfilesStore`
+- `create_translation_profile(config, name) -> Result<TranslationProfilesStore, String>`
+- `rename_translation_profile(profile_id, name) -> Result<TranslationProfilesStore, String>`
+- `activate_translation_profile(profile_id) -> Result<TranslationProfilesStore, String>`
+- `delete_translation_profile(profile_id) -> Result<TranslationProfilesStore, String>`
 - `mark_ui_ready()`
 - `save_config(config: AppConfig) -> Result<(), String>`
 - `translate_text(...)`
@@ -108,6 +118,10 @@ Single Tauri application bootstrap in `lib.rs` with companion modules for config
   - one-time migration of legacy plaintext keys
   - provider-scoped secret load/save/delete helpers used by config persistence
 
+- `profiles.rs`
+  - profile snapshot/load/save helpers
+  - active-profile sync between `profiles.json`, `AppConfig`, and tray switching
+
 - `hotkey.rs`
   - `parse_hotkey()`: parses Electron-style accelerator strings requiring at least one modifier plus an alphanumeric key
 
@@ -119,22 +133,21 @@ Single Tauri application bootstrap in `lib.rs` with companion modules for config
 
 ### Window Configuration (`src-tauri/tauri.conf.json`)
 
-- `label: "main"`
-- `width: 640`, `height: 460`
-- `minWidth: 560`, `minHeight: 380`
-- `decorations: false`
-- `transparent: true`
-- `alwaysOnTop: false` at config level; pinning is applied dynamically at runtime
-- `skipTaskbar: true`
-- `resizable: true`
-- `create: false`
-- `visible: false`
+- `label: "translation"` for the floating translation bubble
+- `label: "settings"` for the dedicated tool window
+- both windows are frameless, transparent, hidden at startup, and skipped from the taskbar
+- pinning remains runtime-controlled rather than fixed in static config
 
 ### Integration Points
 
 - `ui/routes/+page.svelte`
   - `invoke('get_config')`
   - `invoke('save_config', { config })`
+  - `invoke('get_translation_profiles')`
+  - `invoke('create_translation_profile', { config, name })`
+  - `invoke('rename_translation_profile', { profileId, name })`
+  - `invoke('activate_translation_profile', { profileId })`
+  - `invoke('delete_translation_profile', { profileId })`
   - `invoke('mark_ui_ready')`
   - `listen('trigger-translate')`
   - `listen('show-settings')`
@@ -160,6 +173,7 @@ Single Tauri application bootstrap in `lib.rs` with companion modules for config
 
 - Add cursor-aware multi-monitor positioning and taskbar-edge detection.
 - Emit config load failures through the same structured daemon event pathway used elsewhere.
-- Add richer tray status/actions beyond the current recall and setup shortcuts.
+- Add richer tray status/actions beyond the current recall, setup, and profile switching shortcuts.
+- Add history access directly into the tray alongside profile switching.
 - Add rotating daemon logs in the app data directory.
 - Make window offsets user-configurable in `AppConfig`.

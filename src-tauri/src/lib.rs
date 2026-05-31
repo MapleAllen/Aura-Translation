@@ -2,6 +2,7 @@ mod aura_guard;
 mod config;
 mod history;
 mod hotkey;
+mod profiles;
 mod readiness;
 mod secrets;
 mod translate;
@@ -12,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, PhysicalPosition, State,
     WebviewWindow, WebviewWindowBuilder, WindowEvent,
@@ -30,6 +31,7 @@ use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
 
 const TRANSLATION_WINDOW_LABEL: &str = "translation";
 const SETTINGS_WINDOW_LABEL: &str = "settings";
+const TRAY_ID: &str = "main";
 const DEFAULT_TRANSLATION_WIDTH: f64 = 360.0;
 const DEFAULT_TRANSLATION_HEIGHT: f64 = 164.0;
 const SETTINGS_EDGE_MARGIN: f64 = 18.0;
@@ -38,6 +40,7 @@ const TRANSLATION_CURSOR_GAP: f64 = 18.0;
 
 type ConfigState = Arc<RwLock<AppConfig>>;
 type HistoryState = Arc<Mutex<history::TranslationHistoryStore>>;
+type ProfilesState = Arc<RwLock<profiles::TranslationProfilesStore>>;
 type UiReadyState = Arc<RwLock<HashSet<String>>>;
 type RuntimeState = Arc<Mutex<AppRuntimeState>>;
 
@@ -114,6 +117,100 @@ fn get_provider_defaults(provider: Provider) -> ProviderDefaults {
 #[tauri::command]
 fn load_provider_api_key(provider: Provider) -> Result<String, String> {
     secrets::load_provider_api_key(&provider)
+}
+
+#[tauri::command]
+fn get_translation_profiles(state: State<'_, ProfilesState>) -> profiles::TranslationProfilesStore {
+    state.read().unwrap().snapshot()
+}
+
+#[tauri::command]
+fn create_translation_profile(
+    app: AppHandle,
+    config_state: State<'_, ConfigState>,
+    profiles_state: State<'_, ProfilesState>,
+    mut config: AppConfig,
+    name: String,
+) -> Result<profiles::TranslationProfilesStore, String> {
+    let old_config = config_state.read().unwrap().clone();
+    profiles_state
+        .write()
+        .unwrap()
+        .create_and_activate(name.trim(), &mut config)?;
+    persist_config_and_sync(
+        &app,
+        &config_state,
+        &profiles_state,
+        &old_config,
+        &mut config,
+    )?;
+    sync_tray_menu(&app)?;
+    Ok(profiles_state.read().unwrap().snapshot())
+}
+
+#[tauri::command]
+fn rename_translation_profile(
+    app: AppHandle,
+    profiles_state: State<'_, ProfilesState>,
+    profile_id: String,
+    name: String,
+) -> Result<profiles::TranslationProfilesStore, String> {
+    profiles_state
+        .write()
+        .unwrap()
+        .rename(&profile_id, name.trim())?;
+    sync_tray_menu(&app)?;
+    Ok(profiles_state.read().unwrap().snapshot())
+}
+
+#[tauri::command]
+fn activate_translation_profile(
+    app: AppHandle,
+    config_state: State<'_, ConfigState>,
+    profiles_state: State<'_, ProfilesState>,
+    profile_id: String,
+) -> Result<profiles::TranslationProfilesStore, String> {
+    let old_config = config_state.read().unwrap().clone();
+    let mut next_config = old_config.clone();
+    profiles_state
+        .write()
+        .unwrap()
+        .activate(&profile_id, &mut next_config)?;
+    secrets::hydrate_api_key(&mut next_config)?;
+    persist_config_and_sync(
+        &app,
+        &config_state,
+        &profiles_state,
+        &old_config,
+        &mut next_config,
+    )?;
+    sync_tray_menu(&app)?;
+    Ok(profiles_state.read().unwrap().snapshot())
+}
+
+#[tauri::command]
+fn delete_translation_profile(
+    app: AppHandle,
+    config_state: State<'_, ConfigState>,
+    profiles_state: State<'_, ProfilesState>,
+    profile_id: String,
+) -> Result<profiles::TranslationProfilesStore, String> {
+    let old_config = config_state.read().unwrap().clone();
+    let mut next_config = old_config.clone();
+    profiles_state
+        .write()
+        .unwrap()
+        .delete(&profile_id, &mut next_config)?;
+    secrets::hydrate_api_key(&mut next_config)?;
+    persist_config_and_sync(
+        &app,
+        &config_state,
+        &profiles_state,
+        &old_config,
+        &mut next_config,
+    )?;
+    sync_tray_menu(&app)?;
+    Ok(profiles_state.read().unwrap().snapshot())
 }
 
 #[tauri::command]
@@ -247,6 +344,7 @@ fn realign_translation_window(
 fn save_config(
     app: AppHandle,
     state: State<'_, ConfigState>,
+    profiles_state: State<'_, ProfilesState>,
     config: AppConfig,
 ) -> Result<(), String> {
     let old_config = state.read().unwrap().clone();
@@ -254,7 +352,8 @@ fn save_config(
     let mut next_config = config;
 
     if old_hotkey == next_config.hotkey {
-        persist_config_and_sync(&app, &state, &old_config, &mut next_config)?;
+        persist_config_and_sync(&app, &state, &profiles_state, &old_config, &mut next_config)?;
+        sync_tray_menu(&app)?;
         return Ok(());
     }
 
@@ -285,7 +384,9 @@ fn save_config(
         return Err(format!("Hotkey save rejected: {}", e));
     }
 
-    if let Err(e) = persist_config_and_sync(&app, &state, &old_config, &mut next_config) {
+    if let Err(e) =
+        persist_config_and_sync(&app, &state, &profiles_state, &old_config, &mut next_config)
+    {
         emit_daemon_error(
             &app,
             "config-or-secret-save-failed",
@@ -312,6 +413,7 @@ fn save_config(
         return Err(format!("Failed to save config: {}", e));
     }
 
+    sync_tray_menu(&app)?;
     emit_hotkey_registered(&app, &next_config.hotkey);
     Ok(())
 }
@@ -325,11 +427,16 @@ fn save_config(_app: AppHandle, config: AppConfig) -> Result<(), String> {
 fn persist_config_and_sync(
     app: &AppHandle,
     state: &State<'_, ConfigState>,
+    profiles_state: &State<'_, ProfilesState>,
     old_config: &AppConfig,
     config: &mut AppConfig,
 ) -> Result<(), String> {
     secrets::persist_api_key(config, old_config)?;
     config.save()?;
+    profiles_state
+        .write()
+        .unwrap()
+        .sync_active_profile_from_config(config)?;
     *state.write().unwrap() = config.clone();
     sync_existing_windows(app, config);
     emit_config_updated(app, config);
@@ -340,17 +447,28 @@ fn current_config(app: &AppHandle) -> AppConfig {
     app.state::<ConfigState>().read().unwrap().clone()
 }
 
-fn initialize_config_secrets(app: &AppHandle) -> Result<(), String> {
-    let state = app.state::<ConfigState>();
-    let mut config = state.read().unwrap().clone();
+fn initialize_profiles_and_secrets(app: &AppHandle) -> Result<(), String> {
+    let config_state = app.state::<ConfigState>();
+    let profiles_state = app.state::<ProfilesState>();
+    let mut config = config_state.read().unwrap().clone();
+
+    profiles_state
+        .write()
+        .unwrap()
+        .ensure_seeded_from_config(&mut config)?;
+
     let migrated = secrets::migrate_legacy_plaintext_key(&mut config)?;
     secrets::hydrate_api_key(&mut config)?;
+    profiles_state
+        .write()
+        .unwrap()
+        .sync_active_profile_from_config(&config)?;
 
     if migrated {
         config.save()?;
     }
 
-    *state.write().unwrap() = config.clone();
+    *config_state.write().unwrap() = config.clone();
 
     if migrated {
         emit_config_updated(app, &config);
@@ -859,6 +977,79 @@ async fn handle_tray_primary_action(app: AppHandle) {
     show_existing_translation_window(app).await;
 }
 
+fn activate_profile_by_id(app: &AppHandle, profile_id: &str) -> Result<(), String> {
+    let config_state = app.state::<ConfigState>();
+    let profiles_state = app.state::<ProfilesState>();
+    let old_config = config_state.read().unwrap().clone();
+    let mut next_config = old_config.clone();
+    profiles_state
+        .write()
+        .unwrap()
+        .activate(profile_id, &mut next_config)?;
+    secrets::hydrate_api_key(&mut next_config)?;
+    persist_config_and_sync(
+        app,
+        &config_state,
+        &profiles_state,
+        &old_config,
+        &mut next_config,
+    )?;
+    sync_tray_menu(app)?;
+    Ok(())
+}
+
+fn build_tray_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String> {
+    let profiles_snapshot = app.state::<ProfilesState>().read().unwrap().snapshot();
+    let mut profile_items = Vec::new();
+    for profile in &profiles_snapshot.profiles {
+        profile_items.push(
+            CheckMenuItem::with_id(
+                app,
+                format!("profile:{}", profile.id),
+                &profile.name,
+                true,
+                profile.id == profiles_snapshot.active_profile_id,
+                None::<&str>,
+            )
+            .map_err(|e| {
+                format!(
+                    "Failed to build tray Profile item '{}': {}",
+                    profile.name, e
+                )
+            })?,
+        );
+    }
+
+    let profile_refs: Vec<&dyn IsMenuItem<_>> = profile_items
+        .iter()
+        .map(|item| item as &dyn IsMenuItem<_>)
+        .collect();
+    let profiles_submenu = Submenu::with_items(app, "Profiles", true, &profile_refs)
+        .map_err(|e| format!("Failed to build tray Profiles submenu: {}", e))?;
+    let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)
+        .map_err(|e| format!("Failed to build tray Settings item: {}", e))?;
+    let separator = PredefinedMenuItem::separator(app)
+        .map_err(|e| format!("Failed to build tray separator: {}", e))?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)
+        .map_err(|e| format!("Failed to build tray Quit item: {}", e))?;
+
+    Menu::with_items(
+        app,
+        &[&profiles_submenu, &settings_item, &separator, &quit_item],
+    )
+    .map_err(|e| format!("Failed to build tray menu: {}", e))
+}
+
+fn sync_tray_menu(app: &AppHandle) -> Result<(), String> {
+    let menu = build_tray_menu(app)?;
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return Ok(());
+    };
+
+    tray.set_menu(Some(menu))
+        .map_err(|e| format!("Failed to refresh the tray menu: {}", e))
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn restore_previous_hotkey(app: &AppHandle, hotkey: &str) {
     match hotkey::parse_hotkey(hotkey) {
@@ -892,22 +1083,14 @@ fn restore_previous_hotkey(app: &AppHandle, hotkey: &str) {
 }
 
 fn build_tray(app: &AppHandle) -> Result<(), String> {
-    let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)
-        .map_err(|e| format!("Failed to build tray Settings item: {}", e))?;
-    let separator = PredefinedMenuItem::separator(app)
-        .map_err(|e| format!("Failed to build tray separator: {}", e))?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)
-        .map_err(|e| format!("Failed to build tray Quit item: {}", e))?;
-
-    let menu = Menu::with_items(app, &[&settings_item, &separator, &quit_item])
-        .map_err(|e| format!("Failed to build tray menu: {}", e))?;
+    let menu = build_tray_menu(app)?;
 
     let icon = app
         .default_window_icon()
         .cloned()
         .ok_or_else(|| "Default window icon is missing.".to_string())?;
 
-    let _tray = TrayIconBuilder::new()
+    let _tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .menu(&menu)
         .tooltip("Aura Translation")
@@ -921,6 +1104,15 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
             }
             "quit" => {
                 app.exit(0);
+            }
+            id if id.starts_with("profile:") => {
+                let app_handle = app.clone();
+                let profile_id = id.trim_start_matches("profile:").to_string();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(err) = activate_profile_by_id(&app_handle, &profile_id) {
+                        emit_daemon_error(&app_handle, "profile-activate-failed", err, true);
+                    }
+                });
             }
             _ => {}
         })
@@ -1144,7 +1336,10 @@ pub fn run() {
     let http_client = reqwest::Client::new();
     let cancel_registry: CancellationRegistry = Arc::new(Mutex::new(HashMap::new()));
     let config_state: ConfigState = Arc::new(RwLock::new(AppConfig::load()));
-    let history_state: HistoryState = Arc::new(Mutex::new(history::TranslationHistoryStore::load()));
+    let history_state: HistoryState =
+        Arc::new(Mutex::new(history::TranslationHistoryStore::load()));
+    let profiles_state: ProfilesState =
+        Arc::new(RwLock::new(profiles::TranslationProfilesStore::load()));
     let ui_ready_state: UiReadyState = Arc::new(RwLock::new(HashSet::new()));
     let runtime_state: RuntimeState = Arc::new(Mutex::new(AppRuntimeState::default()));
 
@@ -1153,6 +1348,7 @@ pub fn run() {
         .manage(cancel_registry)
         .manage(config_state.clone())
         .manage(history_state)
+        .manage(profiles_state)
         .manage(ui_ready_state)
         .manage(runtime_state)
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -1179,6 +1375,11 @@ pub fn run() {
             get_config,
             get_provider_defaults,
             load_provider_api_key,
+            get_translation_profiles,
+            create_translation_profile,
+            rename_translation_profile,
+            activate_translation_profile,
+            delete_translation_profile,
             get_translation_history,
             delete_translation_history_entry,
             clear_translation_history,
@@ -1194,7 +1395,7 @@ pub fn run() {
             translate::cancel_translate
         ])
         .setup(|app| {
-            if let Err(err) = initialize_config_secrets(app.app_handle()) {
+            if let Err(err) = initialize_profiles_and_secrets(app.app_handle()) {
                 emit_daemon_error(app.app_handle(), "secret-storage-init-failed", err, true);
             }
 

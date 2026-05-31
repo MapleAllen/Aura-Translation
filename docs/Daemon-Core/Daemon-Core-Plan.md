@@ -145,7 +145,24 @@ Completed work:
 
 ---
 
-## Phase 8: Testing Strategy - PARTIAL
+## Phase 8: Named Translation Profiles - DONE
+
+Status: **Done**
+
+Goals:
+
+- Let Aura keep multiple provider/model/language presets and switch them from both Settings and the tray.
+
+Completed work:
+
+- Added `profiles.rs` with a dedicated `profiles.json` store and active-profile synchronization.
+- Added profile CRUD commands for the Settings window.
+- Added a tray `Profiles` submenu with checked active-state switching.
+- Kept hotkeys and window placement global while profile state remains translation-scoped.
+
+---
+
+## Phase 9: Testing Strategy - PARTIAL
 
 Status: **Partial**
 

@@ -9,7 +9,7 @@ UI Shell
 The UI Shell is the desktop surface for Aura Translation. It now exposes two coordinated windows:
 
 1. **Translation window**: a minimal floating bubble that appears near the cursor, streams translated text, can be pinned, resized, dragged, hidden, and recalled without losing the last result.
-2. **Settings window**: a separate movable tool window opened from the tray, used to configure provider access, default language pair, hotkey, Aura mode, and pinned-window behavior.
+2. **Settings window**: a separate movable tool window opened from the tray, used to configure provider access, named translation profiles, default language pair, hotkey, Aura mode, and pinned-window behavior.
 
 The shell remains tray-driven and daemon-backed, but it no longer treats Settings as an overlay inside the translation surface.
 
@@ -63,7 +63,13 @@ Tauri creates the hidden translation window during startup and lazily creates th
 
 - `ui/lib/SettingsPanel.svelte`
   - renders the dedicated settings form
-  - now includes default language pair and Aura mode configuration in addition to provider, API key, model, hotkey, pin behavior, and recent translation history actions
+  - now includes named translation profiles, default language pair, Aura mode configuration, provider settings, API key storage, hotkey, pin behavior, and recent translation history actions
+
+- `ui/lib/ProfileManager.svelte`
+  - renders profile create, rename, activate, and delete controls inside Settings
+
+- `ui/lib/translationProfiles.ts`
+  - defines the typed profile store shape shared by the Settings shell and backend commands
 
 - `ui/lib/HistoryList.svelte`
   - renders the recent translation history list inside Settings
@@ -97,6 +103,11 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - `invoke('delete_translation_history_entry', { entryId })`
 - `invoke('clear_translation_history')`
 - `invoke('replay_translation_history_entry', { entryId })`
+- `invoke('get_translation_profiles')`
+- `invoke('create_translation_profile', { config, name })`
+- `invoke('rename_translation_profile', { profileId, name })`
+- `invoke('activate_translation_profile', { profileId })`
+- `invoke('delete_translation_profile', { profileId })`
 - `invoke('mark_ui_ready')`
 - `listen('trigger-translate')`
 - `listen('show-existing-translation')`
@@ -115,6 +126,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - Clipboard auto-trigger intentionally ignores repeated copies of identical text until a different text arrives or the user uses the hotkey fallback.
 - The cursor-near bubble uses cursor position rather than exact cross-application text selection bounds.
 - Translation history is currently managed from Settings only; the tray still does not expose recent entries directly.
+- Translation profiles intentionally scope only translation provider and language defaults; hotkey and window placement stay global.
 
 ## Future Directions
 
