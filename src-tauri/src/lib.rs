@@ -11,7 +11,7 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::TrayIconBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, PhysicalPosition, State,
     WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
@@ -20,6 +20,8 @@ use translate::CancellationRegistry;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use tauri_plugin_notification::NotificationExt;
 
 #[cfg(windows)]
 use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
@@ -306,11 +308,19 @@ fn emit_daemon_error(
 }
 
 fn emit_aura_guard_blocked(app: &AppHandle, reason: impl Into<String>) {
+    let reason = reason.into();
     let _ = app.emit(
         "aura-guard-blocked",
         AuraGuardBlockedPayload {
-            reason: reason.into(),
+            reason: reason.clone(),
         },
+    );
+
+    notify_shell_background(
+        app,
+        "Sensitive clipboard skipped",
+        reason,
+        &[TRANSLATION_WINDOW_LABEL, SETTINGS_WINDOW_LABEL],
     );
 }
 
@@ -330,6 +340,43 @@ fn emit_hotkey_registered(app: &AppHandle, hotkey: &str) {
     if let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
         let _ = window.emit("hotkey-registered", hotkey);
     }
+}
+
+fn is_window_visible(app: &AppHandle, label: &str) -> bool {
+    app.get_webview_window(label)
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false)
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn notify_shell_background(
+    app: &AppHandle,
+    title: &str,
+    body: impl Into<String>,
+    window_labels: &[&str],
+) {
+    if window_labels
+        .iter()
+        .any(|label| is_window_visible(app, label))
+    {
+        return;
+    }
+
+    let _ = app
+        .notification()
+        .builder()
+        .title(title)
+        .body(body.into())
+        .show();
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn notify_shell_background(
+    _app: &AppHandle,
+    _title: &str,
+    _body: impl Into<String>,
+    _window_labels: &[&str],
+) {
 }
 
 fn sync_existing_windows(app: &AppHandle, config: &AppConfig) {
@@ -731,6 +778,15 @@ async fn show_settings_window(app: AppHandle) {
     }
 }
 
+async fn handle_tray_primary_action(app: AppHandle) {
+    if readiness::should_prompt_for_setup(&current_config(&app)) {
+        show_settings_window(app).await;
+        return;
+    }
+
+    show_existing_translation_window(app).await;
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn restore_previous_hotkey(app: &AppHandle, hotkey: &str) {
     match hotkey::parse_hotkey(hotkey) {
@@ -783,6 +839,7 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
         .icon(icon)
         .menu(&menu)
         .tooltip("Aura Translation")
+        .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "settings" => {
                 let app_handle = app.clone();
@@ -792,6 +849,19 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
             }
             "quit" => {
                 app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(move |tray, event| match event {
+            TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } => {
+                let app_handle = tray.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    handle_tray_primary_action(app_handle).await;
+                });
             }
             _ => {}
         })
@@ -1011,7 +1081,8 @@ pub fn run() {
         .manage(config_state.clone())
         .manage(ui_ready_state)
         .manage(runtime_state)
-        .plugin(tauri_plugin_clipboard_manager::init());
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init());
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {

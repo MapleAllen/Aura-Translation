@@ -12,6 +12,7 @@ A lightweight cross-platform desktop translator that runs as a tray daemon. Trig
 - **Pinned comparison mode**: Pin the bubble to keep it visible, draggable, and position-persistent.
 - **Separate settings tool window**: Provider, language pair, hotkey, Aura mode, and pin behavior live in a dedicated movable window.
 - **System tray daemon**: Runs silently in the background with no taskbar footprint.
+- **Tray recall and background alerts**: Left-click the tray icon to reopen the latest result or setup window, and get native notifications when hidden requests retry, fail, or finish.
 - **Adaptive dismiss**: Press `Esc` to close; blur hides the translation bubble by default, while pinned mode stays visible.
 
 ## Tech Stack
@@ -69,7 +70,7 @@ npm run tauri dev
 
 ### First-time Setup
 
-1. Launch the app and right-click the system tray icon, then open `Settings`.
+1. Launch the app. If Aura is not ready yet it opens `Settings` automatically; you can also right-click the tray icon and open `Settings` manually.
 2. Choose a provider: DeepSeek, OpenRouter, or local Ollama.
 3. Enter an API key for DeepSeek or OpenRouter. Ollama does not require one.
 4. Pick your default language pair, hotkey, and whether Aura mode should auto-translate copied text.
@@ -80,7 +81,8 @@ npm run tauri dev
 1. Select any text and copy it with `Ctrl+C`.
 2. If Aura mode is enabled on Windows, the translation bubble appears near the cursor automatically.
 3. If Aura mode is disabled, press your configured hotkey (default `CmdOrCtrl+T`) to translate the current clipboard text.
-4. Press the hotkey again to recall or hide the last translation bubble, or pin the bubble to keep it visible while you read other pages.
+4. Press the hotkey again to recall or hide the last translation bubble, or left-click the tray icon to reopen the latest result when Aura is in the background.
+5. Pin the bubble to keep it visible while you read other pages.
 
 ## Build for Production
 

@@ -27,6 +27,7 @@ Completed work:
 
 - Built the Tauri bootstrap in `lib.rs`.
 - Added the tray menu with Settings and Quit.
+- Added a tray left-click primary action that opens Settings when Aura is not ready and recalls the latest translation bubble otherwise.
 - Added startup config loading and persistence.
 - Registered translation commands and shared backend state.
 - Added blur-event forwarding to the frontend.
@@ -173,6 +174,5 @@ Remaining features:
 
 ## Open Questions
 
-- **Tray left-click behavior:** Should a tray click toggle the shell, open Settings, or remain inert?
 - **Readiness signaling:** Is the polling-based `UiReadyState` sufficient, or should it become an event-driven handshake?
 - **Secret storage fallback:** If keychain support increases binary size too much, is plaintext-with-warning an acceptable long-term compromise?

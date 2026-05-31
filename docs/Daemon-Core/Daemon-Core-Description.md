@@ -48,8 +48,9 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 **System tray**
 - Builds a tray icon from the default bundled app icon
 - Tooltip: `Aura Translation`
+- Left click: recalls the latest translation bubble, or opens Settings when Aura still needs setup
 - Menu actions:
-  - `Settings`: opens the lazily created main window and emits `show-settings`
+  - `Settings`: opens the dedicated settings window
   - `Quit`: calls `app.exit(0)`
 
 **Focus-loss propagation**
@@ -145,7 +146,6 @@ Single Tauri application bootstrap in `lib.rs` with companion modules for config
 
 - **Monitor targeting is still window-centric**: positioning uses the current or primary monitor, not cursor location or tray-edge detection.
 - **Config parse/read failures still fall back with `eprintln!`**: startup config load does not yet route those failures through `daemon-error`.
-- **Tray interaction is menu-only**: there is no left-click toggle behavior on the tray icon.
 - **No lifecycle log file**: daemon events surface to the UI but are not persisted to rotating logs.
 - **UI-ready wait uses polling**: readiness is checked every 25 ms rather than through a one-shot event or condition variable.
 
@@ -153,6 +153,6 @@ Single Tauri application bootstrap in `lib.rs` with companion modules for config
 
 - Add cursor-aware multi-monitor positioning and taskbar-edge detection.
 - Emit config load failures through the same structured daemon event pathway used elsewhere.
-- Add optional tray left-click show/hide behavior.
+- Add richer tray status/actions beyond the current recall and setup shortcuts.
 - Add rotating daemon logs in the app data directory.
 - Make window offsets user-configurable in `AppConfig`.

@@ -41,14 +41,16 @@ Release sign-off extras:
 Complete these checks on the installed build:
 
 1. Confirm the tray icon appears after launch.
-2. Right-click the tray icon and open **Settings**.
-3. Switch to `DeepSeek` or `OpenRouter` and confirm the plaintext API key warning is visible.
-4. Enter an invalid API key and confirm the translation failure is visible in the popup and notification layer.
-5. Enter a valid API key, copy source text, and trigger the hotkey.
-6. Confirm the translation streams and finishes successfully.
-7. Change the hotkey to an in-use shortcut and confirm the conflict appears both in the notification layer and inline in Settings.
-8. Try capturing a bare single-key hotkey such as `T` and confirm the Settings UI rejects it before save.
-9. Restore a valid hotkey and confirm the warning clears after save.
+2. Left-click the tray icon and confirm it recalls **Settings** when setup is incomplete, or the latest translation bubble when Aura is already configured.
+3. Right-click the tray icon and open **Settings**.
+4. Switch to `DeepSeek` or `OpenRouter` and confirm the plaintext API key warning is visible.
+5. Enter an invalid API key and confirm the translation failure is visible in the popup and notification layer.
+6. Enter a valid API key, copy source text, and trigger the hotkey.
+7. Confirm the translation streams and finishes successfully.
+8. Hide the translation bubble, trigger another translation, and confirm Windows shows a native background notification when the hidden request finishes, fails, or retries.
+9. Change the hotkey to an in-use shortcut and confirm the conflict appears both in the notification layer and inline in Settings.
+10. Try capturing a bare single-key hotkey such as `T` and confirm the Settings UI rejects it before save.
+11. Restore a valid hotkey and confirm the warning clears after save.
 
 ## Notes
 
