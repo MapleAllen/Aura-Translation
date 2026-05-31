@@ -162,7 +162,24 @@ Completed work:
 
 ---
 
-## Phase 9: Testing Strategy - PARTIAL
+## Phase 9: Source App Paste-Back - DONE
+
+Status: **Done**
+
+Goals:
+
+- Let the translation bubble return translated text directly to the original Windows app without leaving Aura copied onto the clipboard.
+
+Completed work:
+
+- Captured the foreground source window before showing the translation bubble.
+- Added Windows paste-back commands and bubble availability status.
+- Reused clipboard suppression so temporary clipboard swaps do not retrigger Aura mode.
+- Restored the previous text clipboard after paste-back when the previous clipboard content was text.
+
+---
+
+## Phase 10: Testing Strategy - PARTIAL
 
 Status: **Partial**
 

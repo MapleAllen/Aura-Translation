@@ -48,7 +48,13 @@ Ship a Windows-first two-window desktop shell where translation feels immediate 
 - The tray menu now mirrors those profiles so users can switch provider, model, and language defaults without opening Settings.
 - Profile switching intentionally leaves global hotkeys and window placement untouched.
 
-### Phase 7: Remaining Enhancements - NOT STARTED
+### Phase 7: Source App Paste-Back - DONE
+
+- The translation bubble now exposes a paste-back action when Aura has a captured source window.
+- Paste-back temporarily swaps the text clipboard, sends `Ctrl+V` to the original Windows app, and then restores the previous text clipboard when possible.
+- This flow stays opt-in from the translation bubble and does not change the existing copy-first workflow.
+
+### Phase 8: Remaining Enhancements - NOT STARTED
 
 - Add explicit retry state UI instead of console-only retry logging.
 - Add more keyboard-only controls inside both windows.

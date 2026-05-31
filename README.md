@@ -12,6 +12,7 @@ A lightweight cross-platform desktop translator that runs as a tray daemon. Trig
 - **Pinned comparison mode**: Pin the bubble to keep it visible, draggable, and position-persistent.
 - **Separate settings tool window**: Provider, language pair, hotkey, Aura mode, and pin behavior live in a dedicated movable window.
 - **Named translation profiles**: Save multiple provider and language setups, then switch them from Settings or the tray menu.
+- **Paste back to the source app**: On Windows, send the latest translated text back to the original app and restore the previous text clipboard afterward.
 - **Recent translation history**: Settings keeps the latest 50 successful or failed requests with copy, retry, delete, and clear actions.
 - **System tray daemon**: Runs silently in the background with no taskbar footprint.
 - **Tray recall and background alerts**: Left-click the tray icon to reopen the latest result or setup window, and get native notifications when hidden requests retry, fail, or finish.
@@ -84,8 +85,9 @@ npm run tauri dev
 1. Select any text and copy it with `Ctrl+C`.
 2. If Aura mode is enabled on Windows, the translation bubble appears near the cursor automatically.
 3. If Aura mode is disabled, press your configured hotkey (default `CmdOrCtrl+T`) to translate the current clipboard text.
-4. Press the hotkey again to recall or hide the last translation bubble, or left-click the tray icon to reopen the latest result when Aura is in the background.
-5. Pin the bubble to keep it visible while you read other pages.
+4. Use the paste-back action in the translation bubble when you want Aura to return the translated text to the original Windows app.
+5. Press the hotkey again to recall or hide the last translation bubble, or left-click the tray icon to reopen the latest result when Aura is in the background.
+6. Pin the bubble to keep it visible while you read other pages.
 
 ## Build for Production
 

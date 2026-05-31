@@ -33,6 +33,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - The window auto-sizes to loading, streaming, result, and error states while unpinned.
 - When unpinned, the backend repositions the bubble above the cursor and clamps it to the current monitor work area.
 - When pinned, the bubble stops auto-hiding on blur and persists its dragged size and position.
+- On Windows, the translation bubble can paste the latest translated text back into the original source app when Aura captured that source window at trigger time.
 
 ### Settings window behavior
 
@@ -59,7 +60,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 
 - `ui/lib/TranslationPopup.svelte`
   - renders the minimal floating translation bubble
-  - exposes only pin, copy, cancel, and close controls
+  - exposes pin, retry, paste-back, copy, cancel, and close controls
 
 - `ui/lib/SettingsPanel.svelte`
   - renders the dedicated settings form
@@ -83,7 +84,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - `src-tauri/src/lib.rs`
   - owns both window lifecycles, hotkey handling, cursor-anchored positioning, settings placement restore, and Windows clipboard polling for Aura mode
   - persists window placement metadata into config
-  - suppresses self-originated clipboard writes when the translation bubble copies its own result
+  - suppresses self-originated clipboard writes when the translation bubble copies its own result or temporarily swaps the clipboard for paste-back
 
 - `src-tauri/src/config.rs`
   - stores `aura_mode_enabled`
@@ -97,6 +98,8 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - `invoke('save_window_placement', { kind, placement })`
 - `invoke('realign_translation_window')`
 - `invoke('copy_result_to_clipboard', { text })`
+- `invoke('get_paste_back_status')`
+- `invoke('paste_translation_back', { text })`
 - `invoke('translate_text', { ... })`
 - `invoke('cancel_translate', { requestId })`
 - `invoke('get_translation_history')`
@@ -127,6 +130,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - The cursor-near bubble uses cursor position rather than exact cross-application text selection bounds.
 - Translation history is currently managed from Settings only; the tray still does not expose recent entries directly.
 - Translation profiles intentionally scope only translation provider and language defaults; hotkey and window placement stay global.
+- Paste-back is currently Windows-only and restores only text clipboard content, not non-text clipboard payloads.
 
 ## Future Directions
 

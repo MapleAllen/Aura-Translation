@@ -12,12 +12,14 @@
     retryAttempt: number | null;
     translatedText: string;
     errorMessage: string;
+    canPasteBack: boolean;
     windowPinned: boolean;
     onTogglePinned?: (windowPinned: boolean) => void;
     onretry?: () => void;
     oncancel?: () => void;
     ondismiss?: () => void;
     oncopy?: () => void;
+    onpasteback?: () => void;
   };
 
   let {
@@ -30,12 +32,14 @@
     retryAttempt,
     translatedText,
     errorMessage,
+    canPasteBack,
     windowPinned,
     onTogglePinned,
     onretry,
     oncancel,
     ondismiss,
     oncopy,
+    onpasteback,
   }: Props = $props();
 
   const isBusy = $derived(viewState === 'loading' || viewState === 'streaming');
@@ -101,6 +105,19 @@
         >
           <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9">
             <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992V4.356m-.937 4.992A9 9 0 1 0 6.75 18.75" />
+          </svg>
+        </button>
+      {/if}
+
+      {#if translatedText && !isBusy && canPasteBack}
+        <button
+          class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-accent"
+          onclick={() => onpasteback?.()}
+          aria-label="Paste translation back"
+          type="button"
+        >
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 8.25H5.625A2.625 2.625 0 0 0 3 10.875v7.5A2.625 2.625 0 0 0 5.625 21h7.5a2.625 2.625 0 0 0 2.625-2.625V15.75m-7.5-7.5L12 4.5m0 0 3.75 3.75M12 4.5v10.5" />
           </svg>
         </button>
       {/if}

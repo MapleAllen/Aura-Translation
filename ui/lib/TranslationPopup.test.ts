@@ -14,12 +14,14 @@ describe('TranslationPopup', () => {
       retryAttempt: null,
       translatedText: '',
       errorMessage: '',
+      canPasteBack: false,
       windowPinned: false,
       onTogglePinned: vi.fn(),
       onretry: vi.fn(),
       oncancel: vi.fn(),
       ondismiss: vi.fn(),
       oncopy: vi.fn(),
+      onpasteback: vi.fn(),
     });
 
     expect(screen.getByText(/copy text to translate/i)).toBeInTheDocument();
@@ -38,12 +40,14 @@ describe('TranslationPopup', () => {
       retryAttempt: null,
       translatedText: 'Hello world translated',
       errorMessage: '',
+      canPasteBack: true,
       windowPinned: false,
       onTogglePinned,
       onretry: vi.fn(),
       oncancel: vi.fn(),
       ondismiss: vi.fn(),
       oncopy: vi.fn(),
+      onpasteback: vi.fn(),
     });
 
     const pinButton = screen.getByRole('button', { name: /pin/i });
@@ -66,12 +70,14 @@ describe('TranslationPopup', () => {
       retryAttempt: 2,
       translatedText: '',
       errorMessage: 'Translation failed.',
+      canPasteBack: false,
       windowPinned: false,
       onTogglePinned: vi.fn(),
       onretry,
       oncancel: vi.fn(),
       ondismiss: vi.fn(),
       oncopy: vi.fn(),
+      onpasteback: vi.fn(),
     });
 
     expect(screen.getByText(/source/i)).toBeInTheDocument();
@@ -80,5 +86,32 @@ describe('TranslationPopup', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /retry translation/i }));
     expect(onretry).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers a paste-back action when the source app is available', async () => {
+    const onpasteback = vi.fn();
+
+    render(TranslationPopup, {
+      viewState: 'result',
+      sourceText: 'Paste this back',
+      sourceLangLabel: 'English',
+      targetLangLabel: 'Chinese',
+      providerLabel: 'DeepSeek',
+      modelLabel: 'deepseek-chat',
+      retryAttempt: null,
+      translatedText: '把这个贴回去',
+      errorMessage: '',
+      canPasteBack: true,
+      windowPinned: false,
+      onTogglePinned: vi.fn(),
+      onretry: vi.fn(),
+      oncancel: vi.fn(),
+      ondismiss: vi.fn(),
+      oncopy: vi.fn(),
+      onpasteback,
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /paste translation back/i }));
+    expect(onpasteback).toHaveBeenCalledTimes(1);
   });
 });

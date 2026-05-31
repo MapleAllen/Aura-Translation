@@ -55,7 +55,13 @@
     attempt: number;
   };
 
+  type PasteBackStatus = {
+    supported: boolean;
+    available: boolean;
+  };
+
   let lastRequestConfig = $state<AppConfig | null>(null);
+  let pasteBackStatus = $state<PasteBackStatus>({ supported: false, available: false });
   let retryAttempt = $state<number | null>(null);
 
   function pushNotification(notification: AppNotification) {
@@ -97,6 +103,15 @@
         }),
       );
       return null;
+    }
+  }
+
+  async function refreshPasteBackStatus() {
+    try {
+      pasteBackStatus = await invoke<PasteBackStatus>('get_paste_back_status');
+    } catch (e) {
+      console.error('Failed to load paste-back status:', e);
+      pasteBackStatus = { supported: false, available: false };
     }
   }
 
@@ -239,6 +254,24 @@
     }
   }
 
+  async function pasteBackResult() {
+    if (!translatedText) return;
+
+    try {
+      await invoke('paste_translation_back', { text: translatedText });
+    } catch (e) {
+      console.error('Failed to paste back:', e);
+      await refreshPasteBackStatus();
+      pushNotification(
+        createDaemonErrorNotification({
+          code: 'paste-back-failed',
+          message: String(e ?? 'Failed to paste the translated text back into the source app.'),
+          recoverable: true,
+        }),
+      );
+    }
+  }
+
   function showBubble() {
     visible = true;
     popupScale.target = 1;
@@ -329,6 +362,7 @@
 
   onMount(() => {
     void loadConfig();
+    void refreshPasteBackStatus();
 
     const appWindow = getCurrentWindow();
     const unlisteners: Array<() => void> = [];
@@ -344,6 +378,7 @@
 
           translatedTextTriggerText = text;
           showBubble();
+          await refreshPasteBackStatus();
           const loadedConfig = await loadConfig();
           if (!loadedConfig) return;
           lastRequestConfig = cloneAppConfig(loadedConfig);
@@ -354,6 +389,7 @@
       unlisteners.push(
         await listen('show-existing-translation', () => {
           showBubble();
+          void refreshPasteBackStatus();
           scheduleAutoSize();
         }),
       );
@@ -496,12 +532,14 @@
         {retryAttempt}
         {translatedText}
         {errorMessage}
+        canPasteBack={pasteBackStatus.supported && pasteBackStatus.available}
         windowPinned={config.window_pinned}
         onTogglePinned={handlePinnedChange}
         onretry={retryTranslation}
         oncancel={handleCancel}
         ondismiss={dismiss}
         oncopy={copyResult}
+        onpasteback={pasteBackResult}
       />
     </div>
   </div>

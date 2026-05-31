@@ -6,7 +6,7 @@ Daemon Core
 
 ## Purpose
 
-The Daemon Core is the system-facing runtime for Aura Translation. It owns startup, tray integration, global hotkey registration, lazy window creation, window positioning, config persistence, translation-profile switching, and the backend commands the frontend consumes. Its job is to keep the app effectively invisible until the user triggers translation or opens Settings, while still exposing enough control to support pinned-window comparison and provider-backed streaming translation.
+The Daemon Core is the system-facing runtime for Aura Translation. It owns startup, tray integration, global hotkey registration, lazy window creation, window positioning, config persistence, translation-profile switching, source-app paste-back, and the backend commands the frontend consumes. Its job is to keep the app effectively invisible until the user triggers translation or opens Settings, while still exposing enough control to support pinned-window comparison and provider-backed streaming translation.
 
 ## Current Implementation
 
@@ -61,6 +61,12 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 - Re-emits `WindowEvent::Focused(false)` as `window-blur`
 - Lets the frontend decide whether blur should dismiss the shell based on settings visibility and pin state
 
+**Paste-back to source apps**
+- Captures the foreground non-Aura window handle before showing the translation bubble
+- Exposes `get_paste_back_status` so the translation bubble can decide whether to show the action
+- On Windows, temporarily swaps the clipboard to the translated text, focuses the original window, sends `Ctrl+V`, and then restores the previous text clipboard when available
+- Reuses clipboard suppression so Aura mode does not auto-trigger from its own temporary clipboard writes
+
 **Config persistence**
 - `AppConfig` fields: `api_key`, `api_key_storage`, `active_profile_id`, `model`, `source_lang`, `target_lang`, `hotkey`, `window_pinned`, `provider`, `api_base_url`, `available_models`
 - Config path: `{config_dir}/aura-translation/config.json`
@@ -83,6 +89,8 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 - `get_config() -> AppConfig`
 - `get_provider_defaults(provider) -> ProviderDefaults`
 - `load_provider_api_key(provider) -> Result<String, String>`
+- `get_paste_back_status() -> Result<PasteBackStatus, String>`
+- `paste_translation_back(text) -> Result<(), String>`
 - `get_translation_profiles() -> TranslationProfilesStore`
 - `create_translation_profile(config, name) -> Result<TranslationProfilesStore, String>`
 - `rename_translation_profile(profile_id, name) -> Result<TranslationProfilesStore, String>`
@@ -148,6 +156,8 @@ Single Tauri application bootstrap in `lib.rs` with companion modules for config
   - `invoke('rename_translation_profile', { profileId, name })`
   - `invoke('activate_translation_profile', { profileId })`
   - `invoke('delete_translation_profile', { profileId })`
+  - `invoke('get_paste_back_status')`
+  - `invoke('paste_translation_back', { text })`
   - `invoke('mark_ui_ready')`
   - `listen('trigger-translate')`
   - `listen('show-settings')`
@@ -168,6 +178,7 @@ Single Tauri application bootstrap in `lib.rs` with companion modules for config
 - **Config parse/read failures still fall back with `eprintln!`**: startup config load does not yet route those failures through `daemon-error`.
 - **No lifecycle log file**: daemon events surface to the UI but are not persisted to rotating logs.
 - **UI-ready wait uses polling**: readiness is checked every 25 ms rather than through a one-shot event or condition variable.
+- **Paste-back is text-only today**: Aura restores previous text clipboard content when available, but does not preserve non-text clipboard payloads.
 
 ## Future Directions
 

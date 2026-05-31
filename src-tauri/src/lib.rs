@@ -27,7 +27,20 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
 
 #[cfg(windows)]
-use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
+use windows::Win32::{
+    Foundation::HWND,
+    System::DataExchange::GetClipboardSequenceNumber,
+    UI::{
+        Input::KeyboardAndMouse::{
+            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_CONTROL,
+            VK_V,
+        },
+        WindowsAndMessaging::{
+            GetForegroundWindow, GetWindowThreadProcessId, IsIconic, IsWindow,
+            SetForegroundWindow, ShowWindow, SW_RESTORE,
+        },
+    },
+};
 
 const TRANSLATION_WINDOW_LABEL: &str = "translation";
 const SETTINGS_WINDOW_LABEL: &str = "settings";
@@ -37,6 +50,7 @@ const DEFAULT_TRANSLATION_HEIGHT: f64 = 164.0;
 const SETTINGS_EDGE_MARGIN: f64 = 18.0;
 const TRANSLATION_EDGE_MARGIN: f64 = 14.0;
 const TRANSLATION_CURSOR_GAP: f64 = 18.0;
+const MAX_SUPPRESSED_CLIPBOARD_TEXTS: usize = 4;
 
 type ConfigState = Arc<RwLock<AppConfig>>;
 type HistoryState = Arc<Mutex<history::TranslationHistoryStore>>;
@@ -54,13 +68,14 @@ struct AppRuntimeState {
 struct ClipboardWatcherState {
     last_sequence: Option<u32>,
     last_dispatched_text: Option<String>,
-    suppressed_text: Option<String>,
+    suppressed_texts: Vec<String>,
 }
 
 #[derive(Default)]
 struct TranslationRuntimeState {
     last_anchor: Option<CursorAnchor>,
     last_requested_text: Option<String>,
+    paste_back_window: Option<isize>,
 }
 
 #[derive(Clone, Copy)]
@@ -85,6 +100,12 @@ struct DaemonErrorPayload {
 #[derive(Clone, Serialize)]
 struct AuraGuardBlockedPayload {
     reason: String,
+}
+
+#[derive(Clone, Serialize)]
+struct PasteBackStatus {
+    supported: bool,
+    available: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -117,6 +138,26 @@ fn get_provider_defaults(provider: Provider) -> ProviderDefaults {
 #[tauri::command]
 fn load_provider_api_key(provider: Provider) -> Result<String, String> {
     secrets::load_provider_api_key(&provider)
+}
+
+#[tauri::command]
+async fn get_paste_back_status(state: State<'_, RuntimeState>) -> Result<PasteBackStatus, String> {
+    let runtime_state = state.inner().clone();
+    let mut runtime = runtime_state.lock().await;
+    let available = runtime
+        .translation
+        .paste_back_window
+        .map(is_valid_paste_back_window)
+        .unwrap_or(false);
+
+    if runtime.translation.paste_back_window.is_some() && !available {
+        runtime.translation.paste_back_window = None;
+    }
+
+    Ok(PasteBackStatus {
+        supported: paste_back_supported(),
+        available,
+    })
 }
 
 #[tauri::command]
@@ -291,10 +332,86 @@ fn copy_result_to_clipboard(
 
     let runtime = runtime.inner().clone();
     tauri::async_runtime::spawn(async move {
-        runtime.lock().await.clipboard.suppressed_text = Some(text);
+        let mut state = runtime.lock().await;
+        queue_suppressed_clipboard_text(&mut state.clipboard, text);
     });
 
     Ok(())
+}
+
+#[tauri::command]
+async fn paste_translation_back(
+    app: AppHandle,
+    runtime: State<'_, RuntimeState>,
+    text: String,
+) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use tauri_plugin_clipboard_manager::ClipboardExt;
+        let runtime_state = runtime.inner().clone();
+
+        let translated_text = text.trim().to_string();
+        if translated_text.is_empty() {
+            return Err("There is no translated text to paste back yet.".to_string());
+        }
+
+        let target_window = {
+            let mut state = runtime_state.lock().await;
+            let Some(target_window) = state.translation.paste_back_window else {
+                return Err("Aura has not captured a source window for paste-back yet.".to_string());
+            };
+
+            if !is_valid_paste_back_window(target_window) {
+                state.translation.paste_back_window = None;
+                return Err("The original source window is no longer available for paste-back.".to_string());
+            }
+
+            target_window
+        };
+
+        let previous_clipboard = app.clipboard().read_text().ok();
+
+        {
+            let mut state = runtime_state.lock().await;
+            queue_suppressed_clipboard_text(&mut state.clipboard, translated_text.clone());
+        }
+
+        app.clipboard()
+            .write_text(translated_text.clone())
+            .map_err(|e| format!("Failed to prepare the clipboard for paste-back: {}", e))?;
+
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        let paste_result = focus_window_for_paste_back(target_window).and_then(|_| send_ctrl_v());
+        tokio::time::sleep(Duration::from_millis(120)).await;
+
+        if let Some(previous_clipboard) = previous_clipboard.filter(|value| value != &translated_text)
+        {
+            {
+                let mut state = runtime_state.lock().await;
+                queue_suppressed_clipboard_text(&mut state.clipboard, previous_clipboard.clone());
+            }
+
+            if let Err(err) = app.clipboard().write_text(previous_clipboard) {
+                emit_daemon_error(
+                    &app,
+                    "pasteback-clipboard-restore-failed",
+                    format!(
+                        "Aura pasted the translation, but failed to restore the previous clipboard text: {}",
+                        err
+                    ),
+                    true,
+                );
+            }
+        }
+
+        paste_result
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (app, runtime, text);
+        Err("Paste-back is currently supported on Windows only.".to_string())
+    }
 }
 
 #[tauri::command]
@@ -529,6 +646,126 @@ fn emit_hotkey_conflict(app: &AppHandle, hotkey: &str, error: impl Into<String>)
 fn emit_hotkey_registered(app: &AppHandle, hotkey: &str) {
     if let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
         let _ = window.emit("hotkey-registered", hotkey);
+    }
+}
+
+fn queue_suppressed_clipboard_text(state: &mut ClipboardWatcherState, text: impl Into<String>) {
+    let text = text.into().trim().to_string();
+    if text.is_empty() || state.suppressed_texts.iter().any(|entry| entry == &text) {
+        return;
+    }
+
+    state.suppressed_texts.push(text);
+    if state.suppressed_texts.len() > MAX_SUPPRESSED_CLIPBOARD_TEXTS {
+        let overflow = state.suppressed_texts.len() - MAX_SUPPRESSED_CLIPBOARD_TEXTS;
+        state.suppressed_texts.drain(0..overflow);
+    }
+}
+
+fn consume_suppressed_clipboard_text(state: &mut ClipboardWatcherState, text: &str) -> bool {
+    if let Some(index) = state.suppressed_texts.iter().position(|entry| entry == text) {
+        state.suppressed_texts.remove(index);
+        true
+    } else {
+        false
+    }
+}
+
+#[cfg(windows)]
+const fn paste_back_supported() -> bool {
+    true
+}
+
+#[cfg(not(windows))]
+const fn paste_back_supported() -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn current_foreground_window_handle() -> Option<isize> {
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.0.is_null() {
+            return None;
+        }
+
+        let mut process_id = 0u32;
+        GetWindowThreadProcessId(hwnd, Some(&mut process_id));
+        if process_id == std::process::id() {
+            return None;
+        }
+
+        Some(hwnd.0 as isize)
+    }
+}
+
+#[cfg(not(windows))]
+fn current_foreground_window_handle() -> Option<isize> {
+    None
+}
+
+#[cfg(windows)]
+fn is_valid_paste_back_window(handle: isize) -> bool {
+    unsafe { IsWindow(Some(HWND(handle as *mut _))).as_bool() }
+}
+
+#[cfg(not(windows))]
+fn is_valid_paste_back_window(_handle: isize) -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn focus_window_for_paste_back(handle: isize) -> Result<(), String> {
+    unsafe {
+        let hwnd = HWND(handle as *mut _);
+        if !IsWindow(Some(hwnd)).as_bool() {
+            return Err("The original source window is no longer available for paste-back.".to_string());
+        }
+
+        if IsIconic(hwnd).as_bool() {
+            let _ = ShowWindow(hwnd, SW_RESTORE);
+        }
+
+        if GetForegroundWindow().0 != hwnd.0 && !SetForegroundWindow(hwnd).as_bool() {
+            return Err("Failed to focus the original source window for paste-back.".to_string());
+        }
+    }
+
+    std::thread::sleep(Duration::from_millis(40));
+    Ok(())
+}
+
+#[cfg(windows)]
+fn send_ctrl_v() -> Result<(), String> {
+    let inputs = [
+        keyboard_input(VK_CONTROL, Default::default()),
+        keyboard_input(VK_V, Default::default()),
+        keyboard_input(VK_V, KEYEVENTF_KEYUP),
+        keyboard_input(VK_CONTROL, KEYEVENTF_KEYUP),
+    ];
+
+    let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+    if sent != inputs.len() as u32 {
+        return Err("Failed to send Ctrl+V to the original source window.".to_string());
+    }
+
+    Ok(())
+}
+
+#[cfg(windows)]
+fn keyboard_input(
+    key: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY,
+    flags: windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS,
+) -> INPUT {
+    INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: key,
+                dwFlags: flags,
+                ..Default::default()
+            },
+        },
     }
 }
 
@@ -888,6 +1125,7 @@ fn prepare_translation_window_for_recall(
 }
 
 async fn trigger_translation(app: AppHandle, clipboard_text: String) {
+    let paste_back_window = current_foreground_window_handle();
     let window = match ensure_window(&app, TRANSLATION_WINDOW_LABEL) {
         Ok(window) => window,
         Err(err) => {
@@ -905,6 +1143,7 @@ async fn trigger_translation(app: AppHandle, clipboard_text: String) {
     {
         let mut state = runtime.lock().await;
         state.translation.last_requested_text = Some(clipboard_text.clone());
+        state.translation.paste_back_window = paste_back_window;
         state.clipboard.last_dispatched_text = Some(clipboard_text.clone());
     }
 
@@ -1258,13 +1497,8 @@ fn spawn_clipboard_monitor(app: &AppHandle) {
                 }
 
                 let mut runtime = runtime_state.lock().await;
-                if let Some(suppressed) = runtime.clipboard.suppressed_text.as_deref() {
-                    if suppressed == trimmed.as_str() {
-                        runtime.clipboard.suppressed_text = None;
-                        continue;
-                    }
-
-                    runtime.clipboard.suppressed_text = None;
+                if consume_suppressed_clipboard_text(&mut runtime.clipboard, trimmed.as_str()) {
+                    continue;
                 }
 
                 if runtime.clipboard.last_dispatched_text.as_deref() == Some(trimmed.as_str()) {
@@ -1375,6 +1609,7 @@ pub fn run() {
             get_config,
             get_provider_defaults,
             load_provider_api_key,
+            get_paste_back_status,
             get_translation_profiles,
             create_translation_profile,
             rename_translation_profile,
@@ -1391,6 +1626,7 @@ pub fn run() {
             save_window_placement,
             realign_translation_window,
             copy_result_to_clipboard,
+            paste_translation_back,
             translate::translate_text,
             translate::cancel_translate
         ])
