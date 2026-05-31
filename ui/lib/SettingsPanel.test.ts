@@ -23,14 +23,64 @@ const baseConfig = {
   pinned_translation_placement: null,
 };
 
+const readyStatus = {
+  level: 'ready',
+  summary: 'Aura is ready to translate with DeepSeek and model deepseek-chat.',
+  can_translate_now: true,
+  checklist: [
+    { code: 'provider', label: 'Provider: DeepSeek', ok: true },
+    { code: 'base_url', label: 'API base URL configured', ok: true },
+    { code: 'model', label: 'Default model selected', ok: true },
+    { code: 'api_key', label: 'API key saved', ok: true },
+  ],
+};
+
+const needsSetupStatus = {
+  level: 'needs_setup',
+  summary: 'Save an API key, or switch to Ollama if you want a local provider.',
+  can_translate_now: false,
+  checklist: [
+    { code: 'provider', label: 'Provider: DeepSeek', ok: true },
+    { code: 'base_url', label: 'API base URL configured', ok: true },
+    { code: 'model', label: 'Default model selected', ok: true },
+    { code: 'api_key', label: 'API key saved', ok: false },
+  ],
+};
+
 describe('SettingsPanel', () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    invokeMock.mockImplementation((command: string, payload?: { provider?: string; config?: typeof baseConfig }) => {
+      switch (command) {
+        case 'get_config':
+          return Promise.resolve(baseConfig);
+        case 'get_runtime_status':
+          return Promise.resolve(readyStatus);
+        case 'get_provider_defaults':
+          if (payload?.provider === 'ollama') {
+            return Promise.resolve({
+              base_url: 'http://localhost:11434',
+              models: ['qwen2.5'],
+            });
+          }
+          return Promise.resolve({
+            base_url: 'https://api.deepseek.com',
+            models: ['deepseek-chat', 'deepseek-reasoner'],
+          });
+        case 'save_config':
+          return Promise.resolve(undefined);
+        case 'probe_provider':
+          return Promise.resolve({
+            ok: true,
+            message: `Provider test succeeded for ${payload?.config?.provider ?? 'deepseek'}.`,
+          });
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
   });
 
   it('shows plaintext API key warning and inline hotkey conflict for authenticated providers', async () => {
-    invokeMock.mockResolvedValueOnce(baseConfig);
-
     render(SettingsPanel, {
       visible: true,
       onclose: () => {},
@@ -40,20 +90,45 @@ describe('SettingsPanel', () => {
     expect(await screen.findByTestId('plaintext-api-key-warning')).toHaveTextContent(
       'stored in plaintext',
     );
+    expect(screen.getByTestId('runtime-status-card')).toHaveTextContent('Aura is ready to translate');
     expect(screen.getByTestId('hotkey-conflict-inline')).toHaveTextContent(
       'Could not register "Alt+Shift+T"',
     );
     expect(invokeMock).toHaveBeenCalledWith('get_config');
+    expect(invokeMock).toHaveBeenCalledWith('get_runtime_status');
   });
 
   it('hides plaintext API key warning for ollama', async () => {
-    invokeMock.mockResolvedValueOnce({
-      ...baseConfig,
-      api_key: '',
-      model: 'qwen2.5',
-      provider: 'ollama',
-      api_base_url: 'http://localhost:11434',
-      available_models: ['qwen2.5'],
+    invokeMock.mockImplementation((command: string, payload?: { provider?: string }) => {
+      switch (command) {
+        case 'get_config':
+          return Promise.resolve({
+            ...baseConfig,
+            api_key: '',
+            model: 'qwen2.5',
+            provider: 'ollama',
+            api_base_url: 'http://localhost:11434',
+            available_models: ['qwen2.5'],
+          });
+        case 'get_runtime_status':
+          return Promise.resolve({
+            ...readyStatus,
+            summary: 'Aura is ready to translate with Ollama and model qwen2.5.',
+          });
+        case 'get_provider_defaults':
+          if (payload?.provider === 'ollama') {
+            return Promise.resolve({
+              base_url: 'http://localhost:11434',
+              models: ['qwen2.5'],
+            });
+          }
+          return Promise.resolve({
+            base_url: 'https://api.deepseek.com',
+            models: ['deepseek-chat', 'deepseek-reasoner'],
+          });
+        default:
+          return Promise.resolve(undefined);
+      }
     });
 
     render(SettingsPanel, {
@@ -68,8 +143,6 @@ describe('SettingsPanel', () => {
   });
 
   it('rejects bare single-key hotkeys during capture', async () => {
-    invokeMock.mockResolvedValueOnce(baseConfig);
-
     render(SettingsPanel, {
       visible: true,
       onclose: () => {},
@@ -87,8 +160,6 @@ describe('SettingsPanel', () => {
   });
 
   it('captures modifier-based hotkeys and clears the inline validation message', async () => {
-    invokeMock.mockResolvedValueOnce(baseConfig);
-
     render(SettingsPanel, {
       visible: true,
       onclose: () => {},
@@ -105,8 +176,6 @@ describe('SettingsPanel', () => {
   });
 
   it('loads and saves the window pin preference', async () => {
-    invokeMock.mockResolvedValueOnce(baseConfig);
-    invokeMock.mockResolvedValueOnce(undefined);
     const onsaved = vi.fn();
 
     render(SettingsPanel, {
@@ -124,19 +193,18 @@ describe('SettingsPanel', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
 
-    expect(invokeMock).toHaveBeenLastCalledWith(
+    expect(invokeMock).toHaveBeenCalledWith(
       'save_config',
       expect.objectContaining({
         config: expect.objectContaining({ window_pinned: true }),
       }),
     );
-    expect(onsaved).toHaveBeenCalledWith(expect.objectContaining({ window_pinned: true }));
+    await waitFor(() => {
+      expect(onsaved).toHaveBeenCalledWith(expect.objectContaining({ window_pinned: true }));
+    });
   });
 
   it('loads and saves the aura mode preference', async () => {
-    invokeMock.mockResolvedValueOnce(baseConfig);
-    invokeMock.mockResolvedValueOnce(undefined);
-
     render(SettingsPanel, {
       visible: true,
       onclose: () => {},
@@ -151,11 +219,61 @@ describe('SettingsPanel', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
 
-    expect(invokeMock).toHaveBeenLastCalledWith(
+    expect(invokeMock).toHaveBeenCalledWith(
       'save_config',
       expect.objectContaining({
         config: expect.objectContaining({ aura_mode_enabled: true }),
       }),
+    );
+  });
+
+  it('shows setup guidance when the saved config is not ready', async () => {
+    invokeMock.mockImplementation((command: string) => {
+      switch (command) {
+        case 'get_config':
+          return Promise.resolve({
+            ...baseConfig,
+            api_key: '',
+          });
+        case 'get_runtime_status':
+          return Promise.resolve(needsSetupStatus);
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+
+    render(SettingsPanel, {
+      visible: true,
+      onclose: () => {},
+      hotkeyConflictMessage: '',
+    });
+
+    expect(await screen.findByTestId('runtime-status-card')).toHaveTextContent('Action needed');
+    expect(screen.getByTestId('runtime-status-card')).toHaveTextContent(
+      'Save an API key, or switch to Ollama if you want a local provider.',
+    );
+  });
+
+  it('runs a provider test using the current unsaved settings', async () => {
+    render(SettingsPanel, {
+      visible: true,
+      onclose: () => {},
+      hotkeyConflictMessage: '',
+    });
+
+    await fireEvent.input(await screen.findByPlaceholderText('sk-...'), {
+      target: { value: 'sk-updated' },
+    });
+    await fireEvent.click(screen.getByTestId('probe-provider-button'));
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      'probe_provider',
+      expect.objectContaining({
+        config: expect.objectContaining({ api_key: 'sk-updated' }),
+      }),
+    );
+    expect(await screen.findByTestId('provider-probe-message')).toHaveTextContent(
+      'Provider test succeeded',
     );
   });
 });

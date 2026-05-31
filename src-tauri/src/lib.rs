@@ -1,5 +1,6 @@
 mod config;
 mod hotkey;
+mod readiness;
 mod translate;
 
 use config::{AppConfig, Provider, WindowPlacement};
@@ -100,6 +101,20 @@ fn get_provider_defaults(provider: Provider) -> ProviderDefaults {
 }
 
 #[tauri::command]
+fn get_runtime_status(state: State<'_, ConfigState>) -> readiness::RuntimeStatus {
+    readiness::build_runtime_status(&state.read().unwrap())
+}
+
+#[tauri::command]
+async fn probe_provider(
+    client: State<'_, reqwest::Client>,
+    config: AppConfig,
+) -> Result<readiness::ProviderProbeResult, String> {
+    let client = client.inner().clone();
+    Ok(readiness::probe_provider(&client, &config).await)
+}
+
+#[tauri::command]
 fn mark_ui_ready(window: WebviewWindow, state: State<'_, UiReadyState>) {
     state.write().unwrap().insert(window.label().to_string());
 }
@@ -139,7 +154,9 @@ fn save_window_placement(
     let mut next = state.read().unwrap().clone();
     match kind {
         WindowPlacementKind::Settings => next.settings_window_placement = Some(placement),
-        WindowPlacementKind::PinnedTranslation => next.pinned_translation_placement = Some(placement),
+        WindowPlacementKind::PinnedTranslation => {
+            next.pinned_translation_placement = Some(placement)
+        }
     }
     next.save()?;
     *state.write().unwrap() = next;
@@ -361,11 +378,7 @@ fn attach_window_event_forwarders(app: &AppHandle, window: &WebviewWindow) {
     });
 }
 
-async fn wait_for_ui_ready(
-    app: &AppHandle,
-    label: &str,
-    timeout: Duration,
-) -> Result<(), String> {
+async fn wait_for_ui_ready(app: &AppHandle, label: &str, timeout: Duration) -> Result<(), String> {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
         if app.state::<UiReadyState>().read().unwrap().contains(label) {
@@ -419,7 +432,11 @@ fn set_window_logical_bounds(
     let _ = window.set_position(LogicalPosition::new(x, y));
 }
 
-fn default_bottom_right_position(window: &WebviewWindow, width: f64, height: f64) -> Option<(f64, f64)> {
+fn default_bottom_right_position(
+    window: &WebviewWindow,
+    width: f64,
+    height: f64,
+) -> Option<(f64, f64)> {
     let monitor = window
         .current_monitor()
         .ok()
@@ -548,9 +565,13 @@ fn position_translation_near_anchor(
     let width = outer_size.width as f64;
     let height = outer_size.height as f64;
     let min_x = work_area.position.x as f64 + TRANSLATION_EDGE_MARGIN;
-    let max_x = (work_area.position.x + work_area.size.width as i32) as f64 - width - TRANSLATION_EDGE_MARGIN;
+    let max_x = (work_area.position.x + work_area.size.width as i32) as f64
+        - width
+        - TRANSLATION_EDGE_MARGIN;
     let min_y = work_area.position.y as f64 + TRANSLATION_EDGE_MARGIN;
-    let max_y = (work_area.position.y + work_area.size.height as i32) as f64 - height - TRANSLATION_EDGE_MARGIN;
+    let max_y = (work_area.position.y + work_area.size.height as i32) as f64
+        - height
+        - TRANSLATION_EDGE_MARGIN;
     let desired_x = anchor.x - (width / 2.0);
     let desired_y = anchor.y - height - TRANSLATION_CURSOR_GAP;
 
@@ -638,7 +659,9 @@ async fn trigger_translation(app: AppHandle, clipboard_text: String) {
     let _ = window.show();
     let _ = window.set_focus();
 
-    if let Err(err) = wait_for_ui_ready(&app, TRANSLATION_WINDOW_LABEL, Duration::from_secs(5)).await {
+    if let Err(err) =
+        wait_for_ui_ready(&app, TRANSLATION_WINDOW_LABEL, Duration::from_secs(5)).await
+    {
         emit_daemon_error(&app, "translation-window-ui-timeout", err, true);
         return;
     }
@@ -664,7 +687,9 @@ async fn show_existing_translation_window(app: AppHandle) {
     let _ = window.show();
     let _ = window.set_focus();
 
-    if let Err(err) = wait_for_ui_ready(&app, TRANSLATION_WINDOW_LABEL, Duration::from_secs(5)).await {
+    if let Err(err) =
+        wait_for_ui_ready(&app, TRANSLATION_WINDOW_LABEL, Duration::from_secs(5)).await
+    {
         emit_daemon_error(&app, "translation-window-ui-timeout", err, true);
         return;
     }
@@ -986,6 +1011,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             get_provider_defaults,
+            get_runtime_status,
+            probe_provider,
             mark_ui_ready,
             save_config,
             save_window_placement,
@@ -1014,6 +1041,14 @@ pub fn run() {
             }
 
             spawn_clipboard_monitor(app.app_handle());
+
+            if readiness::should_prompt_for_setup(&current_config(app.app_handle())) {
+                let app_handle = app.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    show_settings_window(app_handle).await;
+                });
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())

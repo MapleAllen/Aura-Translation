@@ -5,9 +5,11 @@
   import { Spring } from 'svelte/motion';
   import { invoke } from '@tauri-apps/api/core';
   import LanguageSelector from './LanguageSelector.svelte';
+  import SetupStatusCard from './SetupStatusCard.svelte';
   import type { AppConfig, Provider } from './appConfig';
   import { cloneAppConfig, createDefaultAppConfig } from './appConfig';
   import { shouldShowPlaintextApiKeyWarning } from './notifications';
+  import type { ProviderProbeResult, RuntimeStatus } from './runtimeStatus';
 
   const PROVIDER_OPTIONS: { value: Provider; label: string }[] = [
     { value: 'deepseek', label: 'DeepSeek (api.deepseek.com)' },
@@ -33,11 +35,14 @@
 
   let showApiKey = $state(false);
   let saving = $state(false);
+  let testingProvider = $state(false);
   let saveMessage = $state('');
   let saveErrorMessage = $state('');
   let panelErrorMessage = $state('');
   let hotkeyInputMessage = $state('');
   let isCapturingHotkey = $state(false);
+  let runtimeStatus = $state<RuntimeStatus | null>(null);
+  let probeResult = $state<ProviderProbeResult | null>(null);
 
   const saveScale = new Spring(1, { stiffness: 0.4, damping: 0.5 });
 
@@ -52,9 +57,14 @@
     hotkeyInputMessage = '';
     saveMessage = '';
     saveErrorMessage = '';
+    probeResult = null;
     try {
-      const loaded = await invoke<AppConfig>('get_config');
+      const [loaded, nextRuntimeStatus] = await Promise.all([
+        invoke<AppConfig>('get_config'),
+        invoke<RuntimeStatus>('get_runtime_status'),
+      ]);
       config = cloneAppConfig(loaded);
+      runtimeStatus = nextRuntimeStatus;
     } catch (e) {
       panelErrorMessage = 'Failed to load settings from the local Aura config.';
       console.error('Failed to load config:', { error: e });
@@ -65,6 +75,7 @@
     config.provider = newProvider;
     panelErrorMessage = '';
     saveErrorMessage = '';
+    probeResult = null;
     try {
       const defaults = await invoke<ProviderDefaults>('get_provider_defaults', {
         provider: newProvider,
@@ -107,6 +118,34 @@
     hotkeyInputMessage = '';
   }
 
+  async function refreshRuntimeStatus() {
+    try {
+      runtimeStatus = await invoke<RuntimeStatus>('get_runtime_status');
+    } catch (e) {
+      panelErrorMessage = 'Failed to refresh Aura readiness from the desktop backend.';
+      console.error('Failed to refresh runtime status:', { error: e });
+    }
+  }
+
+  async function handleProviderProbe() {
+    testingProvider = true;
+    probeResult = null;
+
+    try {
+      probeResult = await invoke<ProviderProbeResult>('probe_provider', {
+        config: cloneAppConfig(config),
+      });
+    } catch (e) {
+      probeResult = {
+        ok: false,
+        message: 'Failed to run the provider test from the desktop backend.',
+      };
+      console.error('Failed to probe provider:', { error: e });
+    }
+
+    testingProvider = false;
+  }
+
   async function saveConfig() {
     saving = true;
     saveMessage = '';
@@ -116,9 +155,11 @@
 
     try {
       await invoke('save_config', { config: cloneAppConfig(config) });
+      await refreshRuntimeStatus();
       saveMessage = 'Settings saved';
       onsaved?.(cloneAppConfig(config));
       hotkeyInputMessage = '';
+      probeResult = null;
       saveScale.target = 1.05;
       setTimeout(() => {
         saveScale.target = 1;
@@ -173,6 +214,13 @@
           {panelErrorMessage}
         </div>
       {/if}
+
+      <SetupStatusCard
+        status={runtimeStatus}
+        testing={testingProvider}
+        {probeResult}
+        ontest={handleProviderProbe}
+      />
 
       <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
         <div>
