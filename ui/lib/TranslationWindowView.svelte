@@ -149,6 +149,13 @@
 
   function showEmptyClipboardHint() {
     if (visible) {
+      pushNotification(
+        createDaemonErrorNotification({
+          code: 'hotkey-empty-clipboard',
+          message: 'Copy text to translate first, then press the hotkey.',
+          recoverable: true,
+        }),
+      );
       return;
     }
 
@@ -207,6 +214,7 @@
       return;
     }
 
+    clearEmptyHintTimer();
     lastRequestConfig = cloneAppConfig(requestConfig);
     currentRequestId += 1;
     const requestId = currentRequestId;
@@ -422,6 +430,7 @@
           const text = event.payload?.trim();
           if (!text) return;
 
+          clearEmptyHintTimer();
           await cancelCurrentTranslation();
           currentRequestId += 1;
 
