@@ -24,6 +24,41 @@
   const activeProfile = $derived(
     store?.profiles.find((profile) => profile.id === store.active_profile_id) ?? null,
   );
+
+  const DELETE_CONFIRM_TIMEOUT_MS = 5000;
+  let confirmingDeleteId = $state<string | null>(null);
+  let deleteConfirmTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearDeleteConfirmTimer() {
+    if (deleteConfirmTimer !== null) {
+      clearTimeout(deleteConfirmTimer);
+      deleteConfirmTimer = null;
+    }
+  }
+
+  function enterDeleteConfirm(profileId: string) {
+    clearDeleteConfirmTimer();
+    confirmingDeleteId = profileId;
+    deleteConfirmTimer = setTimeout(() => {
+      confirmingDeleteId = null;
+      deleteConfirmTimer = null;
+    }, DELETE_CONFIRM_TIMEOUT_MS);
+  }
+
+  function cancelDeleteConfirm() {
+    clearDeleteConfirmTimer();
+    confirmingDeleteId = null;
+  }
+
+  function commitDelete(profileId: string) {
+    clearDeleteConfirmTimer();
+    confirmingDeleteId = null;
+    ondelete?.(profileId);
+  }
+
+  $effect(() => {
+    return () => clearDeleteConfirmTimer();
+  });
 </script>
 
 <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
@@ -93,15 +128,37 @@
               </button>
             {/if}
 
-            <button
-              class="rounded-md border border-aura-border bg-white px-3 py-1.5 text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-error/30 hover:text-aura-error"
-              type="button"
-              aria-label={`Delete profile ${profile.name}`}
-              onclick={() => ondelete?.(profile.id)}
-              disabled={store.profiles.length <= 1}
-            >
-              Delete
-            </button>
+            {#if confirmingDeleteId === profile.id}
+              <div class="flex flex-wrap items-center gap-2" data-testid="delete-confirm-group">
+                <button
+                  class="rounded-md border border-aura-error bg-aura-error px-3 py-1.5 text-[11px] font-display font-semibold text-white transition-colors duration-150 hover:brightness-110"
+                  type="button"
+                  data-testid="delete-confirm-commit"
+                  onclick={() => commitDelete(profile.id)}
+                >
+                  Confirm delete
+                </button>
+                <button
+                  class="rounded-md border border-aura-border bg-white px-3 py-1.5 text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
+                  type="button"
+                  data-testid="delete-confirm-cancel"
+                  onclick={cancelDeleteConfirm}
+                >
+                  Cancel
+                </button>
+              </div>
+            {:else}
+              <button
+                class="rounded-md border border-aura-border bg-white px-3 py-1.5 text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-error/30 hover:text-aura-error"
+                type="button"
+                aria-label={`Delete profile ${profile.name}`}
+                data-testid="delete-profile-button"
+                onclick={() => enterDeleteConfirm(profile.id)}
+                disabled={store.profiles.length <= 1}
+              >
+                Delete
+              </button>
+            {/if}
           </div>
         </div>
       {/each}

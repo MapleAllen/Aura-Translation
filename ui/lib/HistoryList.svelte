@@ -14,6 +14,41 @@
   };
 
   let { entries, oncopy, onretry, ondelete, onclear }: Props = $props();
+
+  const CLEAR_CONFIRM_TIMEOUT_MS = 5000;
+  let confirmingClear = $state(false);
+  let clearConfirmTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearClearConfirmTimer() {
+    if (clearConfirmTimer !== null) {
+      clearTimeout(clearConfirmTimer);
+      clearConfirmTimer = null;
+    }
+  }
+
+  function enterClearConfirm() {
+    clearClearConfirmTimer();
+    confirmingClear = true;
+    clearConfirmTimer = setTimeout(() => {
+      confirmingClear = false;
+      clearConfirmTimer = null;
+    }, CLEAR_CONFIRM_TIMEOUT_MS);
+  }
+
+  function cancelClearConfirm() {
+    clearClearConfirmTimer();
+    confirmingClear = false;
+  }
+
+  function commitClear() {
+    clearClearConfirmTimer();
+    confirmingClear = false;
+    onclear?.();
+  }
+
+  $effect(() => {
+    return () => clearClearConfirmTimer();
+  });
 </script>
 
 <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
@@ -28,13 +63,35 @@
     </div>
 
     {#if entries.length > 0}
-      <button
-        class="rounded-md border border-aura-border bg-white px-3 py-1.5 text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
-        type="button"
-        onclick={() => onclear?.()}
-      >
-        Clear all
-      </button>
+      {#if confirmingClear}
+        <div class="flex flex-wrap items-center gap-2" data-testid="clear-confirm-group">
+          <button
+            class="rounded-md border border-aura-error bg-aura-error px-3 py-1.5 text-[11px] font-display font-semibold text-white transition-colors duration-150 hover:brightness-110"
+            type="button"
+            data-testid="clear-confirm-commit"
+            onclick={commitClear}
+          >
+            Confirm clear all
+          </button>
+          <button
+            class="rounded-md border border-aura-border bg-white px-3 py-1.5 text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
+            type="button"
+            data-testid="clear-confirm-cancel"
+            onclick={cancelClearConfirm}
+          >
+            Cancel
+          </button>
+        </div>
+      {:else}
+        <button
+          class="rounded-md border border-aura-border bg-white px-3 py-1.5 text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
+          type="button"
+          data-testid="clear-all-button"
+          onclick={enterClearConfirm}
+        >
+          Clear all
+        </button>
+      {/if}
     {/if}
   </div>
 
