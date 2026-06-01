@@ -301,10 +301,19 @@
           {/if}
         </div>
       {:else}
-        <div class="flex min-h-[96px] w-full flex-1 items-center justify-center text-center">
+        <div class="flex min-h-[96px] w-full flex-1 flex-col items-center justify-center gap-3 px-2 text-center">
           <p class="max-w-[260px] text-sm leading-relaxed text-aura-error/90">
             {errorMessage || 'Translation failed.'}
           </p>
+          <button
+            type="button"
+            data-testid="try-again-button"
+            class="rounded-full bg-aura-accent px-5 py-2 text-[12px] font-display font-medium text-white transition-all duration-200 hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+            onclick={() => onretry?.()}
+            disabled={!draftSourceText.trim()}
+          >
+            Try again
+          </button>
         </div>
       {/if}
     </div>

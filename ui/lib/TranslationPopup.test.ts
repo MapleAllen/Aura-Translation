@@ -114,6 +114,76 @@ describe('TranslationPopup', () => {
     expect(onretry).toHaveBeenCalledTimes(1);
   });
 
+  it('renders a prominent Try again button in the error state', async () => {
+    const onretry = vi.fn();
+
+    render(TranslationPopup, {
+      viewState: 'error',
+      sourceText: 'Hello world',
+      draftSourceText: 'Hello world',
+      sourceLangLabel: 'English',
+      targetLangLabel: 'Chinese',
+      providerLabel: 'DeepSeek',
+      modelLabel: 'deepseek-chat',
+      retryAttempt: null,
+      translatedText: '',
+      errorMessage: 'Network error: connection refused',
+      showComposer: false,
+      hasDraftChanges: false,
+      usage: null,
+      canPasteBack: false,
+      windowPinned: false,
+      ondraftsourcechange: vi.fn(),
+      ontranslatedraft: vi.fn(),
+      onresetdraft: vi.fn(),
+      onTogglePinned: vi.fn(),
+      onretry,
+      oncancel: vi.fn(),
+      ondismiss: vi.fn(),
+      oncopy: vi.fn(),
+      onpasteback: vi.fn(),
+    });
+
+    const tryAgain = screen.getByTestId('try-again-button');
+    expect(tryAgain).toBeInTheDocument();
+    expect(tryAgain).toHaveTextContent(/try again/i);
+    expect(tryAgain).not.toBeDisabled();
+
+    await fireEvent.click(tryAgain);
+    expect(onretry).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the Try again button when there is no source text to retry', () => {
+    render(TranslationPopup, {
+      viewState: 'error',
+      sourceText: '',
+      draftSourceText: '',
+      sourceLangLabel: '',
+      targetLangLabel: '',
+      providerLabel: '',
+      modelLabel: '',
+      retryAttempt: null,
+      translatedText: '',
+      errorMessage: 'Translation failed.',
+      showComposer: false,
+      hasDraftChanges: false,
+      usage: null,
+      canPasteBack: false,
+      windowPinned: false,
+      ondraftsourcechange: vi.fn(),
+      ontranslatedraft: vi.fn(),
+      onresetdraft: vi.fn(),
+      onTogglePinned: vi.fn(),
+      onretry: vi.fn(),
+      oncancel: vi.fn(),
+      ondismiss: vi.fn(),
+      oncopy: vi.fn(),
+      onpasteback: vi.fn(),
+    });
+
+    expect(screen.getByTestId('try-again-button')).toBeDisabled();
+  });
+
   it('offers a paste-back action when the source app is available', async () => {
     const onpasteback = vi.fn();
 
