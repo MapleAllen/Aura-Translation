@@ -218,6 +218,149 @@ describe('TranslationPopup', () => {
     expect(onpasteback).toHaveBeenCalledTimes(1);
   });
 
+  it('disables paste-back on macOS/Linux with an explanatory tooltip', () => {
+    render(TranslationPopup, {
+      viewState: 'result',
+      sourceText: 'Paste this back',
+      draftSourceText: 'Paste this back',
+      sourceLangLabel: 'English',
+      targetLangLabel: 'Chinese',
+      providerLabel: 'DeepSeek',
+      modelLabel: 'deepseek-chat',
+      retryAttempt: null,
+      translatedText: '把这个贴回去',
+      errorMessage: '',
+      showComposer: false,
+      hasDraftChanges: false,
+      usage: null,
+      canPasteBack: false,
+      pasteBackSupported: false,
+      pasteBackAvailable: false,
+      windowPinned: false,
+      ondraftsourcechange: vi.fn(),
+      ontranslatedraft: vi.fn(),
+      onresetdraft: vi.fn(),
+      onTogglePinned: vi.fn(),
+      onretry: vi.fn(),
+      oncancel: vi.fn(),
+      ondismiss: vi.fn(),
+      oncopy: vi.fn(),
+      onpasteback: vi.fn(),
+    });
+
+    const button = screen.getByRole('button', { name: /paste translation back/i });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('title', 'Paste-back is only available on Windows.');
+  });
+
+  it('disables paste-back on Windows when no foreground source app is captured', () => {
+    render(TranslationPopup, {
+      viewState: 'result',
+      sourceText: 'Paste this back',
+      draftSourceText: 'Paste this back',
+      sourceLangLabel: 'English',
+      targetLangLabel: 'Chinese',
+      providerLabel: 'DeepSeek',
+      modelLabel: 'deepseek-chat',
+      retryAttempt: null,
+      translatedText: '把这个贴回去',
+      errorMessage: '',
+      showComposer: false,
+      hasDraftChanges: false,
+      usage: null,
+      canPasteBack: false,
+      pasteBackSupported: true,
+      pasteBackAvailable: false,
+      windowPinned: false,
+      ondraftsourcechange: vi.fn(),
+      ontranslatedraft: vi.fn(),
+      onresetdraft: vi.fn(),
+      onTogglePinned: vi.fn(),
+      onretry: vi.fn(),
+      oncancel: vi.fn(),
+      ondismiss: vi.fn(),
+      oncopy: vi.fn(),
+      onpasteback: vi.fn(),
+    });
+
+    const button = screen.getByRole('button', { name: /paste translation back/i });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute(
+      'title',
+      'Copy text from a foreground app first, then paste-back will be available.',
+    );
+  });
+
+  it('disables paste-back while no translated text is ready', () => {
+    render(TranslationPopup, {
+      viewState: 'streaming',
+      sourceText: 'Hello world',
+      draftSourceText: 'Hello world',
+      sourceLangLabel: 'English',
+      targetLangLabel: 'Chinese',
+      providerLabel: 'DeepSeek',
+      modelLabel: 'deepseek-chat',
+      retryAttempt: null,
+      translatedText: '',
+      errorMessage: '',
+      showComposer: false,
+      hasDraftChanges: false,
+      usage: null,
+      canPasteBack: true,
+      pasteBackSupported: true,
+      pasteBackAvailable: true,
+      windowPinned: false,
+      ondraftsourcechange: vi.fn(),
+      ontranslatedraft: vi.fn(),
+      onresetdraft: vi.fn(),
+      onTogglePinned: vi.fn(),
+      onretry: vi.fn(),
+      oncancel: vi.fn(),
+      ondismiss: vi.fn(),
+      oncopy: vi.fn(),
+      onpasteback: vi.fn(),
+    });
+
+    expect(
+      screen.queryByRole('button', { name: /paste translation back/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('hides paste-back when the result is empty (idle/idle-ready view)', () => {
+    render(TranslationPopup, {
+      viewState: 'idle',
+      sourceText: '',
+      draftSourceText: '',
+      sourceLangLabel: '',
+      targetLangLabel: '',
+      providerLabel: '',
+      modelLabel: '',
+      retryAttempt: null,
+      translatedText: '',
+      errorMessage: '',
+      showComposer: false,
+      hasDraftChanges: false,
+      usage: null,
+      canPasteBack: true,
+      pasteBackSupported: true,
+      pasteBackAvailable: true,
+      windowPinned: false,
+      ondraftsourcechange: vi.fn(),
+      ontranslatedraft: vi.fn(),
+      onresetdraft: vi.fn(),
+      onTogglePinned: vi.fn(),
+      onretry: vi.fn(),
+      oncancel: vi.fn(),
+      ondismiss: vi.fn(),
+      oncopy: vi.fn(),
+      onpasteback: vi.fn(),
+    });
+
+    expect(
+      screen.queryByRole('button', { name: /paste translation back/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it('shows a pinned draft composer with translate and reset actions', async () => {
     const ondraftsourcechange = vi.fn();
     const ontranslatedraft = vi.fn();

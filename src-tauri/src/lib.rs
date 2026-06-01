@@ -1559,6 +1559,12 @@ async fn handle_hotkey_pressed(app: AppHandle) {
     let clipboard_text = app.clipboard().read_text().unwrap_or_default();
     let trimmed = clipboard_text.trim().to_string();
     if trimmed.is_empty() {
+        emit_daemon_error(
+            &app,
+            "hotkey-empty-clipboard",
+            "Copy text to translate first, then press the hotkey.",
+            true,
+        );
         return;
     }
 

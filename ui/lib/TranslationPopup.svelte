@@ -18,7 +18,9 @@
     showComposer: boolean;
     hasDraftChanges: boolean;
     usage: TranslationUsage | null;
-    canPasteBack: boolean;
+    canPasteBack?: boolean;
+    pasteBackSupported?: boolean;
+    pasteBackAvailable?: boolean;
     windowPinned: boolean;
     ondraftsourcechange?: (value: string) => void;
     ontranslatedraft?: () => void;
@@ -46,6 +48,8 @@
     hasDraftChanges,
     usage,
     canPasteBack,
+    pasteBackSupported,
+    pasteBackAvailable,
     windowPinned,
     ondraftsourcechange,
     ontranslatedraft,
@@ -59,6 +63,23 @@
   }: Props = $props();
 
   const isBusy = $derived(viewState === 'loading' || viewState === 'streaming');
+
+  const canPasteBackDerived = $derived(
+    canPasteBack ?? (Boolean(pasteBackSupported) && Boolean(pasteBackAvailable)),
+  );
+
+  const pasteBackTooltip = $derived.by(() => {
+    if (!translatedText || isBusy) {
+      return 'Translate first to paste back.';
+    }
+    if (!pasteBackSupported) {
+      return 'Paste-back is only available on Windows.';
+    }
+    if (!pasteBackAvailable) {
+      return 'Copy text from a foreground app first, then paste-back will be available.';
+    }
+    return 'Send the translation back to the source app.';
+  });
 </script>
 
 <div
@@ -125,12 +146,14 @@
         </button>
       {/if}
 
-      {#if translatedText && !isBusy && canPasteBack}
+      {#if translatedText && !isBusy}
         <button
-          class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-accent"
+          class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-aura-border disabled:hover:text-aura-text-dim"
           onclick={() => onpasteback?.()}
           aria-label="Paste translation back"
+          title={pasteBackTooltip}
           type="button"
+          disabled={!canPasteBackDerived}
         >
           <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9">
             <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 8.25H5.625A2.625 2.625 0 0 0 3 10.875v7.5A2.625 2.625 0 0 0 5.625 21h7.5a2.625 2.625 0 0 0 2.625-2.625V15.75m-7.5-7.5L12 4.5m0 0 3.75 3.75M12 4.5v10.5" />

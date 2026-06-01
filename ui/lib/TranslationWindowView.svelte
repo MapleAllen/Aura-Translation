@@ -30,6 +30,7 @@
   let loadingTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let placementSaveTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let autoSizeTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let emptyHintTimerId: ReturnType<typeof setTimeout> | null = null;
   let visible = $state(false);
   let config: AppConfig = $state(createDefaultAppConfig());
   let popupElement = $state<HTMLDivElement | null>(null);
@@ -137,6 +138,32 @@
       clearTimeout(loadingTimeoutId);
       loadingTimeoutId = null;
     }
+  }
+
+  function clearEmptyHintTimer() {
+    if (emptyHintTimerId !== null) {
+      clearTimeout(emptyHintTimerId);
+      emptyHintTimerId = null;
+    }
+  }
+
+  function showEmptyClipboardHint() {
+    if (visible) {
+      return;
+    }
+
+    clearEmptyHintTimer();
+    appState = 'idle';
+    errorMessage = '';
+    translatedText = '';
+    translatedTextTriggerText = '';
+    draftSourceText = '';
+    showBubble();
+
+    emptyHintTimerId = setTimeout(() => {
+      emptyHintTimerId = null;
+      void dismiss();
+    }, 3000);
   }
 
   function isCurrentRequest(requestId: number) {
@@ -479,6 +506,10 @@
 
       unlisteners.push(
         await listen<DaemonErrorPayload>('daemon-error', (event) => {
+          if (event.payload.code === 'hotkey-empty-clipboard') {
+            showEmptyClipboardHint();
+            return;
+          }
           pushNotification(createDaemonErrorNotification(event.payload));
           console.error('Daemon error:', event.payload);
         }),
@@ -519,6 +550,7 @@
     return () => {
       if (placementSaveTimeoutId !== null) clearTimeout(placementSaveTimeoutId);
       if (autoSizeTimeoutId !== null) clearTimeout(autoSizeTimeoutId);
+      if (emptyHintTimerId !== null) clearTimeout(emptyHintTimerId);
       for (const unlisten of unlisteners) {
         unlisten();
       }
@@ -567,6 +599,8 @@
         hasDraftChanges={draftSourceText.trim() !== translatedTextTriggerText.trim()}
         usage={translationUsage}
         canPasteBack={pasteBackStatus.supported && pasteBackStatus.available}
+        pasteBackSupported={pasteBackStatus.supported}
+        pasteBackAvailable={pasteBackStatus.available}
         windowPinned={config.window_pinned}
         ondraftsourcechange={(value) => {
           draftSourceText = value;

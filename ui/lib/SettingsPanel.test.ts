@@ -522,6 +522,9 @@ describe('SettingsPanel', () => {
     });
 
     await fireEvent.click(await screen.findByRole('button', { name: /clear all/i }));
+    expect(invokeMock).not.toHaveBeenCalledWith('clear_translation_history');
+
+    await fireEvent.click(await screen.findByRole('button', { name: /confirm clear all/i }));
     expect(invokeMock).toHaveBeenCalledWith('clear_translation_history');
   });
 });
