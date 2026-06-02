@@ -83,24 +83,17 @@
 </script>
 
 <div
-  class="group relative flex h-full flex-col overflow-hidden rounded-[18px] border border-aura-border bg-[rgba(248,250,252,0.96)] text-aura-text shadow-[0_20px_42px_rgba(89,104,129,0.18)]"
+  class="relative flex h-full flex-col overflow-hidden rounded-[18px] border border-aura-border bg-[rgba(248,250,252,0.96)] text-aura-text shadow-[0_20px_42px_rgba(89,104,129,0.18)]"
   style="
     backdrop-filter: blur(18px) saturate(1.04);
     -webkit-backdrop-filter: blur(18px) saturate(1.04);
   "
 >
   <div
-    class="absolute inset-x-4 top-2 z-[1] h-5 rounded-full"
-    data-tauri-drag-region
-    aria-hidden="true"
-  ></div>
-
-  <div
-    class="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between gap-3 px-3 py-3 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
-    data-tauri-drag-region
+    class="absolute inset-x-0 top-0 z-[2] flex items-center gap-3 px-3 py-3"
   >
     <div
-      class="rounded-full border border-aura-border/70 bg-white/78 px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.16em] text-aura-text-dim"
+      class="shrink-0 rounded-full border border-aura-border/70 bg-white/78 px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.16em] text-aura-text-dim"
       data-tauri-drag-region
     >
       {#if viewState === 'loading'}
@@ -118,7 +111,15 @@
       {/if}
     </div>
 
-    <div class="pointer-events-auto flex items-center gap-2">
+    <div
+      class="h-8 min-w-[88px] flex-1 cursor-move rounded-full"
+      data-tauri-drag-region
+      data-testid="window-drag-handle"
+      aria-label="Drag window"
+      title="Drag window"
+    ></div>
+
+    <div class="flex shrink-0 items-center gap-2">
       <button
         class={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11px] font-display transition-colors duration-150 ${
           windowPinned
@@ -200,7 +201,7 @@
     </div>
   </div>
 
-  <div class="flex min-h-0 flex-1 items-stretch px-5 py-5" data-tauri-drag-region>
+  <div class="flex min-h-0 flex-1 items-stretch px-5 py-5">
     <div class="flex w-full min-h-0 flex-col">
       {#if sourceText || showComposer}
         <div class="mb-4 space-y-2">
@@ -231,7 +232,7 @@
                     Draft
                   </p>
                   <p class="mt-1 text-[11px] leading-relaxed text-aura-text-muted">
-                    Edit the source here and press Ctrl+Enter to re-translate without leaving Aura.
+                    Edit the source here and press Ctrl+Enter to run the full translation again without leaving Aura.
                   </p>
                 </div>
 
@@ -252,7 +253,7 @@
                     onclick={() => ontranslatedraft?.()}
                     disabled={!draftSourceText.trim() || isBusy}
                   >
-                    Translate edits
+                    Re-run full translation
                   </button>
                 </div>
               </div>
@@ -287,18 +288,15 @@
       {/if}
 
       {#if viewState === 'idle'}
-        <div
-          class="flex min-h-[96px] w-full items-center justify-center rounded-[14px] border border-dashed border-aura-border bg-white/62 px-5 text-center"
-          data-tauri-drag-region
-        >
-          <p class="max-w-[250px] text-sm leading-relaxed text-aura-text-dim" data-tauri-drag-region>
+        <div class="flex min-h-[96px] w-full items-center justify-center rounded-[14px] border border-dashed border-aura-border bg-white/62 px-5 text-center">
+          <p class="max-w-[250px] text-sm leading-relaxed text-aura-text-dim">
             {showComposer
-              ? 'Type or paste source text into the draft area, then press Ctrl+Enter to translate.'
+              ? 'Type or paste source text into the draft area, then press Ctrl+Enter to run the full translation again.'
               : 'Copy text to translate. Use the hotkey to recall the last result anytime.'}
           </p>
         </div>
       {:else if viewState === 'loading'}
-        <div class="flex min-h-[96px] w-full flex-1 items-center justify-center" data-tauri-drag-region>
+        <div class="flex min-h-[96px] w-full flex-1 items-center justify-center">
           <div class="flex items-center gap-3 rounded-full border border-aura-border bg-white/78 px-4 py-2.5 text-sm text-aura-text-dim">
             <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-aura-accent"></span>
             <span>{retryAttempt !== null ? `Retrying request (${retryAttempt}/3)...` : 'Translating...'}</span>

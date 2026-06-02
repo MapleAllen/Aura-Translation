@@ -568,21 +568,23 @@
 </script>
 
 <div class="relative h-screen w-screen overflow-hidden">
-  <div class="pointer-events-none absolute inset-0 z-[80]">
-    {#each RESIZE_HANDLES as handle}
-      <button
-        class={`pointer-events-auto absolute ${handle.className}`}
-        style={`cursor: ${handle.cursor};`}
-        onmousedown={(event) => {
-          event.preventDefault();
-          void startResize(handle.direction);
-        }}
-        aria-hidden="true"
-        tabindex="-1"
-        type="button"
-      ></button>
-    {/each}
-  </div>
+  {#if config.window_pinned}
+    <div class="pointer-events-none absolute inset-0 z-[80]">
+      {#each RESIZE_HANDLES as handle}
+        <button
+          class={`pointer-events-auto absolute ${handle.className}`}
+          style={`cursor: ${handle.cursor};`}
+          onmousedown={(event) => {
+            event.preventDefault();
+            void startResize(handle.direction);
+          }}
+          aria-hidden="true"
+          tabindex="-1"
+          type="button"
+        ></button>
+      {/each}
+    </div>
+  {/if}
 
   <div
     class="relative h-full w-full"

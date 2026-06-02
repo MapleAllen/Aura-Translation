@@ -71,9 +71,46 @@ describe('TranslationPopup', () => {
     const pinButton = screen.getByRole('button', { name: /pin/i });
     expect(pinButton).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByText(/15 tokens/i)).toBeInTheDocument();
+    expect(screen.getByTestId('window-drag-handle')).toBeInTheDocument();
 
     await fireEvent.click(pinButton);
     expect(onTogglePinned).toHaveBeenCalledWith(true);
+  });
+
+  it('renders the translated result text in the result state', () => {
+    render(TranslationPopup, {
+      viewState: 'result',
+      sourceText: 'Render this result',
+      draftSourceText: 'Render this result',
+      sourceLangLabel: 'English',
+      targetLangLabel: 'Chinese',
+      providerLabel: 'DeepSeek',
+      modelLabel: 'deepseek-chat',
+      retryAttempt: null,
+      translatedText: '请把这段结果显示出来。',
+      errorMessage: '',
+      showComposer: false,
+      hasDraftChanges: false,
+      usage: {
+        prompt_tokens: 11,
+        completion_tokens: 8,
+        total_tokens: 19,
+      },
+      canPasteBack: true,
+      windowPinned: false,
+      ondraftsourcechange: vi.fn(),
+      ontranslatedraft: vi.fn(),
+      onresetdraft: vi.fn(),
+      onTogglePinned: vi.fn(),
+      onretry: vi.fn(),
+      oncancel: vi.fn(),
+      ondismiss: vi.fn(),
+      oncopy: vi.fn(),
+      onpasteback: vi.fn(),
+    });
+
+    expect(screen.getByText('请把这段结果显示出来。')).toBeInTheDocument();
+    expect(screen.getByText(/total 19/i)).toBeInTheDocument();
   });
 
   it('shows request context and retries when asked', async () => {
@@ -216,6 +253,40 @@ describe('TranslationPopup', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /paste translation back/i }));
     expect(onpasteback).toHaveBeenCalledTimes(1);
+  });
+
+  it('copies the translated result when the copy action is clicked', async () => {
+    const oncopy = vi.fn();
+
+    render(TranslationPopup, {
+      viewState: 'result',
+      sourceText: 'Copy this result',
+      draftSourceText: 'Copy this result',
+      sourceLangLabel: 'English',
+      targetLangLabel: 'Chinese',
+      providerLabel: 'DeepSeek',
+      modelLabel: 'deepseek-chat',
+      retryAttempt: null,
+      translatedText: '请复制这条翻译结果。',
+      errorMessage: '',
+      showComposer: false,
+      hasDraftChanges: false,
+      usage: null,
+      canPasteBack: true,
+      windowPinned: false,
+      ondraftsourcechange: vi.fn(),
+      ontranslatedraft: vi.fn(),
+      onresetdraft: vi.fn(),
+      onTogglePinned: vi.fn(),
+      onretry: vi.fn(),
+      oncancel: vi.fn(),
+      ondismiss: vi.fn(),
+      oncopy,
+      onpasteback: vi.fn(),
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /copy translation/i }));
+    expect(oncopy).toHaveBeenCalledTimes(1);
   });
 
   it('disables paste-back on macOS/Linux with an explanatory tooltip', () => {
@@ -398,7 +469,11 @@ describe('TranslationPopup', () => {
     });
     expect(ondraftsourcechange).toHaveBeenCalledWith('Edited again');
 
-    await fireEvent.click(screen.getByRole('button', { name: /translate edits/i }));
+    expect(
+      screen.getByText(/run the full translation again without leaving aura/i),
+    ).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: /re-run full translation/i }));
     expect(ontranslatedraft).toHaveBeenCalledTimes(1);
 
     await fireEvent.click(screen.getByRole('button', { name: /reset/i }));
