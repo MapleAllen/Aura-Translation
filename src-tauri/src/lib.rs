@@ -58,6 +58,10 @@ type ProfilesState = Arc<RwLock<profiles::TranslationProfilesStore>>;
 type UiReadyState = Arc<RwLock<HashSet<String>>>;
 type RuntimeState = Arc<Mutex<AppRuntimeState>>;
 
+fn log_clipboard_action(message: impl AsRef<str>) {
+    eprintln!("[aura][clipboard] {}", message.as_ref());
+}
+
 #[derive(Default)]
 struct AppRuntimeState {
     clipboard: ClipboardWatcherState,
@@ -326,15 +330,22 @@ fn copy_result_to_clipboard(
 ) -> Result<(), String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
 
+    let char_count = text.chars().count();
+    log_clipboard_action(format!("copy requested chars={char_count}"));
+
     app.clipboard()
         .write_text(text.clone())
-        .map_err(|e| format!("Failed to write clipboard text: {}", e))?;
+        .map_err(|e| {
+            log_clipboard_action(format!("copy failed chars={char_count} error={e}"));
+            format!("Failed to write clipboard text: {}", e)
+        })?;
 
     let runtime = runtime.inner().clone();
     tauri::async_runtime::spawn(async move {
         let mut state = runtime.lock().await;
         queue_suppressed_clipboard_text(&mut state.clipboard, text);
     });
+    log_clipboard_action(format!("copy completed chars={char_count}"));
 
     Ok(())
 }
@@ -351,25 +362,39 @@ async fn paste_translation_back(
         let runtime_state = runtime.inner().clone();
 
         let translated_text = text.trim().to_string();
+        let char_count = translated_text.chars().count();
         if translated_text.is_empty() {
+            log_clipboard_action("paste-back rejected reason=empty-text");
             return Err("There is no translated text to paste back yet.".to_string());
         }
 
         let target_window = {
             let mut state = runtime_state.lock().await;
             let Some(target_window) = state.translation.paste_back_window else {
+                log_clipboard_action(format!(
+                    "paste-back rejected chars={char_count} reason=no-source-window"
+                ));
                 return Err("Aura has not captured a source window for paste-back yet.".to_string());
             };
 
             if !is_valid_paste_back_window(target_window) {
                 state.translation.paste_back_window = None;
+                log_clipboard_action(format!(
+                    "paste-back rejected chars={char_count} reason=stale-source-window hwnd={target_window}"
+                ));
                 return Err("The original source window is no longer available for paste-back.".to_string());
             }
 
             target_window
         };
+        log_clipboard_action(format!(
+            "paste-back requested chars={char_count} hwnd={target_window}"
+        ));
 
         let previous_clipboard = app.clipboard().read_text().ok();
+        let had_previous_clipboard = previous_clipboard
+            .as_ref()
+            .is_some_and(|value| !value.is_empty());
 
         {
             let mut state = runtime_state.lock().await;
@@ -378,7 +403,12 @@ async fn paste_translation_back(
 
         app.clipboard()
             .write_text(translated_text.clone())
-            .map_err(|e| format!("Failed to prepare the clipboard for paste-back: {}", e))?;
+            .map_err(|e| {
+                log_clipboard_action(format!(
+                    "paste-back failed chars={char_count} stage=prepare-clipboard error={e}"
+                ));
+                format!("Failed to prepare the clipboard for paste-back: {}", e)
+            })?;
 
         tokio::time::sleep(Duration::from_millis(40)).await;
         let paste_result = focus_window_for_paste_back(target_window).and_then(|_| send_ctrl_v());
@@ -392,6 +422,9 @@ async fn paste_translation_back(
             }
 
             if let Err(err) = app.clipboard().write_text(previous_clipboard) {
+                log_clipboard_action(format!(
+                    "paste-back restore failed chars={char_count} hwnd={target_window} error={err}"
+                ));
                 emit_daemon_error(
                     &app,
                     "pasteback-clipboard-restore-failed",
@@ -401,15 +434,37 @@ async fn paste_translation_back(
                     ),
                     true,
                 );
+            } else {
+                log_clipboard_action(format!(
+                    "paste-back restore completed chars={char_count} hwnd={target_window}"
+                ));
             }
+        } else {
+            log_clipboard_action(format!(
+                "paste-back restore skipped chars={char_count} hwnd={target_window} had_previous_clipboard={had_previous_clipboard}"
+            ));
         }
 
-        paste_result
+        match paste_result {
+            Ok(()) => {
+                log_clipboard_action(format!(
+                    "paste-back completed chars={char_count} hwnd={target_window}"
+                ));
+                Ok(())
+            }
+            Err(err) => {
+                log_clipboard_action(format!(
+                    "paste-back failed chars={char_count} hwnd={target_window} stage=send-ctrl-v error={err}"
+                ));
+                Err(err)
+            }
+        }
     }
 
     #[cfg(not(windows))]
     {
         let _ = (app, runtime, text);
+        log_clipboard_action("paste-back rejected reason=unsupported-platform");
         Err("Paste-back is currently supported on Windows only.".to_string())
     }
 }
@@ -439,7 +494,7 @@ fn save_window_placement(
 }
 
 #[tauri::command]
-fn realign_translation_window(
+async fn realign_translation_window(
     app: AppHandle,
     state: State<'_, ConfigState>,
     runtime: State<'_, RuntimeState>,
@@ -453,7 +508,7 @@ fn realign_translation_window(
         return Ok(());
     }
 
-    position_translation_near_anchor(&window, runtime.inner(), &config)
+    position_translation_near_anchor(&window, runtime.inner(), &config).await
 }
 
 #[tauri::command]
@@ -998,24 +1053,24 @@ fn restore_settings_window(window: &WebviewWindow, config: &AppConfig) {
     }
 }
 
-fn capture_cursor_anchor(window: &WebviewWindow, runtime: &RuntimeState) -> Result<(), String> {
+async fn capture_cursor_anchor(
+    window: &WebviewWindow,
+    runtime: &RuntimeState,
+) -> Result<(), String> {
     let position = window
         .cursor_position()
         .map_err(|e| format!("Failed to read cursor position: {}", e))?;
 
-    let runtime = runtime.clone();
-    tauri::async_runtime::spawn(async move {
-        let mut state = runtime.lock().await;
-        state.translation.last_anchor = Some(CursorAnchor {
-            x: position.x,
-            y: position.y,
-        });
+    let mut state = runtime.lock().await;
+    state.translation.last_anchor = Some(CursorAnchor {
+        x: position.x,
+        y: position.y,
     });
 
     Ok(())
 }
 
-fn position_translation_near_anchor(
+async fn position_translation_near_anchor(
     window: &WebviewWindow,
     runtime: &RuntimeState,
     config: &AppConfig,
@@ -1034,7 +1089,7 @@ fn position_translation_near_anchor(
     }
 
     let anchor = {
-        let runtime = runtime.blocking_lock();
+        let runtime = runtime.lock().await;
         runtime.translation.last_anchor
     }
     .ok_or_else(|| "Missing translation anchor point.".to_string())?;
@@ -1072,7 +1127,7 @@ fn position_translation_near_anchor(
         .map_err(|e| format!("Failed to position translation window: {}", e))
 }
 
-fn prepare_translation_window_for_new_request(
+async fn prepare_translation_window_for_new_request(
     window: &WebviewWindow,
     config: &AppConfig,
     runtime: &RuntimeState,
@@ -1096,11 +1151,11 @@ fn prepare_translation_window_for_new_request(
         DEFAULT_TRANSLATION_WIDTH,
         DEFAULT_TRANSLATION_HEIGHT,
     ));
-    capture_cursor_anchor(window, runtime)?;
-    position_translation_near_anchor(window, runtime, config)
+    capture_cursor_anchor(window, runtime).await?;
+    position_translation_near_anchor(window, runtime, config).await
 }
 
-fn prepare_translation_window_for_recall(
+async fn prepare_translation_window_for_recall(
     window: &WebviewWindow,
     config: &AppConfig,
     runtime: &RuntimeState,
@@ -1120,8 +1175,8 @@ fn prepare_translation_window_for_recall(
         return Ok(());
     }
 
-    capture_cursor_anchor(window, runtime)?;
-    position_translation_near_anchor(window, runtime, config)
+    capture_cursor_anchor(window, runtime).await?;
+    position_translation_near_anchor(window, runtime, config).await
 }
 
 async fn trigger_translation(app: AppHandle, clipboard_text: String) {
@@ -1136,7 +1191,7 @@ async fn trigger_translation(app: AppHandle, clipboard_text: String) {
 
     let config = current_config(&app);
     let runtime = app.state::<RuntimeState>().inner().clone();
-    if let Err(err) = prepare_translation_window_for_new_request(&window, &config, &runtime) {
+    if let Err(err) = prepare_translation_window_for_new_request(&window, &config, &runtime).await {
         emit_daemon_error(&app, "translation-window-prepare-failed", err, true);
     }
 
@@ -1171,7 +1226,7 @@ async fn show_existing_translation_window(app: AppHandle) {
 
     let config = current_config(&app);
     let runtime = app.state::<RuntimeState>().inner().clone();
-    if let Err(err) = prepare_translation_window_for_recall(&window, &config, &runtime) {
+    if let Err(err) = prepare_translation_window_for_recall(&window, &config, &runtime).await {
         emit_daemon_error(&app, "translation-window-recall-failed", err, true);
     }
 
