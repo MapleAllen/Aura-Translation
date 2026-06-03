@@ -182,11 +182,7 @@ pub async fn probe_provider(client: &Client, config: &AppConfig) -> ProviderProb
                 if trimmed.is_empty() {
                     format!("服务商测试失败，HTTP {}。", status.as_u16())
                 } else {
-                    let preview = if trimmed.len() > 160 {
-                        format!("{}...", &trimmed[..160])
-                    } else {
-                        trimmed.to_string()
-                    };
+                    let preview = preview_body(trimmed, 160);
                     format!(
                         "服务商测试失败，HTTP {}：{}",
                         status.as_u16(),
@@ -238,6 +234,16 @@ fn provider_label(provider: &Provider) -> &'static str {
     }
 }
 
+fn preview_body(body: &str, max_chars: usize) -> String {
+    let mut chars = body.chars();
+    let preview = chars.by_ref().take(max_chars).collect::<String>();
+    if chars.next().is_some() {
+        format!("{preview}...")
+    } else {
+        preview
+    }
+}
+
 fn build_chat_completions_url(api_base_url: &str) -> String {
     format!("{}/chat/completions", api_base_url.trim_end_matches('/'))
 }
@@ -273,6 +279,10 @@ fn authorization_header(api_key: &str) -> Result<(HeaderName, HeaderValue), Stri
 mod tests {
     use super::*;
     use crate::config::ApiKeyStorage;
+    use wiremock::{
+        matchers::{method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
 
     fn deepseek_config() -> AppConfig {
         AppConfig {
@@ -333,5 +343,24 @@ mod tests {
         let status = build_runtime_status(&config);
         assert_eq!(status.level, RuntimeStatusLevel::Ready);
         assert!(status.can_translate_now);
+    }
+
+    #[tokio::test]
+    async fn provider_probe_handles_multibyte_error_body_preview() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("错误".repeat(90)))
+            .mount(&server)
+            .await;
+
+        let mut config = deepseek_config();
+        config.api_base_url = server.uri();
+
+        let result = probe_provider(&Client::new(), &config).await;
+
+        assert!(!result.ok);
+        assert!(result.message.contains("HTTP 500"));
+        assert!(result.message.ends_with("..."));
     }
 }
