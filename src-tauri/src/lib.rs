@@ -1716,28 +1716,12 @@ pub fn run() {
                 emit_daemon_error(app.app_handle(), "tray-build-failed", err, false);
             }
 
-            if let Err(err) = ensure_window(app.app_handle(), TRANSLATION_WINDOW_LABEL) {
-                emit_daemon_error(
-                    app.app_handle(),
-                    "translation-window-startup-create-failed",
-                    err,
-                    false,
-                );
-            }
-
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
                 register_startup_hotkey(app.app_handle());
             }
 
             spawn_clipboard_monitor(app.app_handle());
-
-            if readiness::should_prompt_for_setup(&current_config(app.app_handle())) {
-                let app_handle = app.app_handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    show_settings_window(app_handle).await;
-                });
-            }
 
             Ok(())
         })

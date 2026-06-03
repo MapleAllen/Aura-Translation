@@ -54,9 +54,9 @@
     }
 
     try {
-      await getCurrentWindow().hide();
+      await getCurrentWindow().close();
     } catch (e) {
-      console.error('Failed to hide settings window:', e);
+      console.error('Failed to close settings window:', e);
     }
   }
 
