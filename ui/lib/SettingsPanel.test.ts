@@ -173,6 +173,17 @@ describe('SettingsPanel operator console layout', () => {
     expect(await screen.findByTestId('profile-list')).toHaveTextContent('Default');
   });
 
+  it('keeps the close button outside the draggable title region', async () => {
+    const { container } = renderPanel();
+
+    const closeButton = container.querySelector('button[aria-label="关闭设置"]');
+    expect(closeButton).not.toBeNull();
+    if (!closeButton) {
+      throw new Error('Expected the settings close button to be rendered.');
+    }
+    expect(closeButton.closest('[data-tauri-drag-region]')).toBeNull();
+  });
+
   it('hides API key storage messaging for ollama', async () => {
     invokeMock.mockImplementation((command: string, payload?: { provider?: string }) => {
       switch (command) {

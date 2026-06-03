@@ -332,8 +332,8 @@
     class="aura-glass-panel z-50 flex min-h-0 flex-col"
     style="animation: fade-in-up 0.25s ease-out both;"
   >
-    <div class="flex items-start justify-between border-b border-aura-border px-5 py-4" data-tauri-drag-region>
-      <div data-tauri-drag-region>
+    <div class="flex items-start justify-between border-b border-aura-border px-5 py-4">
+      <div class="flex-1 pr-4" data-tauri-drag-region>
         <h2 class="text-base font-display font-semibold text-aura-text" data-tauri-drag-region>
           设置
         </h2>
