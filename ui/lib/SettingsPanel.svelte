@@ -21,7 +21,7 @@
   const PROVIDER_OPTIONS: { value: Provider; label: string }[] = [
     { value: 'deepseek', label: 'DeepSeek (api.deepseek.com)' },
     { value: 'openrouter', label: 'OpenRouter (openrouter.ai)' },
-    { value: 'ollama', label: 'Ollama (local, no auth)' },
+    { value: 'ollama', label: 'Ollama（本地，无需认证）' },
   ];
 
   type ProviderDefaults = {
@@ -84,7 +84,7 @@
       profileStore = nextProfileStore;
       profileDraftName = getActiveProfileName(nextProfileStore);
     } catch (e) {
-      panelErrorMessage = 'Failed to load settings, profiles, or translation history from the desktop backend.';
+      panelErrorMessage = '无法从桌面后端加载设置、配置方案或翻译历史。';
       console.error('Failed to load config:', { error: e });
     }
   }
@@ -118,7 +118,7 @@
         config.model = defaults.models[0];
       }
     } catch (e) {
-      panelErrorMessage = 'Failed to load provider defaults from the desktop backend.';
+      panelErrorMessage = '无法从桌面后端加载该服务商的默认配置。';
       console.error('Failed to fetch provider defaults:', e);
     }
   }
@@ -127,7 +127,7 @@
     try {
       await invoke('copy_result_to_clipboard', { text: translatedText });
     } catch (e) {
-      panelErrorMessage = 'Failed to copy the saved translation result.';
+      panelErrorMessage = '无法复制保存的译文。';
       console.error('Failed to copy history result:', { error: e });
     }
   }
@@ -136,7 +136,7 @@
     try {
       await invoke('replay_translation_history_entry', { entryId });
     } catch (e) {
-      panelErrorMessage = 'Failed to retry the selected history entry.';
+      panelErrorMessage = '无法重试选中的历史记录。';
       console.error('Failed to replay history entry:', { error: e });
     }
   }
@@ -148,7 +148,7 @@
         { entryId },
       );
     } catch (e) {
-      panelErrorMessage = 'Failed to delete the selected history entry.';
+      panelErrorMessage = '无法删除选中的历史记录。';
       console.error('Failed to delete history entry:', { error: e });
     }
   }
@@ -157,14 +157,14 @@
     try {
       historyEntries = await invoke<TranslationHistoryEntry[]>('clear_translation_history');
     } catch (e) {
-      panelErrorMessage = 'Failed to clear translation history.';
+      panelErrorMessage = '无法清空翻译历史。';
       console.error('Failed to clear history:', { error: e });
     }
   }
 
   async function createProfile() {
     if (!profileDraftName.trim()) {
-      panelErrorMessage = 'Enter a profile name before saving a new profile.';
+      panelErrorMessage = '请先输入配置方案名称，再保存新方案。';
       return;
     }
 
@@ -177,14 +177,14 @@
       config = cloneAppConfig(refreshedConfig);
       profileDraftName = getActiveProfileName(profileStore);
     } catch (e) {
-      panelErrorMessage = 'Failed to create the translation profile.';
+      panelErrorMessage = '无法创建翻译配置方案。';
       console.error('Failed to create profile:', { error: e });
     }
   }
 
   async function renameActiveProfile(profileId: string) {
     if (!profileDraftName.trim()) {
-      panelErrorMessage = 'Enter a profile name before renaming the active profile.';
+      panelErrorMessage = '请先输入配置方案名称，再重命名当前方案。';
       return;
     }
 
@@ -195,7 +195,7 @@
       });
       profileDraftName = getActiveProfileName(profileStore);
     } catch (e) {
-      panelErrorMessage = 'Failed to rename the active translation profile.';
+      panelErrorMessage = '无法重命名当前翻译配置方案。';
       console.error('Failed to rename profile:', { error: e });
     }
   }
@@ -209,7 +209,7 @@
       config = cloneAppConfig(refreshedConfig);
       profileDraftName = getActiveProfileName(profileStore);
     } catch (e) {
-      panelErrorMessage = 'Failed to activate the selected translation profile.';
+      panelErrorMessage = '无法启用选中的翻译配置方案。';
       console.error('Failed to activate profile:', { error: e });
     }
   }
@@ -223,7 +223,7 @@
       config = cloneAppConfig(refreshedConfig);
       profileDraftName = getActiveProfileName(profileStore);
     } catch (e) {
-      panelErrorMessage = 'Failed to delete the selected translation profile.';
+      panelErrorMessage = '无法删除选中的翻译配置方案。';
       console.error('Failed to delete profile:', { error: e });
     }
   }
@@ -240,13 +240,13 @@
     if (e.shiftKey) parts.push('Shift');
 
     if (parts.length === 0) {
-      hotkeyInputMessage = 'Include at least one modifier key.';
+      hotkeyInputMessage = '快捷键至少需要包含一个修饰键。';
       return;
     }
 
     const key = e.key.length === 1 && /^[a-z0-9]$/i.test(e.key) ? e.key.toUpperCase() : null;
     if (!key) {
-      hotkeyInputMessage = 'Use a letter or digit key with at least one modifier.';
+      hotkeyInputMessage = '请使用字母或数字键，并至少搭配一个修饰键。';
       return;
     }
 
@@ -259,7 +259,7 @@
     try {
       runtimeStatus = await invoke<RuntimeStatus>('get_runtime_status');
     } catch (e) {
-      panelErrorMessage = 'Failed to refresh Aura readiness from the desktop backend.';
+      panelErrorMessage = '无法从桌面后端刷新 Aura 就绪状态。';
       console.error('Failed to refresh runtime status:', { error: e });
     }
   }
@@ -275,7 +275,7 @@
     } catch (e) {
       probeResult = {
         ok: false,
-        message: 'Failed to run the provider test from the desktop backend.',
+        message: '无法从桌面后端运行服务商测试。',
       };
       console.error('Failed to probe provider:', { error: e });
     }
@@ -293,7 +293,7 @@
     try {
       await invoke('save_config', { config: cloneAppConfig(config) });
       await refreshRuntimeStatus();
-      saveMessage = 'Settings saved';
+      saveMessage = '设置已保存';
       onsaved?.(cloneAppConfig(config));
       hotkeyInputMessage = '';
       probeResult = null;
@@ -305,8 +305,8 @@
     } catch (e) {
       const message = String(e ?? '');
       saveErrorMessage = message.startsWith('Hotkey save rejected:')
-        ? 'Could not save settings. Fix the hotkey and try again.'
-        : 'Failed to save settings to the local Aura config.';
+        ? '无法保存设置，请修正快捷键后重试。'
+        : '无法保存到本地 Aura 配置。';
       saveScale.target = 1;
       console.error('Failed to save config:', { error: e });
     }
@@ -317,26 +317,24 @@
 
 {#if visible}
   <div
-    class="absolute inset-0 z-50 flex flex-col overflow-hidden rounded-[10px] border border-aura-border bg-[rgba(248,250,252,0.96)] text-aura-text shadow-[0_18px_40px_rgba(89,104,129,0.16)]"
+    class="aura-glass-panel z-50 flex flex-col"
     style="
-      backdrop-filter: blur(18px) saturate(1.02);
-      -webkit-backdrop-filter: blur(18px) saturate(1.02);
       animation: fade-in-up 0.25s ease-out both;
     "
   >
-    <div class="flex items-start justify-between border-b border-aura-border px-5 py-4" data-tauri-drag-region>
+    <div class="flex items-start justify-between border-b border-aura-border px-6 py-5" data-tauri-drag-region>
       <div data-tauri-drag-region>
-        <h2 class="text-sm font-display font-semibold tracking-[0.08em] text-aura-text uppercase" data-tauri-drag-region>
-          Settings
+        <h2 class="text-base font-display font-semibold text-aura-text" data-tauri-drag-region>
+          设置
         </h2>
         <p class="mt-1 text-xs leading-relaxed text-aura-text-dim" data-tauri-drag-region>
-          Configure languages, trigger behavior, provider access, and window memory.
+          配置语言、触发方式、服务商访问和窗口记忆。
         </p>
       </div>
       <button
         class="flex h-8 w-8 items-center justify-center rounded-md border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
         onclick={onclose}
-        aria-label="Close settings"
+        aria-label="关闭设置"
         type="button"
       >
         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -345,7 +343,7 @@
       </button>
     </div>
 
-    <div class="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+    <div class="flex-1 space-y-4 overflow-y-auto px-6 py-5">
       {#if panelErrorMessage}
         <div class="rounded-lg border border-aura-error/25 bg-[#fff4f6] px-4 py-3 text-sm leading-relaxed text-aura-error">
           {panelErrorMessage}
@@ -371,13 +369,13 @@
         ondelete={deleteProfile}
       />
 
-      <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+      <section class="space-y-3 rounded-xl border border-aura-border bg-white/80 px-5 py-5">
         <div>
-          <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
-            Translation
+          <p class="aura-section-title">
+            翻译语言
           </p>
           <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-            Choose the default language pair used for every new translation request.
+            设置每次新翻译请求默认使用的语言方向。
           </p>
         </div>
         <LanguageSelector
@@ -390,14 +388,14 @@
         />
       </section>
 
-      <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+      <section class="space-y-3 rounded-xl border border-aura-border bg-white/80 px-5 py-5">
         <div class="flex items-center justify-between gap-4">
           <div>
-            <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
-              Aura mode
+            <p class="aura-section-title">
+              Aura 模式
             </p>
             <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-              On Windows, automatically translate new clipboard text as soon as it changes.
+              在 Windows 上，剪贴板文本变化后自动发起翻译。
             </p>
           </div>
           <button
@@ -408,7 +406,7 @@
             }`}
             role="switch"
             aria-checked={config.aura_mode_enabled}
-            aria-label="Aura mode"
+            aria-label="Aura 模式"
             type="button"
             onclick={() => (config.aura_mode_enabled = !config.aura_mode_enabled)}
           >
@@ -421,19 +419,19 @@
           </button>
         </div>
 
-        <div class="rounded-md border border-aura-border/80 bg-aura-surface-soft px-3 py-2 text-xs leading-relaxed text-aura-text-dim">
-          With Aura mode off, Aura keeps the existing copy-then-hotkey workflow.
+        <div class="rounded-lg border border-aura-border/80 bg-aura-surface-soft px-4 py-3 text-xs leading-relaxed text-aura-text-dim">
+          关闭 Aura 模式后，仍可继续使用“复制文本后按快捷键”的手动流程。
         </div>
       </section>
 
-      <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+      <section class="space-y-3 rounded-xl border border-aura-border bg-white/80 px-5 py-5">
         <div class="flex items-center justify-between gap-4">
           <div>
-            <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
-              Sensitive clipboard guard
+            <p class="aura-section-title">
+              敏感剪贴板保护
             </p>
             <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-              Skip likely passwords, tokens, and long credential-like strings before Aura mode sends anything to a provider.
+              Aura 模式发送内容前，会跳过疑似密码、令牌和长凭据字符串。
             </p>
           </div>
           <button
@@ -444,7 +442,7 @@
             }`}
             role="switch"
             aria-checked={config.aura_guard_enabled}
-            aria-label="Sensitive clipboard guard"
+            aria-label="敏感剪贴板保护"
             type="button"
             onclick={() => (config.aura_guard_enabled = !config.aura_guard_enabled)}
           >
@@ -457,19 +455,19 @@
           </button>
         </div>
 
-        <div class="rounded-md border border-aura-border/80 bg-aura-surface-soft px-3 py-2 text-xs leading-relaxed text-aura-text-dim">
-          This guard only affects automatic Aura mode clipboard translations. Manual hotkey translations still use the text you explicitly trigger.
+        <div class="rounded-lg border border-aura-border/80 bg-aura-surface-soft px-4 py-3 text-xs leading-relaxed text-aura-text-dim">
+          此保护只影响 Aura 模式的自动剪贴板翻译；手动快捷键翻译仍会使用你主动触发的文本。
         </div>
       </section>
 
-      <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+      <section class="space-y-3 rounded-xl border border-aura-border bg-white/80 px-5 py-5">
         <div class="flex items-center justify-between gap-4">
           <div>
-            <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
-              Window behavior
+            <p class="aura-section-title">
+              窗口行为
             </p>
             <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-              Pin the translator when you want it to stay visible, movable, and always on top.
+              需要翻译窗保持可见、可移动并置顶时，可以固定它。
             </p>
           </div>
           <button
@@ -480,7 +478,7 @@
             }`}
             role="switch"
             aria-checked={config.window_pinned}
-            aria-label="Pin window"
+            aria-label="固定窗口"
             type="button"
             onclick={() => (config.window_pinned = !config.window_pinned)}
           >
@@ -494,22 +492,22 @@
         </div>
 
         <div class="grid gap-2 text-xs text-aura-text-dim sm:grid-cols-2">
-          <div class="rounded-md border border-aura-border/80 bg-aura-surface-soft px-3 py-2">
-            Unpinned: recalls near the cursor and hides on blur.
+          <div class="rounded-lg border border-aura-border/80 bg-aura-surface-soft px-4 py-3">
+            未固定：在光标附近唤起，失焦后自动隐藏。
           </div>
-          <div class="rounded-md border border-aura-border/80 bg-aura-surface-soft px-3 py-2">
-            Pinned: remembers its last dragged position and size.
+          <div class="rounded-lg border border-aura-border/80 bg-aura-surface-soft px-4 py-3">
+            已固定：记住上次拖动后的位置和大小。
           </div>
         </div>
       </section>
 
-      <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+      <section class="space-y-3 rounded-xl border border-aura-border bg-white/80 px-5 py-5">
         <div>
-          <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
-            Provider
+          <p class="aura-section-title">
+            翻译服务
           </p>
           <p class="mt-1 text-xs text-aura-text-dim">
-            Aura uses any OpenAI-compatible endpoint, including local Ollama.
+            Aura 可使用任意 OpenAI 兼容接口，也支持本地 Ollama。
           </p>
         </div>
         <select
@@ -525,13 +523,13 @@
       </section>
 
       {#if config.provider !== 'ollama'}
-        <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+        <section class="space-y-3 rounded-xl border border-aura-border bg-white/80 px-5 py-5">
           <div>
-            <label class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted" for="api-key-storage">
-              API Key Storage
+            <label class="aura-section-title" for="api-key-storage">
+              API Key 存储
             </label>
             <p class="mt-1 text-xs text-aura-text-dim">
-              Choose whether Aura stores the selected provider key in the system credential store or keeps an explicit plaintext fallback in `config.json`.
+              选择将服务商密钥存入系统凭据库，或作为明文备用写入 `config.json`。
             </p>
           </div>
           <select
@@ -539,8 +537,8 @@
             bind:value={config.api_key_storage}
             class="w-full cursor-pointer rounded-lg border border-aura-border bg-white px-3 py-2.5 text-sm text-aura-text outline-none transition-all duration-200 hover:border-aura-border-accent focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
           >
-            <option value="system">System credential store (recommended)</option>
-            <option value="plaintext_fallback">Plaintext config fallback</option>
+            <option value="system">系统凭据存储（推荐）</option>
+            <option value="plaintext_fallback">明文配置备用</option>
           </select>
         </section>
 
@@ -550,7 +548,7 @@
             data-testid="plaintext-api-key-warning"
           >
             <p class="text-xs leading-relaxed text-[#8a6226]">
-              API keys in plaintext fallback mode are written to the local Aura config on this machine. Use a trial or low-permission key when possible.
+              明文备用模式会把 API Key 写入本机 Aura 配置。尽量使用试用或低权限密钥。
             </p>
           </div>
         {:else if usesSystemCredentialStorage(config.api_key_storage)}
@@ -559,21 +557,21 @@
             data-testid="system-api-key-storage-note"
           >
             <p class="text-xs leading-relaxed text-aura-text-dim">
-              API keys in system mode are stored in the OS credential store instead of `config.json`.
+              系统模式会把 API Key 存入操作系统凭据库，而不是 `config.json`。
             </p>
           </div>
         {/if}
 
-        <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+        <section class="space-y-3 rounded-xl border border-aura-border bg-white/80 px-5 py-5">
           <div>
-            <label class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted" for="api-key">
+            <label class="aura-section-title" for="api-key">
               API Key
             </label>
             <p class="mt-1 text-xs text-aura-text-dim">
               {#if usesSystemCredentialStorage(config.api_key_storage)}
-                Stored in the system credential store for the selected provider.
+                当前服务商密钥会保存在系统凭据库中。
               {:else}
-                Stored in the local Aura config for the selected provider.
+                当前服务商密钥会保存在本地 Aura 配置中。
               {/if}
             </p>
           </div>
@@ -589,7 +587,7 @@
               class="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-aura-text-muted transition-colors hover:bg-aura-accent-soft hover:text-aura-accent"
               onclick={() => (showApiKey = !showApiKey)}
               type="button"
-              aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
+              aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
             >
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 {#if showApiKey}
@@ -604,13 +602,13 @@
         </section>
       {/if}
 
-      <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+      <section class="space-y-3 rounded-xl border border-aura-border bg-white/80 px-5 py-5">
         <div>
-          <label class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted" for="model">
-            Model
+          <label class="aura-section-title" for="model">
+            模型
           </label>
           <p class="mt-1 text-xs text-aura-text-dim">
-            The list updates when you switch providers.
+            切换服务商后，模型列表会自动更新。
           </p>
         </div>
         <select
@@ -624,13 +622,13 @@
         </select>
       </section>
 
-      <section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+      <section class="space-y-3 rounded-xl border border-aura-border bg-white/80 px-5 py-5">
         <div>
-          <label class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted" for="hotkey-capture">
-            Hotkey
+          <label class="aura-section-title" for="hotkey-capture">
+            快捷键
           </label>
           <p class="mt-1 text-xs text-aura-text-dim">
-            Use the hotkey to translate manually, or to recall and hide the floating translation bubble.
+            使用快捷键手动翻译，也可唤起或隐藏悬浮翻译窗。
           </p>
         </div>
         <div class="relative">
@@ -638,23 +636,23 @@
             id="hotkey-capture"
             type="text"
             value={config.hotkey}
-            placeholder="Press a key combination"
+            placeholder="按下快捷键组合"
             readonly
             onfocus={() => (isCapturingHotkey = true)}
             onblur={() => (isCapturingHotkey = false)}
             onkeydown={handleHotkeyKeydown}
-            class={`w-full cursor-pointer select-none rounded-lg border bg-white px-3 py-2.5 pr-28 text-sm font-medium text-aura-text outline-none transition-all duration-200 ${
+            class={`w-full cursor-pointer select-none rounded-lg border bg-white px-3 py-2.5 pr-24 text-sm font-medium text-aura-text outline-none transition-all duration-200 ${
               isCapturingHotkey
                 ? 'border-aura-accent ring-2 ring-aura-accent/15'
                 : 'border-aura-border hover:border-aura-border-accent'
             }`}
           />
           <span class={`absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium ${isCapturingHotkey ? 'text-aura-accent' : 'text-aura-text-muted'}`}>
-            {isCapturingHotkey ? 'recording...' : 'click to edit'}
+            {isCapturingHotkey ? '记录中...' : '点击编辑'}
           </span>
         </div>
         <p class="pl-0.5 text-xs text-aura-text-muted">
-          Hotkeys must include at least one modifier and a letter or digit key.
+          快捷键必须包含至少一个修饰键，并搭配一个字母或数字键。
         </p>
 
         {#if hotkeyInputMessage}
@@ -682,7 +680,7 @@
       />
     </div>
 
-    <div class="border-t border-aura-border px-5 py-4">
+    <div class="border-t border-aura-border px-6 py-5">
       {#if saveErrorMessage}
         <p class="mb-3 text-sm text-aura-error" data-testid="save-error-message">{saveErrorMessage}</p>
       {:else if saveMessage}
@@ -690,16 +688,16 @@
       {/if}
 
       <button
-        class="w-full rounded-lg bg-aura-accent py-3 text-sm font-display font-medium text-white transition-all duration-200 hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+        class="w-full rounded-lg bg-aura-accent py-3.5 text-sm font-display font-medium text-white transition-all duration-200 hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
         style:transform="scale({saveScale.current})"
         onclick={saveConfig}
         disabled={saving}
         type="button"
       >
         {#if saving}
-          Saving...
+          保存中...
         {:else}
-          Save Settings
+          保存设置
         {/if}
       </button>
     </div>

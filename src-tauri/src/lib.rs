@@ -45,8 +45,10 @@ use windows::Win32::{
 const TRANSLATION_WINDOW_LABEL: &str = "translation";
 const SETTINGS_WINDOW_LABEL: &str = "settings";
 const TRAY_ID: &str = "main";
-const DEFAULT_TRANSLATION_WIDTH: f64 = 360.0;
-const DEFAULT_TRANSLATION_HEIGHT: f64 = 164.0;
+const DEFAULT_TRANSLATION_WIDTH: f64 = 392.0;
+const DEFAULT_TRANSLATION_HEIGHT: f64 = 188.0;
+const DEFAULT_SETTINGS_WIDTH: f64 = 480.0;
+const DEFAULT_SETTINGS_HEIGHT: f64 = 680.0;
 const SETTINGS_EDGE_MARGIN: f64 = 18.0;
 const TRANSLATION_EDGE_MARGIN: f64 = 14.0;
 const TRANSLATION_CURSOR_GAP: f64 = 18.0;
@@ -337,7 +339,7 @@ fn copy_result_to_clipboard(
         .write_text(text.clone())
         .map_err(|e| {
             log_clipboard_action(format!("copy failed chars={char_count} error={e}"));
-            format!("Failed to write clipboard text: {}", e)
+            format!("无法写入剪贴板文本：{}", e)
         })?;
 
     let runtime = runtime.inner().clone();
@@ -365,7 +367,7 @@ async fn paste_translation_back(
         let char_count = translated_text.chars().count();
         if translated_text.is_empty() {
             log_clipboard_action("paste-back rejected reason=empty-text");
-            return Err("There is no translated text to paste back yet.".to_string());
+            return Err("当前还没有可回填的译文。".to_string());
         }
 
         let target_window = {
@@ -374,7 +376,7 @@ async fn paste_translation_back(
                 log_clipboard_action(format!(
                     "paste-back rejected chars={char_count} reason=no-source-window"
                 ));
-                return Err("Aura has not captured a source window for paste-back yet.".to_string());
+                return Err("Aura 尚未捕获可回填的原应用窗口。".to_string());
             };
 
             if !is_valid_paste_back_window(target_window) {
@@ -382,7 +384,7 @@ async fn paste_translation_back(
                 log_clipboard_action(format!(
                     "paste-back rejected chars={char_count} reason=stale-source-window hwnd={target_window}"
                 ));
-                return Err("The original source window is no longer available for paste-back.".to_string());
+                return Err("原应用窗口已不可用，无法回填。".to_string());
             }
 
             target_window
@@ -407,7 +409,7 @@ async fn paste_translation_back(
                 log_clipboard_action(format!(
                     "paste-back failed chars={char_count} stage=prepare-clipboard error={e}"
                 ));
-                format!("Failed to prepare the clipboard for paste-back: {}", e)
+                format!("无法为回填准备剪贴板：{}", e)
             })?;
 
         tokio::time::sleep(Duration::from_millis(40)).await;
@@ -465,7 +467,7 @@ async fn paste_translation_back(
     {
         let _ = (app, runtime, text);
         log_clipboard_action("paste-back rejected reason=unsupported-platform");
-        Err("Paste-back is currently supported on Windows only.".to_string())
+        Err("回填功能目前仅支持 Windows。".to_string())
     }
 }
 
@@ -774,7 +776,7 @@ fn focus_window_for_paste_back(handle: isize) -> Result<(), String> {
     unsafe {
         let hwnd = HWND(handle as *mut _);
         if !IsWindow(Some(hwnd)).as_bool() {
-            return Err("The original source window is no longer available for paste-back.".to_string());
+            return Err("原应用窗口已不可用，无法回填。".to_string());
         }
 
         if IsIconic(hwnd).as_bool() {
@@ -782,7 +784,7 @@ fn focus_window_for_paste_back(handle: isize) -> Result<(), String> {
         }
 
         if GetForegroundWindow().0 != hwnd.0 && !SetForegroundWindow(hwnd).as_bool() {
-            return Err("Failed to focus the original source window for paste-back.".to_string());
+            return Err("无法聚焦原应用窗口，回填失败。".to_string());
         }
     }
 
@@ -801,7 +803,7 @@ fn send_ctrl_v() -> Result<(), String> {
 
     let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
     if sent != inputs.len() as u32 {
-        return Err("Failed to send Ctrl+V to the original source window.".to_string());
+        return Err("无法向原应用窗口发送 Ctrl+V，回填失败。".to_string());
     }
 
     Ok(())
@@ -1044,12 +1046,26 @@ fn restore_window_from_saved_placement(
 
 fn restore_settings_window(window: &WebviewWindow, config: &AppConfig) {
     if let Some(placement) = &config.settings_window_placement {
-        restore_window_from_saved_placement(window, placement, 440.0, 640.0, SETTINGS_EDGE_MARGIN);
+        restore_window_from_saved_placement(
+            window,
+            placement,
+            DEFAULT_SETTINGS_WIDTH,
+            DEFAULT_SETTINGS_HEIGHT,
+            SETTINGS_EDGE_MARGIN,
+        );
         return;
     }
 
-    if let Some((x, y)) = default_bottom_right_position(window, 440.0, 640.0) {
-        set_window_logical_bounds(window, Some(440.0), Some(640.0), x, y);
+    if let Some((x, y)) =
+        default_bottom_right_position(window, DEFAULT_SETTINGS_WIDTH, DEFAULT_SETTINGS_HEIGHT)
+    {
+        set_window_logical_bounds(
+            window,
+            Some(DEFAULT_SETTINGS_WIDTH),
+            Some(DEFAULT_SETTINGS_HEIGHT),
+            x,
+            y,
+        );
     }
 }
 
@@ -1318,13 +1334,13 @@ fn build_tray_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String> {
         .iter()
         .map(|item| item as &dyn IsMenuItem<_>)
         .collect();
-    let profiles_submenu = Submenu::with_items(app, "Profiles", true, &profile_refs)
+    let profiles_submenu = Submenu::with_items(app, "配置方案", true, &profile_refs)
         .map_err(|e| format!("Failed to build tray Profiles submenu: {}", e))?;
-    let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)
+    let settings_item = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)
         .map_err(|e| format!("Failed to build tray Settings item: {}", e))?;
     let separator = PredefinedMenuItem::separator(app)
         .map_err(|e| format!("Failed to build tray separator: {}", e))?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)
+    let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)
         .map_err(|e| format!("Failed to build tray Quit item: {}", e))?;
 
     Menu::with_items(
@@ -1387,7 +1403,7 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
     let _tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .menu(&menu)
-        .tooltip("Aura Translation")
+        .tooltip("Aura 翻译")
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "settings" => {
@@ -1617,7 +1633,7 @@ async fn handle_hotkey_pressed(app: AppHandle) {
         emit_daemon_error(
             &app,
             "hotkey-empty-clipboard",
-            "Copy text to translate first, then press the hotkey.",
+            "请先复制要翻译的文本，然后按快捷键。",
             true,
         );
         return;

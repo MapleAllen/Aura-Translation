@@ -46,7 +46,7 @@ pub fn migrate_legacy_plaintext_key(config: &mut AppConfig) -> Result<bool, Stri
 
     if !system_storage_supported() {
         return Err(
-            "System credential storage is not available in this build. Switch API key storage to plaintext fallback if you need to keep using this provider.".to_string(),
+            "当前构建不支持系统凭据存储。如需继续使用该服务商，请将 API Key 存储切换为明文配置备用。".to_string(),
         );
     }
 
@@ -67,7 +67,7 @@ pub fn persist_api_key(config: &mut AppConfig, old_config: &AppConfig) -> Result
         ApiKeyStorage::System => {
             if !system_storage_supported() {
                 return Err(
-                    "System credential storage is not available in this build. Switch API key storage to plaintext fallback to keep using an API key on this platform.".to_string(),
+                    "当前构建不支持系统凭据存储。如需在此平台继续使用 API Key，请切换为明文配置备用。".to_string(),
                 );
             }
 
@@ -103,14 +103,12 @@ fn load_system_api_key(provider: &Provider) -> Result<Option<String>, String> {
     use keyring::{Entry, Error};
 
     let entry = Entry::new(SERVICE_NAME, provider.secret_account_name())
-        .map_err(|err| format!("Failed to open the system credential entry: {err}"))?;
+        .map_err(|err| format!("无法打开系统凭据项：{err}"))?;
 
     match entry.get_password() {
         Ok(api_key) => Ok(Some(api_key)),
         Err(Error::NoEntry) => Ok(None),
-        Err(err) => Err(format!(
-            "Failed to read the API key from the system credential store: {err}"
-        )),
+        Err(err) => Err(format!("无法从系统凭据库读取 API Key：{err}")),
     }
 }
 
@@ -133,10 +131,10 @@ fn save_system_api_key(provider: &Provider, api_key: &str) -> Result<(), String>
     use keyring::Entry;
 
     let entry = Entry::new(SERVICE_NAME, provider.secret_account_name())
-        .map_err(|err| format!("Failed to open the system credential entry: {err}"))?;
+        .map_err(|err| format!("无法打开系统凭据项：{err}"))?;
     entry
         .set_password(api_key)
-        .map_err(|err| format!("Failed to store the API key in the system credential store: {err}"))
+        .map_err(|err| format!("无法将 API Key 存入系统凭据库：{err}"))
 }
 
 #[cfg(all(test, any(target_os = "windows", target_os = "macos")))]
@@ -150,7 +148,7 @@ fn save_system_api_key(provider: &Provider, api_key: &str) -> Result<(), String>
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 fn save_system_api_key(_provider: &Provider, _api_key: &str) -> Result<(), String> {
-    Err("System credential storage is not available in this build.".to_string())
+    Err("当前构建不支持系统凭据存储。".to_string())
 }
 
 #[cfg(all(not(test), any(target_os = "windows", target_os = "macos")))]
@@ -158,13 +156,11 @@ fn delete_system_api_key(provider: &Provider) -> Result<(), String> {
     use keyring::{Entry, Error};
 
     let entry = Entry::new(SERVICE_NAME, provider.secret_account_name())
-        .map_err(|err| format!("Failed to open the system credential entry: {err}"))?;
+        .map_err(|err| format!("无法打开系统凭据项：{err}"))?;
 
     match entry.delete_credential() {
         Ok(()) | Err(Error::NoEntry) => Ok(()),
-        Err(err) => Err(format!(
-            "Failed to remove the API key from the system credential store: {err}"
-        )),
+        Err(err) => Err(format!("无法从系统凭据库移除 API Key：{err}")),
     }
 }
 

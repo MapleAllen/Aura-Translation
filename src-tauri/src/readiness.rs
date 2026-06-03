@@ -45,25 +45,25 @@ pub fn build_runtime_status(config: &AppConfig) -> RuntimeStatus {
     let checklist = vec![
         RuntimeChecklistItem {
             code: "provider".to_string(),
-            label: format!("Provider: {}", provider_label(&config.provider)),
+            label: format!("服务商：{}", provider_label(&config.provider)),
             ok: true,
         },
         RuntimeChecklistItem {
             code: "base_url".to_string(),
-            label: "API base URL configured".to_string(),
+            label: "API 地址已配置".to_string(),
             ok: has_base_url(config),
         },
         RuntimeChecklistItem {
             code: "model".to_string(),
-            label: "Default model selected".to_string(),
+            label: "默认模型已选择".to_string(),
             ok: has_model(config),
         },
         RuntimeChecklistItem {
             code: "api_key".to_string(),
             label: if requires_api_key(&config.provider) {
-                "API key saved".to_string()
+                "API Key 已保存".to_string()
             } else {
-                "API key not required for Ollama".to_string()
+                "Ollama 不需要 API Key".to_string()
             },
             ok: has_required_api_key(config),
         },
@@ -73,7 +73,7 @@ pub fn build_runtime_status(config: &AppConfig) -> RuntimeStatus {
         RuntimeStatus {
             level: RuntimeStatusLevel::Ready,
             summary: format!(
-                "Aura is ready to translate with {} and model {}.",
+                "Aura 已准备好使用 {} 和模型 {} 翻译。",
                 provider_label(&config.provider),
                 config.model
             ),
@@ -94,21 +94,21 @@ pub async fn probe_provider(client: &Client, config: &AppConfig) -> ProviderProb
     if !has_base_url(config) {
         return ProviderProbeResult {
             ok: false,
-            message: "Add an API base URL before testing the provider.".to_string(),
+            message: "测试服务商前，请先填写 API 地址。".to_string(),
         };
     }
 
     if !has_model(config) {
         return ProviderProbeResult {
             ok: false,
-            message: "Choose a default model before testing the provider.".to_string(),
+            message: "测试服务商前，请先选择默认模型。".to_string(),
         };
     }
 
     if !has_required_api_key(config) {
         return ProviderProbeResult {
             ok: false,
-            message: "Save an API key first, or switch to Ollama if you want a local provider."
+            message: "请先保存 API Key；如果想使用本地服务商，可以切换到 Ollama。"
                 .to_string(),
         };
     }
@@ -144,7 +144,7 @@ pub async fn probe_provider(client: &Client, config: &AppConfig) -> ProviderProb
             return ProviderProbeResult {
                 ok: false,
                 message: format!(
-                    "Could not reach the provider. Check the network connection and API base URL. ({})",
+                    "无法连接服务商，请检查网络连接和 API 地址。（{}）",
                     err
                 ),
             };
@@ -155,7 +155,7 @@ pub async fn probe_provider(client: &Client, config: &AppConfig) -> ProviderProb
         return ProviderProbeResult {
             ok: true,
             message: format!(
-                "Provider test succeeded for {} using model {}.",
+                "{} 的服务商测试成功，使用模型 {}。",
                 provider_label(&config.provider),
                 config.model
             ),
@@ -168,19 +168,19 @@ pub async fn probe_provider(client: &Client, config: &AppConfig) -> ProviderProb
         ok: false,
         message: match status {
             StatusCode::UNAUTHORIZED => {
-                "Authentication failed. Check the API key for the selected provider.".to_string()
+                "认证失败。请检查当前服务商的 API Key。".to_string()
             }
             StatusCode::FORBIDDEN => {
-                "The provider rejected this request. Check account permissions and model access."
+                "服务商拒绝了本次请求。请检查账号权限和模型访问权限。"
                     .to_string()
             }
             StatusCode::TOO_MANY_REQUESTS => {
-                "The provider rate-limited this request. Wait a moment and try again.".to_string()
+                "服务商触发了限流。请稍等后重试。".to_string()
             }
             _ => {
                 let trimmed = raw_body.trim();
                 if trimmed.is_empty() {
-                    format!("Provider test failed with HTTP {}.", status.as_u16())
+                    format!("服务商测试失败，HTTP {}。", status.as_u16())
                 } else {
                     let preview = if trimmed.len() > 160 {
                         format!("{}...", &trimmed[..160])
@@ -188,7 +188,7 @@ pub async fn probe_provider(client: &Client, config: &AppConfig) -> ProviderProb
                         trimmed.to_string()
                     };
                     format!(
-                        "Provider test failed with HTTP {}: {}",
+                        "服务商测试失败，HTTP {}：{}",
                         status.as_u16(),
                         preview
                     )
@@ -216,18 +216,18 @@ fn has_base_url(config: &AppConfig) -> bool {
 
 fn missing_setup_message(config: &AppConfig) -> String {
     if !has_required_api_key(config) {
-        return "Save an API key, or switch to Ollama if you want a local provider.".to_string();
+        return "请保存 API Key；如果想使用本地服务商，可以切换到 Ollama。".to_string();
     }
 
     if !has_model(config) {
-        return "Choose a default model before starting translations.".to_string();
+        return "开始翻译前，请先选择默认模型。".to_string();
     }
 
     if !has_base_url(config) {
-        return "Add an API base URL so Aura knows where to send requests.".to_string();
+        return "请填写 API 地址，让 Aura 知道请求发送到哪里。".to_string();
     }
 
-    "Complete the missing setup items below before translating.".to_string()
+    "开始翻译前，请完成下面缺失的配置项。".to_string()
 }
 
 fn provider_label(provider: &Provider) -> &'static str {
@@ -265,7 +265,7 @@ fn provider_headers(
 
 fn authorization_header(api_key: &str) -> Result<(HeaderName, HeaderValue), String> {
     let value = HeaderValue::from_str(&format!("Bearer {}", api_key))
-        .map_err(|err| format!("Invalid API key header: {}", err))?;
+        .map_err(|err| format!("API Key 请求头无效：{}", err))?;
     Ok((HeaderName::from_static("authorization"), value))
 }
 

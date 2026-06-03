@@ -25,12 +25,12 @@ use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 pub fn parse_hotkey(s: &str) -> Result<Shortcut, String> {
     let s = s.trim();
     if s.is_empty() {
-        return Err("Hotkey string is empty".to_string());
+        return Err("快捷键为空。".to_string());
     }
 
     let parts: Vec<&str> = s.split('+').collect();
     if parts.is_empty() {
-        return Err("Hotkey string is empty".to_string());
+        return Err("快捷键为空。".to_string());
     }
 
     // All tokens except the last are modifiers; the last is the key.
@@ -38,7 +38,7 @@ pub fn parse_hotkey(s: &str) -> Result<Shortcut, String> {
     let key_token = key_tokens[0].trim();
 
     if modifier_tokens.is_empty() {
-        return Err("Hotkey must include at least one modifier".to_string());
+        return Err("快捷键至少需要包含一个修饰键。".to_string());
     }
 
     // Build modifier bitmask
@@ -60,7 +60,7 @@ pub fn parse_hotkey(s: &str) -> Result<Shortcut, String> {
             "Alt" => modifiers |= Modifiers::ALT,
             "Shift" => modifiers |= Modifiers::SHIFT,
             "Meta" | "Super" | "Cmd" => modifiers |= Modifiers::SUPER,
-            other => return Err(format!("Unknown modifier: '{}'", other)),
+            other => return Err(format!("未知修饰键：'{}'", other)),
         }
     }
 
@@ -111,9 +111,9 @@ fn parse_key_code(token: &str) -> Result<Code, String> {
             '7' => Ok(Code::Digit7),
             '8' => Ok(Code::Digit8),
             '9' => Ok(Code::Digit9),
-            other => Err(format!("Unsupported key code: '{}'", other)),
+            other => Err(format!("不支持的按键：'{}'", other)),
         },
-        _ => Err(format!("Unsupported key token: '{}'", token)),
+        _ => Err(format!("不支持的按键片段：'{}'", token)),
     }
 }
 

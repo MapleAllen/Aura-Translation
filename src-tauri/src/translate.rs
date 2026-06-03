@@ -170,17 +170,17 @@ impl TranslationEventSink for TauriEventSink<'_> {
     fn notify_background_success(&mut self) {
         notify_translation_background(
             self.app,
-            "Translation ready",
-            "The latest translation is ready. Left-click the tray icon to reopen Aura.",
+            "翻译完成",
+            "最新译文已准备好。左键点击托盘图标可重新打开 Aura。",
         );
     }
 
     fn notify_background_error(&mut self, message: &str) {
         notify_translation_background(
             self.app,
-            "Translation failed",
+            "翻译失败",
             format!(
-                "The last request failed: {}",
+                "上一次请求失败：{}",
                 summarize_notification_message(message)
             ),
         );
@@ -189,9 +189,9 @@ impl TranslationEventSink for TauriEventSink<'_> {
     fn notify_background_retry(&mut self, attempt: u8) {
         notify_translation_background(
             self.app,
-            "Translation retrying",
+            "正在重试翻译",
             format!(
-                "Aura is retrying the last request in the background (attempt {}).",
+                "Aura 正在后台重试上一次请求（第 {} 次）。",
                 attempt
             ),
         );
@@ -622,7 +622,7 @@ fn provider_headers(
 
 fn authorization_header(api_key: &str) -> Result<(HeaderName, HeaderValue), String> {
     let value = HeaderValue::from_str(&format!("Bearer {}", api_key))
-        .map_err(|err| format!("Invalid API key header: {}", err))?;
+        .map_err(|err| format!("API Key 请求头无效：{}", err))?;
     Ok((HeaderName::from_static("authorization"), value))
 }
 

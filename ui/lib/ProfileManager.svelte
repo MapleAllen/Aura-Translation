@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { LANGUAGES } from './languages';
   import type { TranslationProfilesStore } from './translationProfiles';
 
   type Props = {
@@ -56,18 +57,35 @@
     ondelete?.(profileId);
   }
 
+  function providerLabel(provider: string) {
+    switch (provider) {
+      case 'deepseek':
+        return 'DeepSeek';
+      case 'openrouter':
+        return 'OpenRouter';
+      case 'ollama':
+        return 'Ollama';
+      default:
+        return provider;
+    }
+  }
+
+  function languageLabel(code: string) {
+    return LANGUAGES.find((language) => language.code === code)?.label ?? code;
+  }
+
   $effect(() => {
     return () => clearDeleteConfirmTimer();
   });
 </script>
 
-<section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+<section class="space-y-3 rounded-xl border border-aura-border bg-white/80 px-5 py-5">
   <div>
-    <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
-      Profiles
+    <p class="aura-section-title">
+      配置方案
     </p>
     <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-      Save named translation setups and switch them directly from Settings or the tray.
+      保存常用翻译设置，可在设置页或托盘中快速切换。
     </p>
   </div>
 
@@ -75,7 +93,7 @@
     <input
       value={draftName}
       oninput={(event) => ondraftnamechange?.((event.currentTarget as HTMLInputElement).value)}
-      placeholder="Profile name"
+      placeholder="配置方案名称"
       class="w-full rounded-lg border border-aura-border bg-white px-3 py-2.5 text-sm text-aura-text outline-none transition-all duration-200 placeholder:text-aura-text-muted hover:border-aura-border-accent focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
     />
     <button
@@ -83,7 +101,7 @@
       type="button"
       onclick={() => oncreate?.()}
     >
-      Save as new
+      另存为新方案
     </button>
     <button
       class="rounded-lg border border-aura-border bg-white px-3 py-2.5 text-sm font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text disabled:cursor-not-allowed disabled:opacity-50"
@@ -91,13 +109,13 @@
       onclick={() => activeProfile && onrename?.(activeProfile.id)}
       disabled={!activeProfile}
     >
-      Rename active
+      重命名当前方案
     </button>
   </div>
 
   {#if !store || store.profiles.length === 0}
     <div class="rounded-md border border-dashed border-aura-border bg-aura-surface-soft px-3 py-3 text-xs leading-relaxed text-aura-text-dim">
-      Aura will create a default translation profile automatically.
+      Aura 会自动创建一个默认翻译配置方案。
     </div>
   {:else}
     <div class="space-y-2" data-testid="profile-list">
@@ -107,13 +125,13 @@
             <div class="flex flex-wrap items-center gap-2">
               <p class="truncate text-sm font-medium text-aura-text">{profile.name}</p>
               {#if profile.id === store.active_profile_id}
-                <span class="rounded-full bg-aura-accent-soft px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] text-aura-accent">
-                  Active
+                <span class="rounded-full bg-aura-accent-soft px-2.5 py-1 text-[11px] font-display font-medium text-aura-accent">
+                  当前
                 </span>
               {/if}
             </div>
             <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-              {profile.provider} 路 {profile.model} • {profile.source_lang} to {profile.target_lang}
+              {providerLabel(profile.provider)} · {profile.model} · {languageLabel(profile.source_lang)} → {languageLabel(profile.target_lang)}
             </p>
           </div>
 
@@ -124,7 +142,7 @@
                 type="button"
                 onclick={() => onactivate?.(profile.id)}
               >
-                Activate
+                启用
               </button>
             {/if}
 
@@ -136,7 +154,7 @@
                   data-testid="delete-confirm-commit"
                   onclick={() => commitDelete(profile.id)}
                 >
-                  Confirm delete
+                  确认删除
                 </button>
                 <button
                   class="rounded-md border border-aura-border bg-white px-3 py-1.5 text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
@@ -144,19 +162,19 @@
                   data-testid="delete-confirm-cancel"
                   onclick={cancelDeleteConfirm}
                 >
-                  Cancel
+                  取消
                 </button>
               </div>
             {:else}
               <button
                 class="rounded-md border border-aura-border bg-white px-3 py-1.5 text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-error/30 hover:text-aura-error"
                 type="button"
-                aria-label={`Delete profile ${profile.name}`}
+                aria-label={`删除配置方案 ${profile.name}`}
                 data-testid="delete-profile-button"
                 onclick={() => enterDeleteConfirm(profile.id)}
                 disabled={store.profiles.length <= 1}
               >
-                Delete
+                删除
               </button>
             {/if}
           </div>

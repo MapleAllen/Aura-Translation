@@ -14,21 +14,19 @@ pub fn detect_sensitive_clipboard(text: &str) -> Option<AuraGuardBlock> {
     let lowered = trimmed.to_ascii_lowercase();
     if contains_secret_keyword(&lowered) {
         return Some(AuraGuardBlock {
-            reason:
-                "Aura mode skipped this clipboard change because it looks like a password or token."
-                    .to_string(),
+            reason: "Aura 模式已跳过本次剪贴板变化：内容疑似密码或令牌。".to_string(),
         });
     }
 
     if looks_like_known_secret_prefix(trimmed) || looks_like_jwt(trimmed) {
         return Some(AuraGuardBlock {
-            reason: "Aura mode skipped this clipboard change because it matches a common credential format.".to_string(),
+            reason: "Aura 模式已跳过本次剪贴板变化：内容匹配常见凭据格式。".to_string(),
         });
     }
 
     if looks_like_secret_blob(trimmed) {
         return Some(AuraGuardBlock {
-            reason: "Aura mode skipped this clipboard change because it looks like a long secret string.".to_string(),
+            reason: "Aura 模式已跳过本次剪贴板变化：内容疑似较长的密钥字符串。".to_string(),
         });
     }
 
@@ -104,20 +102,20 @@ mod tests {
     #[test]
     fn blocks_password_like_text() {
         let block = detect_sensitive_clipboard("password=supersecret123").unwrap();
-        assert!(block.reason.contains("password or token"));
+        assert!(block.reason.contains("密码或令牌"));
     }
 
     #[test]
     fn blocks_known_secret_prefixes() {
         let block = detect_sensitive_clipboard("sk-8f5c1b2a9d7e3f4a6b8c0d1e2f3a4b5").unwrap();
-        assert!(block.reason.contains("credential format"));
+        assert!(block.reason.contains("常见凭据格式"));
     }
 
     #[test]
     fn blocks_jwt_like_values() {
         let token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkF1cmEiLCJpYXQiOjE1MTYyMzkwMjJ9.signaturePart123";
         let block = detect_sensitive_clipboard(token).unwrap();
-        assert!(block.reason.contains("credential format"));
+        assert!(block.reason.contains("常见凭据格式"));
     }
 
     #[test]

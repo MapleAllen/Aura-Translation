@@ -27,8 +27,8 @@
 
 <div class="flex items-center gap-2 rounded-lg border border-aura-border bg-white px-2 py-2">
   <label class="min-w-0 flex-1 rounded-md border border-aura-border/70 bg-aura-surface-soft px-3 py-2">
-    <span class="mb-1 block text-[10px] font-display font-semibold uppercase tracking-[0.16em] text-aura-text-muted">
-      From
+    <span class="mb-1 block text-xs font-display font-semibold text-aura-text-muted">
+      源语言
     </span>
     <select
       class="w-full cursor-pointer appearance-none bg-transparent text-sm font-medium text-aura-text outline-none"
@@ -47,7 +47,7 @@
     class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-aura-border bg-white text-aura-accent transition-all duration-200 hover:border-aura-border-accent hover:bg-aura-accent-soft active:scale-95 disabled:opacity-35 disabled:hover:border-aura-border disabled:hover:bg-white"
     onclick={swap}
     disabled={sourceLang === 'auto'}
-    title="Swap languages"
+    title="交换语言"
     type="button"
   >
     <svg
@@ -60,8 +60,8 @@
   </button>
 
   <label class="min-w-0 flex-1 rounded-md border border-aura-border/70 bg-aura-surface-soft px-3 py-2">
-    <span class="mb-1 block text-[10px] font-display font-semibold uppercase tracking-[0.16em] text-aura-text-muted">
-      To
+    <span class="mb-1 block text-xs font-display font-semibold text-aura-text-muted">
+      目标语言
     </span>
     <select
       class="w-full cursor-pointer appearance-none bg-transparent text-sm font-medium text-aura-text outline-none"

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { LANGUAGES } from './languages';
   import {
     formatHistoryTimestamp,
     formatTokenCount,
@@ -46,19 +47,36 @@
     onclear?.();
   }
 
+  function providerLabel(provider: string) {
+    switch (provider) {
+      case 'deepseek':
+        return 'DeepSeek';
+      case 'openrouter':
+        return 'OpenRouter';
+      case 'ollama':
+        return 'Ollama';
+      default:
+        return provider;
+    }
+  }
+
+  function languageLabel(code: string) {
+    return LANGUAGES.find((language) => language.code === code)?.label ?? code;
+  }
+
   $effect(() => {
     return () => clearClearConfirmTimer();
   });
 </script>
 
-<section class="space-y-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4">
+<section class="space-y-3 rounded-xl border border-aura-border bg-white/80 px-5 py-5">
   <div class="flex items-start justify-between gap-4">
     <div>
-      <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
-        Recent History
+      <p class="aura-section-title">
+        最近历史
       </p>
       <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-        Aura keeps the latest 50 successful or failed translation requests on this machine.
+        Aura 会在本机保留最近 50 条成功或失败的翻译请求。
       </p>
     </div>
 
@@ -71,7 +89,7 @@
             data-testid="clear-confirm-commit"
             onclick={commitClear}
           >
-            Confirm clear all
+            确认清空
           </button>
           <button
             class="rounded-md border border-aura-border bg-white px-3 py-1.5 text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
@@ -79,7 +97,7 @@
             data-testid="clear-confirm-cancel"
             onclick={cancelClearConfirm}
           >
-            Cancel
+            取消
           </button>
         </div>
       {:else}
@@ -89,7 +107,7 @@
           data-testid="clear-all-button"
           onclick={enterClearConfirm}
         >
-          Clear all
+          清空全部
         </button>
       {/if}
     {/if}
@@ -100,38 +118,38 @@
       class="rounded-md border border-dashed border-aura-border bg-aura-surface-soft px-3 py-3 text-xs leading-relaxed text-aura-text-dim"
       data-testid="history-empty"
     >
-      No translation history yet. Aura will keep recent successes and failures here once you start translating.
+      暂无翻译历史。开始翻译后，最近的成功和失败记录会显示在这里。
     </div>
   {:else}
     <div class="space-y-3" data-testid="history-list">
       {#each entries as entry (entry.id)}
         <article class="rounded-[14px] border border-aura-border bg-white px-3 py-3 shadow-[0_10px_22px_rgba(89,104,129,0.06)]">
           <div class="flex flex-wrap items-center gap-2">
-            <span class={`rounded-full px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] ${
+            <span class={`rounded-full px-2.5 py-1 text-[11px] font-display font-medium ${
               entry.status === 'success'
                 ? 'bg-aura-accent-soft text-aura-accent'
                 : 'bg-[#fff4f6] text-aura-error'
             }`}>
-              {entry.status === 'success' ? 'Success' : 'Failed'}
+              {entry.status === 'success' ? '成功' : '失败'}
             </span>
-            <span class="rounded-full border border-aura-border px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] text-aura-text-dim">
-              {entry.source_lang} to {entry.target_lang}
+            <span class="rounded-full border border-aura-border px-2.5 py-1 text-[11px] font-display font-medium text-aura-text-dim">
+              {languageLabel(entry.source_lang)} → {languageLabel(entry.target_lang)}
             </span>
-            <span class="rounded-full border border-aura-border px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] text-aura-text-dim">
-              {entry.provider} 路 {entry.model}
+            <span class="rounded-full border border-aura-border px-2.5 py-1 text-[11px] font-display font-medium text-aura-text-dim">
+              {providerLabel(entry.provider)} · {entry.model}
             </span>
             <span class="text-[11px] text-aura-text-muted">{formatHistoryTimestamp(entry.created_at_ms)}</span>
             {#if entry.usage}
-              <span class="rounded-full border border-aura-accent/25 bg-aura-accent-soft px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] text-aura-accent">
-                {formatTokenCount(entry.usage.total_tokens)} tokens
+              <span class="rounded-full border border-aura-accent/25 bg-aura-accent-soft px-2.5 py-1 text-[11px] font-display font-medium text-aura-accent">
+                {formatTokenCount(entry.usage.total_tokens)} token
               </span>
             {/if}
           </div>
 
           <div class="mt-3 grid gap-3 md:grid-cols-2">
             <div class="rounded-md border border-aura-border/80 bg-aura-surface-soft px-3 py-3">
-              <p class="text-[10px] font-display font-semibold uppercase tracking-[0.18em] text-aura-text-muted">
-                Source
+              <p class="aura-section-title">
+                原文
               </p>
               <p class="mt-2 whitespace-pre-wrap break-words text-xs leading-6 text-aura-text-dim">
                 {entry.source_text}
@@ -143,13 +161,13 @@
                 ? 'border-aura-border/80 bg-white'
                 : 'border-aura-error/20 bg-[#fff8f9]'
             }`}>
-              <p class="text-[10px] font-display font-semibold uppercase tracking-[0.18em] text-aura-text-muted">
-                {entry.status === 'success' ? 'Result' : 'Error'}
+              <p class="aura-section-title">
+                {entry.status === 'success' ? '译文' : '错误'}
               </p>
               <p class={`mt-2 whitespace-pre-wrap break-words text-xs leading-6 ${
                 entry.status === 'success' ? 'text-aura-text' : 'text-aura-error/90'
               }`}>
-                {entry.status === 'success' ? entry.translated_text : (entry.error_message ?? 'Translation failed.')}
+                {entry.status === 'success' ? entry.translated_text : (entry.error_message ?? '翻译失败。')}
               </p>
             </div>
           </div>
@@ -157,13 +175,13 @@
           {#if entry.usage}
             <div class="mt-3 flex flex-wrap gap-2 text-[11px] text-aura-text-muted">
               <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
-                Input {formatTokenCount(entry.usage.prompt_tokens)}
+                输入 {formatTokenCount(entry.usage.prompt_tokens)}
               </span>
               <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
-                Output {formatTokenCount(entry.usage.completion_tokens)}
+                输出 {formatTokenCount(entry.usage.completion_tokens)}
               </span>
               <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
-                Total {formatTokenCount(entry.usage.total_tokens)}
+                总计 {formatTokenCount(entry.usage.total_tokens)}
               </span>
             </div>
           {/if}
@@ -174,7 +192,7 @@
               type="button"
               onclick={() => onretry?.(entry.id)}
             >
-              Retry
+              重试
             </button>
 
             {#if entry.translated_text}
@@ -183,7 +201,7 @@
                 type="button"
                 onclick={() => oncopy?.(entry.translated_text)}
               >
-                Copy
+                复制
               </button>
             {/if}
 
@@ -192,7 +210,7 @@
               type="button"
               onclick={() => ondelete?.(entry.id)}
             >
-              Delete
+              删除
             </button>
           </div>
         </article>

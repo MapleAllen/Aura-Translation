@@ -40,7 +40,7 @@ export function createDaemonErrorNotification(
   return {
     id: nextNotificationId('daemon'),
     kind: 'error',
-    title: payload.recoverable ? 'Daemon warning' : 'Daemon error',
+    title: payload.recoverable ? '后台提醒' : '后台错误',
     message: payload.message,
     scope: 'global',
   };
@@ -52,8 +52,8 @@ export function createHotkeyConflictNotification(
   return {
     id: nextNotificationId('hotkey'),
     kind: 'warning',
-    title: 'Hotkey conflict',
-    message: `Could not register "${payload.hotkey}": ${payload.error}`,
+    title: '快捷键冲突',
+    message: `无法注册 "${payload.hotkey}"：${payload.error}`,
     scope: 'settings',
   };
 }
@@ -62,7 +62,7 @@ export function createTranslationErrorNotification(message: string): AppNotifica
   return {
     id: nextNotificationId('translation'),
     kind: 'error',
-    title: 'Translation failed',
+    title: '翻译失败',
     message,
     scope: 'global',
   };
@@ -72,49 +72,49 @@ export function createAuraGuardNotification(reason: string): AppNotification {
   return {
     id: nextNotificationId('aura-guard'),
     kind: 'warning',
-    title: 'Sensitive clipboard skipped',
+    title: '已跳过敏感剪贴板内容',
     message: reason,
     scope: 'global',
   };
 }
 
 export function formatTranslationError(input: unknown): string {
-  const message = String(input ?? 'Translation failed.');
+  const message = String(input ?? '翻译失败。');
 
   if (message.startsWith('No API key configured')) {
-    return 'No API key configured. Open Settings from the tray and save a key for the selected provider.';
+    return '尚未配置 API Key。请从托盘打开设置，并为当前服务商保存密钥。';
   }
 
   if (message.startsWith('No response from API (timeout)')) {
-    return 'The provider did not return a first token within 20 seconds. Try again or switch provider or model.';
+    return '服务商在 20 秒内没有返回首个 token。请重试，或切换服务商/模型。';
   }
 
   if (message.includes('API error (401')) {
-    return 'Authentication failed. Check the API key for the selected provider.';
+    return '认证失败。请检查当前服务商的 API Key。';
   }
 
   if (message.includes('API error (403')) {
-    return 'The provider rejected this request. Check account permissions and model access.';
+    return '服务商拒绝了本次请求。请检查账号权限和模型访问权限。';
   }
 
   if (message.includes('API error (429')) {
-    return 'The provider rate-limited this request. Wait a moment and try again.';
+    return '服务商触发了限流。请稍等后重试。';
   }
 
   if (message.startsWith('Network error:')) {
-    return 'Could not reach the provider. Check the network connection and API base URL.';
+    return '无法连接服务商。请检查网络连接和 API 地址。';
   }
 
   if (message.startsWith('Malformed SSE data:')) {
-    return 'The provider returned an invalid streaming response. Try again or switch provider.';
+    return '服务商返回了无效的流式响应。请重试或切换服务商。';
   }
 
   if (message.startsWith('Stream error:')) {
-    return 'The translation stream ended unexpectedly. Try again.';
+    return '翻译流意外结束。请重试。';
   }
 
-  if (message.startsWith('Invalid API key header:')) {
-    return 'The API key contains invalid characters and could not be sent.';
+  if (message.startsWith('Invalid API key header:') || message.startsWith('API Key 请求头无效：')) {
+    return 'API Key 包含无效字符，无法发送。';
   }
 
   return message;

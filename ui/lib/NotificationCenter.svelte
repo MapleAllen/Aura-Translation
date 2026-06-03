@@ -21,7 +21,7 @@
 </script>
 
 {#if notifications.length > 0}
-  <div class="pointer-events-none absolute inset-x-0 top-0 z-60 px-3 pt-3">
+  <div class="pointer-events-none absolute inset-x-2 top-2 z-60 px-3 pt-3">
     <div class="flex flex-col items-end gap-2">
       {#each notifications as notification (notification.id)}
         <section
@@ -43,7 +43,7 @@
             <button
               class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-aura-text-muted transition-colors hover:bg-black/[0.04] hover:text-aura-text"
               type="button"
-              aria-label={`Dismiss ${notification.title}`}
+              aria-label={`关闭通知：${notification.title}`}
               data-testid={`dismiss-${notification.id}`}
               onclick={() => ondismiss(notification.id)}
             >
