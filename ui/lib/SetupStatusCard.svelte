@@ -12,16 +12,16 @@
 </script>
 
 <section
-  class="space-y-3 rounded-lg border border-aura-border bg-white/84 px-4 py-4"
+  class="space-y-3 rounded-xl border border-aura-border bg-white/84 px-5 py-5"
   data-testid="runtime-status-card"
 >
   <div class="flex items-start justify-between gap-3">
     <div>
-      <p class="text-[10px] font-display font-semibold uppercase tracking-[0.22em] text-aura-text-muted">
-        Readiness
+      <p class="aura-section-title">
+        就绪状态
       </p>
       <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-        {status?.summary ?? 'Checking whether Aura is ready to translate...'}
+        {status?.summary ?? '正在检查 Aura 是否已准备好翻译...'}
       </p>
     </div>
 
@@ -32,7 +32,7 @@
           : 'bg-[#fff4f6] text-aura-error'
       }`}
     >
-      {status?.level === 'ready' ? 'Ready' : 'Action needed'}
+      {status?.level === 'ready' ? '已就绪' : '需要配置'}
     </span>
   </div>
 
@@ -55,11 +55,11 @@
     </div>
   {/if}
 
-  <div class="flex items-center justify-between gap-3 rounded-md border border-aura-border/80 bg-aura-surface-soft px-3 py-3">
+  <div class="flex items-center justify-between gap-4 rounded-lg border border-aura-border/80 bg-aura-surface-soft px-4 py-4">
     <div class="min-w-0">
-      <p class="text-xs font-medium text-aura-text">Test provider access</p>
+      <p class="text-sm font-medium text-aura-text">测试服务商连接</p>
       <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-        Runs a lightweight request using the current settings, even before you save them.
+        使用当前设置发起一次轻量请求，保存前也可以测试。
       </p>
       {#if probeResult}
         <p
@@ -72,13 +72,13 @@
     </div>
 
     <button
-      class="shrink-0 rounded-lg border border-aura-border bg-white px-3 py-2 text-xs font-display font-medium text-aura-text transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-accent disabled:cursor-not-allowed disabled:opacity-55"
+      class="shrink-0 rounded-lg border border-aura-border bg-white px-4 py-2.5 text-xs font-display font-medium text-aura-text transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-accent disabled:cursor-not-allowed disabled:opacity-55"
       onclick={ontest}
       disabled={testing}
       data-testid="probe-provider-button"
       type="button"
     >
-      {testing ? 'Testing...' : 'Test provider'}
+      {testing ? '测试中...' : '测试服务商'}
     </button>
   </div>
 </section>

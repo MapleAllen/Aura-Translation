@@ -70,42 +70,38 @@
 
   const pasteBackTooltip = $derived.by(() => {
     if (!translatedText || isBusy) {
-      return 'Translate first to paste back.';
+      return '请先完成翻译再回填。';
     }
     if (!pasteBackSupported) {
-      return 'Paste-back is only available on Windows.';
+      return '回填功能目前仅支持 Windows。';
     }
     if (!pasteBackAvailable) {
-      return 'Copy text from a foreground app first, then paste-back will be available.';
+      return '请先从前台应用复制文本，Aura 才能回填。';
     }
-    return 'Send the translation back to the source app.';
+    return '将译文回填到原应用。';
   });
 </script>
 
 <div
-  class="relative flex h-full flex-col overflow-hidden rounded-[18px] border border-aura-border bg-[rgba(248,250,252,0.96)] text-aura-text shadow-[0_20px_42px_rgba(89,104,129,0.18)]"
-  style="
-    backdrop-filter: blur(18px) saturate(1.04);
-    -webkit-backdrop-filter: blur(18px) saturate(1.04);
-  "
+  class="aura-glass-panel flex flex-col"
 >
   <div
-    class="absolute inset-x-0 top-0 z-[2] flex items-center gap-3 px-3 py-3"
+    class="relative z-[2] flex shrink-0 items-center gap-3 px-4 pb-3 pt-4"
   >
     <div
-      class="shrink-0 rounded-full border border-aura-border/70 bg-white/78 px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.16em] text-aura-text-dim"
+      class="shrink-0 rounded-full border border-aura-border/70 bg-white/78 px-3 py-1.5 text-xs font-display font-medium text-aura-text-dim"
       data-tauri-drag-region
     >
       {#if viewState === 'loading'}
-        Connecting
+        连接中
       {:else if retryAttempt !== null}
-        Retry {retryAttempt}
+        重试 {retryAttempt}
       {:else if viewState === 'streaming'}
-        Streaming
+        翻译中
       {:else if viewState === 'error'}
-        Attention
+        需要处理
       {:else if viewState === 'result'}
-        Ready
+        已就绪
       {:else}
         Aura
       {/if}
@@ -115,8 +111,8 @@
       class="h-8 min-w-[88px] flex-1 cursor-move rounded-full"
       data-tauri-drag-region
       data-testid="window-drag-handle"
-      aria-label="Drag window"
-      title="Drag window"
+      aria-label="拖动窗口"
+      title="拖动窗口"
     ></div>
 
     <div class="flex shrink-0 items-center gap-2">
@@ -131,14 +127,14 @@
         onclick={() => onTogglePinned?.(!windowPinned)}
       >
         <span class="h-2.5 w-2.5 rounded-full bg-current"></span>
-        <span>{windowPinned ? 'Pinned' : 'Pin'}</span>
+        <span>{windowPinned ? '已固定' : '固定'}</span>
       </button>
 
       {#if sourceText && !isBusy && !showComposer}
         <button
           class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-accent"
           onclick={() => onretry?.()}
-          aria-label="Retry translation"
+          aria-label="重新翻译"
           type="button"
         >
           <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9">
@@ -151,7 +147,7 @@
         <button
           class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-aura-border disabled:hover:text-aura-text-dim"
           onclick={() => onpasteback?.()}
-          aria-label="Paste translation back"
+          aria-label="回填译文"
           title={pasteBackTooltip}
           type="button"
           disabled={!canPasteBackDerived}
@@ -166,7 +162,7 @@
         <button
           class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-accent"
           onclick={() => oncopy?.()}
-          aria-label="Copy translation"
+          aria-label="复制译文"
           type="button"
         >
           <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
@@ -179,7 +175,7 @@
         <button
           class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-error/30 hover:text-aura-error"
           onclick={() => oncancel?.()}
-          aria-label="Cancel translation"
+          aria-label="取消翻译"
           type="button"
         >
           <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.1">
@@ -191,7 +187,7 @@
       <button
         class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
         onclick={() => ondismiss?.()}
-        aria-label="Close translator"
+        aria-label="关闭翻译窗"
         type="button"
       >
         <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.1">
@@ -201,38 +197,38 @@
     </div>
   </div>
 
-  <div class="flex min-h-0 flex-1 items-stretch px-5 py-5">
+  <div class="flex min-h-0 flex-1 items-stretch px-5 pb-5 pt-1">
     <div class="flex w-full min-h-0 flex-col">
       {#if sourceText || showComposer}
         <div class="mb-4 space-y-2">
           <div class="flex flex-wrap gap-2">
-            <span class="rounded-full border border-aura-border/80 bg-white/84 px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] text-aura-text-dim">
-              {sourceLangLabel} to {targetLangLabel}
+            <span class="rounded-full border border-aura-border/80 bg-white/84 px-3 py-1.5 text-[11px] font-display font-medium text-aura-text-dim">
+              {sourceLangLabel} → {targetLangLabel}
             </span>
-            <span class="rounded-full border border-aura-border/80 bg-white/84 px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] text-aura-text-dim">
+            <span class="rounded-full border border-aura-border/80 bg-white/84 px-3 py-1.5 text-[11px] font-display font-medium text-aura-text-dim">
               {providerLabel} · {modelLabel}
             </span>
             {#if retryAttempt !== null}
-              <span class="rounded-full border border-aura-accent/25 bg-aura-accent-soft px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] text-aura-accent">
-                Retry {retryAttempt}/3
+              <span class="rounded-full border border-aura-accent/25 bg-aura-accent-soft px-3 py-1.5 text-[11px] font-display font-medium text-aura-accent">
+                第 {retryAttempt}/3 次重试
               </span>
             {/if}
             {#if usage}
-              <span class="rounded-full border border-aura-accent/25 bg-aura-accent-soft px-2.5 py-1 text-[10px] font-display font-semibold uppercase tracking-[0.14em] text-aura-accent">
-                {usage.total_tokens.toLocaleString()} tokens
+              <span class="rounded-full border border-aura-accent/25 bg-aura-accent-soft px-3 py-1.5 text-[11px] font-display font-medium text-aura-accent">
+                {usage.total_tokens.toLocaleString()} token
               </span>
             {/if}
           </div>
 
           {#if showComposer}
-            <div class="rounded-[14px] border border-aura-border bg-white/68 px-4 py-3">
+            <div class="rounded-[16px] border border-aura-border bg-white/68 px-5 py-4">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p class="text-[10px] font-display font-semibold uppercase tracking-[0.18em] text-aura-text-muted">
-                    Draft
+                  <p class="aura-section-title">
+                    原文草稿
                   </p>
-                  <p class="mt-1 text-[11px] leading-relaxed text-aura-text-muted">
-                    Edit the source here and press Ctrl+Enter to run the full translation again without leaving Aura.
+                  <p class="mt-1 text-xs leading-relaxed text-aura-text-muted">
+                    在这里修改原文，按 Ctrl+Enter 可直接重新翻译全文。
                   </p>
                 </div>
 
@@ -243,7 +239,7 @@
                       type="button"
                       onclick={() => onresetdraft?.()}
                     >
-                      Reset
+                      还原
                     </button>
                   {/if}
 
@@ -253,7 +249,7 @@
                     onclick={() => ontranslatedraft?.()}
                     disabled={!draftSourceText.trim() || isBusy}
                   >
-                    Re-run full translation
+                    重新翻译全文
                   </button>
                 </div>
               </div>
@@ -267,18 +263,17 @@
                     ontranslatedraft?.();
                   }
                 }}
-                placeholder="Type or revise source text here."
-                class="mt-3 min-h-[104px] w-full resize-none rounded-[12px] border border-aura-border bg-white px-3 py-3 text-[13px] leading-6 text-aura-text outline-none transition-colors duration-150 placeholder:text-aura-text-muted focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
+                placeholder="在这里输入或修改原文"
+                class="mt-3 min-h-[112px] w-full resize-none rounded-[14px] border border-aura-border bg-white px-4 py-3 text-sm leading-7 text-aura-text outline-none transition-colors duration-150 placeholder:text-aura-text-muted focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
               ></textarea>
             </div>
           {:else}
-            <div class="rounded-[14px] border border-aura-border bg-white/68 px-4 py-3">
-              <p class="text-[10px] font-display font-semibold uppercase tracking-[0.18em] text-aura-text-muted">
-                Source
+            <div class="rounded-[16px] border border-aura-border bg-white/68 px-5 py-4">
+              <p class="aura-section-title">
+                原文
               </p>
               <p
-                class="mt-2 text-[13px] leading-6 text-aura-text-dim"
-                style="display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2;"
+                class="mt-2 max-h-[76px] overflow-y-auto pr-1 text-sm leading-7 text-aura-text-dim"
               >
                 {sourceText}
               </p>
@@ -288,43 +283,43 @@
       {/if}
 
       {#if viewState === 'idle'}
-        <div class="flex min-h-[96px] w-full items-center justify-center rounded-[14px] border border-dashed border-aura-border bg-white/62 px-5 text-center">
-          <p class="max-w-[250px] text-sm leading-relaxed text-aura-text-dim">
+        <div class="flex min-h-[88px] w-full items-center justify-center rounded-[16px] border border-dashed border-aura-border bg-white/62 px-6 text-center">
+          <p class="max-w-[280px] text-sm leading-7 text-aura-text-dim">
             {showComposer
-              ? 'Type or paste source text into the draft area, then press Ctrl+Enter to run the full translation again.'
-              : 'Copy text to translate. Use the hotkey to recall the last result anytime.'}
+              ? '在草稿区输入或粘贴原文，然后按 Ctrl+Enter 重新翻译全文。'
+              : '复制要翻译的文本，按快捷键即可唤起 Aura。'}
           </p>
         </div>
       {:else if viewState === 'loading'}
-        <div class="flex min-h-[96px] w-full flex-1 items-center justify-center">
+        <div class="flex min-h-[88px] w-full flex-1 items-center justify-center">
           <div class="flex items-center gap-3 rounded-full border border-aura-border bg-white/78 px-4 py-2.5 text-sm text-aura-text-dim">
             <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-aura-accent"></span>
-            <span>{retryAttempt !== null ? `Retrying request (${retryAttempt}/3)...` : 'Translating...'}</span>
+            <span>{retryAttempt !== null ? `正在重试请求（${retryAttempt}/3）...` : '正在翻译...'}</span>
           </div>
         </div>
       {:else if viewState === 'streaming' || viewState === 'result'}
-        <div class="w-full min-h-0 flex-1 overflow-y-auto pr-1">
-          <p class="select-text whitespace-pre-wrap text-[15px] leading-7 text-aura-text">
+        <div class="w-full min-h-0 flex-1 overflow-y-auto pb-2 pr-2">
+          <p class="select-text whitespace-pre-wrap break-words text-[15px] leading-8 text-aura-text">
             {translatedText}{#if viewState === 'streaming'}<span class="ml-0.5 inline-block h-5 w-0.5 animate-pulse bg-aura-accent align-text-bottom"></span>{/if}
           </p>
           {#if usage}
             <div class="mt-4 flex flex-wrap gap-2 text-[11px] text-aura-text-muted">
               <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
-                Input {usage.prompt_tokens.toLocaleString()}
+                输入 {usage.prompt_tokens.toLocaleString()}
               </span>
               <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
-                Output {usage.completion_tokens.toLocaleString()}
+                输出 {usage.completion_tokens.toLocaleString()}
               </span>
               <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
-                Total {usage.total_tokens.toLocaleString()}
+                总计 {usage.total_tokens.toLocaleString()}
               </span>
             </div>
           {/if}
         </div>
       {:else}
-        <div class="flex min-h-[96px] w-full flex-1 flex-col items-center justify-center gap-3 px-2 text-center">
-          <p class="max-w-[260px] text-sm leading-relaxed text-aura-error/90">
-            {errorMessage || 'Translation failed.'}
+        <div class="flex min-h-[88px] w-full flex-1 flex-col items-center justify-center gap-3 px-3 text-center">
+          <p class="max-w-[280px] text-sm leading-7 text-aura-error/90">
+            {errorMessage || '翻译失败。'}
           </p>
           <button
             type="button"
@@ -333,7 +328,7 @@
             onclick={() => onretry?.()}
             disabled={!draftSourceText.trim()}
           >
-            Try again
+            重试
           </button>
         </div>
       {/if}

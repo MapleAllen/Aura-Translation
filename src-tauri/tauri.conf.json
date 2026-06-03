@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Aura Translation",
+  "productName": "Aura 翻译",
   "version": "0.1.0",
   "identifier": "com.aura.translation",
   "build": {
@@ -13,11 +13,11 @@
     "windows": [
       {
         "label": "translation",
-        "title": "Aura Translation",
-        "width": 360,
-        "height": 164,
-        "minWidth": 320,
-        "minHeight": 124,
+        "title": "Aura 翻译",
+        "width": 392,
+        "height": 188,
+        "minWidth": 360,
+        "minHeight": 156,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": false,
@@ -28,11 +28,11 @@
       },
       {
         "label": "settings",
-        "title": "Aura Settings",
-        "width": 440,
-        "height": 640,
-        "minWidth": 400,
-        "minHeight": 560,
+        "title": "Aura 设置",
+        "width": 480,
+        "height": 680,
+        "minWidth": 420,
+        "minHeight": 600,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": false,
@@ -43,7 +43,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' https: http:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:"
+      "csp": "default-src 'self'; connect-src 'self' https: http:; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
     }
   },
   "bundle": {

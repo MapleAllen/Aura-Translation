@@ -35,6 +35,11 @@
   let config: AppConfig = $state(createDefaultAppConfig());
   let popupElement = $state<HTMLDivElement | null>(null);
 
+  const TRANSLATION_WINDOW_WIDTH = 392;
+  const TRANSLATION_MIN_HEIGHT = 156;
+  const TRANSLATION_MAX_HEIGHT = 492;
+  const WINDOW_SAFE_AREA_HEIGHT = 18;
+
   const popupScale = new Spring(0.94, { stiffness: 0.16, damping: 0.72 });
   const popupOpacity = new Spring(0, { stiffness: 0.18, damping: 0.82 });
 
@@ -107,7 +112,7 @@
       pushNotification(
         createDaemonErrorNotification({
           code: 'config-load-failed',
-          message: 'Failed to load the local Aura config from the desktop backend.',
+          message: '无法从桌面后端加载本地 Aura 配置。',
           recoverable: true,
         }),
       );
@@ -152,7 +157,7 @@
       pushNotification(
         createDaemonErrorNotification({
           code: 'hotkey-empty-clipboard',
-          message: 'Copy text to translate first, then press the hotkey.',
+          message: '请先复制要翻译的文本，然后按快捷键。',
           recoverable: true,
         }),
       );
@@ -205,7 +210,7 @@
     const requestText = (textOverride ?? draftSourceText ?? translatedTextTriggerText).trim();
 
     if (!requestConfig || !requestText) {
-      showTranslationFailure('No translation request is available to retry yet.');
+      showTranslationFailure('还没有可重试的翻译请求。');
       return;
     }
 
@@ -288,7 +293,7 @@
       pushNotification(
         createDaemonErrorNotification({
           code: 'window-pin-save-failed',
-          message: 'Failed to update window behavior. Try again from Settings.',
+          message: '无法更新窗口行为，请在设置中重试。',
           recoverable: true,
         }),
       );
@@ -304,7 +309,7 @@
       pushNotification(
         createDaemonErrorNotification({
           code: 'clipboard-copy-failed',
-          message: 'Failed to copy the translated text to the clipboard.',
+          message: '无法将译文复制到剪贴板。',
           recoverable: true,
         }),
       );
@@ -322,7 +327,7 @@
       pushNotification(
         createDaemonErrorNotification({
           code: 'paste-back-failed',
-          message: String(e ?? 'Failed to paste the translated text back into the source app.'),
+          message: String(e ?? '无法将译文回填到原应用。'),
           recoverable: true,
         }),
       );
@@ -387,12 +392,12 @@
     await tick();
 
     const desiredHeight = Math.min(
-      Math.max(Math.ceil(popupElement.scrollHeight) + 2, 124),
-      460,
+      Math.max(Math.ceil(popupElement.scrollHeight) + WINDOW_SAFE_AREA_HEIGHT, TRANSLATION_MIN_HEIGHT),
+      TRANSLATION_MAX_HEIGHT,
     );
 
     try {
-      await getCurrentWindow().setSize(new LogicalSize(360, desiredHeight));
+      await getCurrentWindow().setSize(new LogicalSize(TRANSLATION_WINDOW_WIDTH, desiredHeight));
       await invoke('realign_translation_window');
     } catch (e) {
       console.error('Failed to auto-size translation window:', e);
@@ -587,7 +592,7 @@
   {/if}
 
   <div
-    class="relative h-full w-full"
+    class="aura-window-shell"
     style:transform="scale({popupScale.current})"
     style:opacity={popupOpacity.current}
     style="transform-origin: center bottom; will-change: transform, opacity;"

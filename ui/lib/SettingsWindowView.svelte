@@ -126,7 +126,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="relative h-screen w-screen overflow-hidden">
+<div class="aura-window-shell">
   <NotificationCenter {notifications} ondismiss={dismissNotification} />
 
   <SettingsPanel
