@@ -20,7 +20,7 @@
       </p>
     </div>
 
-    <span class={`border px-2 py-1 text-[11px] font-display font-semibold tracking-[0.08em] ${
+    <span class={`rounded-lg border px-2.5 py-1 text-[11px] font-display font-semibold tracking-[0.06em] ${
       status?.level === 'ready'
         ? 'border-[#d9efe4] bg-[#f5fbf8] text-aura-success'
         : 'border-[#f4d4da] bg-[#fff8f9] text-aura-error'
@@ -30,10 +30,10 @@
   </div>
 
   {#if status}
-    <div class="overflow-hidden border border-aura-border">
+    <div class="overflow-hidden rounded-lg border border-aura-border bg-white/80">
       {#each status.checklist as item, index}
         <div
-          class={`flex items-center gap-3 px-3 py-2 text-xs ${
+          class={`flex items-center gap-3 px-3.5 py-2.5 text-xs ${
             index === 0 ? '' : 'border-t border-aura-border'
           } ${item.ok ? 'text-aura-text' : 'text-aura-error/90'}`}
         >
@@ -48,7 +48,7 @@
     </div>
   {/if}
 
-  <div class="flex flex-wrap items-center justify-between gap-4 border border-aura-border bg-aura-surface-soft px-4 py-3">
+  <div class="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-aura-border bg-aura-surface-soft px-4 py-3.5">
     <div class="min-w-0">
       <p class="text-sm font-medium text-aura-text">测试服务商连接</p>
       <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">

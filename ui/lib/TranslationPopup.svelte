@@ -127,16 +127,16 @@
 
 <div class="aura-glass-panel flex min-h-0 flex-col">
   <div
-    class="flex shrink-0 items-center gap-3 border-b border-aura-border px-3 py-2.5"
+    class="flex shrink-0 items-center gap-3 border-b border-aura-border bg-white/70 px-4 py-3"
     data-testid="popup-status-bar"
   >
     <div class="flex shrink-0 items-center gap-2 text-[11px] font-display font-medium text-aura-text-dim">
-      <span class="h-1.5 w-1.5 rounded-full bg-aura-accent"></span>
+      <span class="h-2 w-2 rounded-full bg-aura-accent shadow-[0_0_0_4px_var(--color-aura-accent-soft)]"></span>
       <span>{statusLabel}</span>
     </div>
 
     <div
-      class="min-w-[92px] flex-1 cursor-move select-none text-center text-[11px] font-medium uppercase tracking-[0.18em] text-aura-text-muted"
+      class="min-w-[92px] flex-1 cursor-move select-none text-center text-[11px] font-medium uppercase tracking-[0.14em] text-aura-text-muted"
       data-tauri-drag-region
       data-testid="window-drag-handle"
       aria-label="拖动窗口"
@@ -147,10 +147,10 @@
 
     <div class="flex shrink-0 items-center gap-1.5">
       <button
-        class={`flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-display transition-colors duration-150 ${
+        class={`flex h-[2.15rem] items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-display transition-colors duration-150 ${
           windowPinned
-            ? 'border-aura-accent bg-aura-accent text-white'
-            : 'border-aura-border bg-aura-surface-strong text-aura-text-dim hover:border-aura-border-accent hover:text-aura-text'
+            ? 'border-aura-accent bg-aura-accent text-white shadow-[0_8px_16px_rgba(37,111,216,0.16)]'
+            : 'border-aura-border bg-aura-surface-strong text-aura-text-dim hover:border-aura-border-accent hover:bg-white hover:text-aura-text'
         }`}
         type="button"
         aria-pressed={windowPinned}
@@ -227,13 +227,13 @@
     </div>
   </div>
 
-  <div class="min-h-0 flex-1 p-3">
+  <div class="min-h-0 flex-1 p-3.5">
     <div
-      class="flex h-full min-h-0 flex-col overflow-hidden rounded-[10px] border border-aura-border bg-aura-surface-strong"
+      class="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-aura-border bg-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
       data-testid="popup-main-surface"
     >
       {#if showContextBar}
-        <div class="border-b border-aura-border px-4 py-3">
+        <div class="border-b border-aura-border bg-aura-surface-soft/45 px-4 py-3.5">
           <div
             class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] text-aura-text-dim"
             data-testid="popup-context-row"
@@ -255,8 +255,8 @@
           </div>
 
           {#if showComposer}
-            <div class="mt-3 border-t border-aura-border pt-3">
-              <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="mt-3.5 border-t border-aura-border pt-3.5">
+              <div class="flex flex-wrap items-center justify-between gap-3.5">
                 <div>
                   <p class="aura-section-title">原文草稿</p>
                   <p class="mt-1 text-xs leading-relaxed text-aura-text-muted">
@@ -297,16 +297,16 @@
                   }
                 }}
                 placeholder="在这里输入或修改原文"
-                class="aura-console-textarea mt-3 min-h-[116px]"
+                class="aura-console-textarea mt-3.5 min-h-[128px]"
               ></textarea>
             </div>
           {:else if showSourceToggle && sourceExpanded}
             <div
-              class="mt-3 border-t border-aura-border pt-3"
+              class="mt-3.5 border-t border-aura-border pt-3.5"
               data-testid="popup-source-panel"
             >
               <p class="aura-section-title">原文</p>
-              <p class="mt-2 max-h-[96px] overflow-y-auto pr-1 text-sm leading-7 text-aura-text-dim">
+              <p class="mt-2.5 max-h-[108px] overflow-y-auto pr-1 text-sm leading-7 text-aura-text-dim">
                 {sourceText}
               </p>
             </div>
@@ -314,7 +314,7 @@
         </div>
       {/if}
 
-      <div class="flex-1 min-h-0 px-4 py-4">
+      <div class="flex-1 min-h-0 px-5 py-5">
         {#if viewState === 'idle'}
           <div
             class="flex h-full items-center justify-center text-center"
@@ -331,21 +331,21 @@
             class="flex h-full items-center justify-center"
             data-testid="popup-loading-state"
           >
-            <div class="flex items-center gap-3 text-sm text-aura-text-dim">
-              <span class="h-2 w-2 animate-pulse rounded-full bg-aura-accent"></span>
+            <div class="flex items-center gap-3 rounded-lg border border-aura-border bg-aura-surface-soft px-4 py-3 text-sm text-aura-text-dim">
+              <span class="h-2 w-2 animate-pulse rounded-full bg-aura-accent shadow-[0_0_0_4px_var(--color-aura-accent-soft)]"></span>
               <span>{retryAttempt !== null ? `正在重试请求 ${retryAttempt}/3...` : '正在翻译...'}</span>
             </div>
           </div>
         {:else if viewState === 'streaming' || viewState === 'result'}
           <div class="flex h-full min-h-0 flex-col">
             <div class="min-h-0 flex-1 overflow-y-auto pr-1">
-              <p class="select-text whitespace-pre-wrap break-words text-[15px] leading-8 text-aura-text">
+              <p class="select-text whitespace-pre-wrap break-words text-[15px] leading-[2rem] text-aura-text">
                 {translatedText}{#if viewState === 'streaming'}<span class="ml-0.5 inline-block h-5 w-0.5 animate-pulse bg-aura-accent align-text-bottom"></span>{/if}
               </p>
             </div>
 
             {#if usage}
-              <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-aura-border pt-3 text-[11px] text-aura-text-muted">
+              <div class="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-t border-aura-border pt-3 text-[11px] text-aura-text-muted">
                 <span class="font-mono">输入 {usage.prompt_tokens.toLocaleString()}</span>
                 <span class="font-mono">输出 {usage.completion_tokens.toLocaleString()}</span>
                 <span class="font-mono">总计 {usage.total_tokens.toLocaleString()}</span>
@@ -353,7 +353,7 @@
             {/if}
           </div>
         {:else}
-          <div class="flex h-full flex-col items-start justify-center gap-4">
+          <div class="flex h-full flex-col items-start justify-center gap-4 rounded-lg border border-aura-error/20 bg-[#fff8f9] px-4 py-4">
             <div>
               <p class="aura-section-title text-aura-error">翻译失败</p>
               <p class="mt-2 max-w-[320px] text-sm leading-7 text-aura-error/90">
