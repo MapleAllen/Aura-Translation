@@ -1,7 +1,4 @@
 <script lang="ts">
-  /**
-   * LanguageSelector - Compact source/target language toolbar.
-   */
   import { Spring } from 'svelte/motion';
   import { LANGUAGES } from './languages';
 
@@ -25,13 +22,11 @@
   }
 </script>
 
-<div class="flex items-center gap-2 rounded-lg border border-aura-border bg-white px-2 py-2">
-  <label class="min-w-0 flex-1 rounded-md border border-aura-border/70 bg-aura-surface-soft px-3 py-2">
-    <span class="mb-1 block text-xs font-display font-semibold text-aura-text-muted">
-      源语言
-    </span>
+<div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+  <label class="space-y-1.5">
+    <span class="aura-section-title">源语言</span>
     <select
-      class="w-full cursor-pointer appearance-none bg-transparent text-sm font-medium text-aura-text outline-none"
+      class="aura-console-select"
       value={sourceLang}
       onchange={(e) => onchange((e.target as HTMLSelectElement).value, targetLang)}
     >
@@ -44,7 +39,7 @@
   </label>
 
   <button
-    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-aura-border bg-white text-aura-accent transition-all duration-200 hover:border-aura-border-accent hover:bg-aura-accent-soft active:scale-95 disabled:opacity-35 disabled:hover:border-aura-border disabled:hover:bg-white"
+    class="aura-console-icon-button self-end"
     onclick={swap}
     disabled={sourceLang === 'auto'}
     title="交换语言"
@@ -59,12 +54,10 @@
     </svg>
   </button>
 
-  <label class="min-w-0 flex-1 rounded-md border border-aura-border/70 bg-aura-surface-soft px-3 py-2">
-    <span class="mb-1 block text-xs font-display font-semibold text-aura-text-muted">
-      目标语言
-    </span>
+  <label class="space-y-1.5">
+    <span class="aura-section-title">目标语言</span>
     <select
-      class="w-full cursor-pointer appearance-none bg-transparent text-sm font-medium text-aura-text outline-none"
+      class="aura-console-select"
       value={targetLang}
       onchange={(e) => onchange(sourceLang, (e.target as HTMLSelectElement).value)}
     >

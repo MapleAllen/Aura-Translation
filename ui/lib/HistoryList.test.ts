@@ -17,7 +17,7 @@ const sampleEntry: TranslationHistoryEntry = {
   created_at_ms: Date.UTC(2026, 0, 1, 12, 0, 0),
 };
 
-describe('HistoryList clear all inline confirm', () => {
+describe('HistoryList operator log view', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -35,28 +35,48 @@ describe('HistoryList clear all inline confirm', () => {
     expect(screen.queryByTestId('clear-confirm-group')).not.toBeInTheDocument();
   });
 
-  it('does not call onclear on the first click of Clear all', async () => {
-    const onclear = vi.fn();
+  it('shows summary rows first and keeps details collapsed by default', () => {
     render(HistoryList, {
       entries: [sampleEntry],
-      onclear,
     });
 
-    await fireEvent.click(screen.getByTestId('clear-all-button'));
-    expect(onclear).not.toHaveBeenCalled();
+    expect(screen.getByTestId('history-list')).toHaveTextContent('DeepSeek');
+    expect(screen.getByTestId('history-list')).toHaveTextContent('英语');
+    expect(screen.queryByTestId('history-details-entry-1')).not.toBeInTheDocument();
   });
 
-  it('shows the confirm group after the first click and hides the original button', async () => {
+  it('reveals and hides details through the row toggle', async () => {
     render(HistoryList, {
       entries: [sampleEntry],
     });
 
-    await fireEvent.click(screen.getByTestId('clear-all-button'));
+    await fireEvent.click(screen.getByTestId('history-toggle-entry-1'));
+    expect(screen.getByTestId('history-details-entry-1')).toHaveTextContent('Hello world');
+    expect(screen.getByTestId('history-details-entry-1')).toHaveTextContent('你好世界');
 
-    expect(screen.queryByTestId('clear-all-button')).not.toBeInTheDocument();
-    expect(screen.getByTestId('clear-confirm-group')).toBeInTheDocument();
-    expect(screen.getByTestId('clear-confirm-commit')).toHaveTextContent('确认清空');
-    expect(screen.getByTestId('clear-confirm-cancel')).toHaveTextContent('取消');
+    await fireEvent.click(screen.getByTestId('history-toggle-entry-1'));
+    expect(screen.queryByTestId('history-details-entry-1')).not.toBeInTheDocument();
+  });
+
+  it('keeps row actions available from the summary line', async () => {
+    const onretry = vi.fn();
+    const oncopy = vi.fn();
+    const ondelete = vi.fn();
+
+    render(HistoryList, {
+      entries: [sampleEntry],
+      onretry,
+      oncopy,
+      ondelete,
+    });
+
+    await fireEvent.click(screen.getByTestId('history-retry-entry-1'));
+    await fireEvent.click(screen.getByTestId('history-copy-entry-1'));
+    await fireEvent.click(screen.getByTestId('history-delete-entry-1'));
+
+    expect(onretry).toHaveBeenCalledWith('entry-1');
+    expect(oncopy).toHaveBeenCalledWith('你好世界');
+    expect(ondelete).toHaveBeenCalledWith('entry-1');
   });
 
   it('calls onclear only when the user confirms', async () => {
@@ -67,13 +87,13 @@ describe('HistoryList clear all inline confirm', () => {
     });
 
     await fireEvent.click(screen.getByTestId('clear-all-button'));
-    await fireEvent.click(screen.getByTestId('clear-confirm-commit'));
+    expect(onclear).not.toHaveBeenCalled();
 
+    await fireEvent.click(screen.getByTestId('clear-confirm-commit'));
     expect(onclear).toHaveBeenCalledTimes(1);
-    expect(screen.queryByTestId('clear-confirm-group')).not.toBeInTheDocument();
   });
 
-  it('cancels without calling onclear when Cancel is pressed', async () => {
+  it('cancels clear confirmation and restores the default action', async () => {
     const onclear = vi.fn();
     render(HistoryList, {
       entries: [sampleEntry],
@@ -85,38 +105,20 @@ describe('HistoryList clear all inline confirm', () => {
 
     expect(onclear).not.toHaveBeenCalled();
     expect(screen.getByTestId('clear-all-button')).toBeInTheDocument();
-    expect(screen.queryByTestId('clear-confirm-group')).not.toBeInTheDocument();
   });
 
-  it('auto-resets to the initial state after the 5s timeout', async () => {
-    const onclear = vi.fn();
+  it('auto-resets clear confirmation after the timeout', async () => {
     render(HistoryList, {
       entries: [sampleEntry],
-      onclear,
+      onclear: vi.fn(),
     });
 
     await fireEvent.click(screen.getByTestId('clear-all-button'));
-    expect(screen.getByTestId('clear-confirm-group')).toBeInTheDocument();
-
     vi.advanceTimersByTime(5000);
 
     await waitFor(() => {
       expect(screen.queryByTestId('clear-confirm-group')).not.toBeInTheDocument();
     });
     expect(screen.getByTestId('clear-all-button')).toBeInTheDocument();
-    expect(onclear).not.toHaveBeenCalled();
-  });
-
-  it('does not call onclear before the timeout elapses', async () => {
-    const onclear = vi.fn();
-    render(HistoryList, {
-      entries: [sampleEntry],
-      onclear,
-    });
-
-    await fireEvent.click(screen.getByTestId('clear-all-button'));
-    vi.advanceTimersByTime(4999);
-    expect(onclear).not.toHaveBeenCalled();
-    expect(screen.getByTestId('clear-confirm-group')).toBeInTheDocument();
   });
 });

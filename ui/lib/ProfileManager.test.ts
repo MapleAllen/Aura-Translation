@@ -56,6 +56,17 @@ describe('ProfileManager delete inline confirm', () => {
     expect(ondelete).not.toHaveBeenCalled();
   });
 
+  it('renders profiles as compact operator rows', () => {
+    render(ProfileManager, {
+      store: multiStore,
+      draftName: 'Default',
+    });
+
+    expect(screen.getAllByTestId('profile-row')).toHaveLength(2);
+    expect(screen.getByTestId('profile-list')).toHaveTextContent('Default');
+    expect(screen.getByTestId('profile-list')).toHaveTextContent('Work');
+  });
+
   it('shows the confirm group inline and hides the original button', async () => {
     render(ProfileManager, {
       store: multiStore,

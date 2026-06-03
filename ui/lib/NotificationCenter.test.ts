@@ -4,7 +4,7 @@ import NotificationCenter from './NotificationCenter.svelte';
 import type { AppNotification } from './notifications';
 
 describe('NotificationCenter', () => {
-  it('renders notifications and dismisses them through the callback', async () => {
+  it('renders thin notification strips and dismisses them through the callback', async () => {
     const ondismiss = vi.fn();
     const notifications: AppNotification[] = [
       {
@@ -18,6 +18,7 @@ describe('NotificationCenter', () => {
 
     render(NotificationCenter, { notifications, ondismiss });
 
+    expect(screen.getByTestId('notification-strip')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('后台错误');
     expect(screen.getByRole('alert')).toHaveTextContent('无法创建托盘图标。');
 

@@ -9,10 +9,11 @@
   let { notifications, ondismiss }: Props = $props();
 
   const accentByKind = {
-    error: 'border-l-aura-error bg-white/92 text-aura-text',
-    warning: 'border-l-[#d39d2f] bg-[#fffaf0] text-aura-text',
-    info: 'border-l-aura-accent bg-white/92 text-aura-text',
+    error: 'border-aura-error bg-white text-aura-text',
+    warning: 'border-[#d39d2f] bg-[#fffaf0] text-aura-text',
+    info: 'border-aura-accent bg-white text-aura-text',
   } as const;
+
   const iconByKind = {
     error: '!',
     warning: '!',
@@ -21,27 +22,29 @@
 </script>
 
 {#if notifications.length > 0}
-  <div class="pointer-events-none absolute inset-x-2 top-2 z-60 px-3 pt-3">
+  <div class="pointer-events-none absolute inset-x-2 top-2 z-60 px-2 pt-2">
     <div class="flex flex-col items-end gap-2">
       {#each notifications as notification (notification.id)}
         <section
-          class={`pointer-events-auto w-full max-w-[388px] rounded-lg border border-aura-border border-l-4 shadow-[0_10px_22px_rgba(89,104,129,0.12)] ${accentByKind[notification.kind]}`}
+          class={`pointer-events-auto w-full max-w-[420px] border-l-2 border-y border-r px-3 py-2 shadow-[0_6px_14px_rgba(25,39,54,0.08)] ${accentByKind[notification.kind]}`}
           role="alert"
           aria-live="assertive"
-          data-testid="notification-card"
+          data-testid="notification-strip"
         >
-          <div class="flex items-start gap-3 px-4 py-3">
-            <div class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-black/[0.04] text-[11px] font-semibold text-aura-text-dim">
+          <div class="flex items-start gap-3">
+            <div class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center border border-current/10 text-[10px] font-semibold text-aura-text-dim">
               {iconByKind[notification.kind]}
             </div>
             <div class="min-w-0 flex-1">
-              <p class="text-xs font-display font-semibold tracking-wide">{notification.title}</p>
-              <p class="mt-1 break-words text-xs leading-relaxed text-aura-text-dim">
+              <p class="text-[11px] font-display font-semibold tracking-[0.08em]">
+                {notification.title}
+              </p>
+              <p class="mt-0.5 break-words text-xs leading-relaxed text-aura-text-dim">
                 {notification.message}
               </p>
             </div>
             <button
-              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-aura-text-muted transition-colors hover:bg-black/[0.04] hover:text-aura-text"
+              class="flex h-6 w-6 shrink-0 items-center justify-center text-aura-text-muted transition-colors hover:text-aura-text"
               type="button"
               aria-label={`关闭通知：${notification.title}`}
               data-testid={`dismiss-${notification.id}`}

@@ -79,32 +79,30 @@
   });
 </script>
 
-<section class="space-y-3 rounded-xl border border-aura-border bg-white/80 px-5 py-5">
+<section class="space-y-4">
   <div>
-    <p class="aura-section-title">
-      配置方案
-    </p>
+    <p class="aura-section-title">配置方案</p>
     <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-      保存常用翻译设置，可在设置页或托盘中快速切换。
+      保存常用翻译设置，在独立工作流之间快速切换。
     </p>
   </div>
 
-  <div class="grid gap-3 md:grid-cols-[1fr_auto_auto]">
+  <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto]">
     <input
       value={draftName}
       oninput={(event) => ondraftnamechange?.((event.currentTarget as HTMLInputElement).value)}
       placeholder="配置方案名称"
-      class="w-full rounded-lg border border-aura-border bg-white px-3 py-2.5 text-sm text-aura-text outline-none transition-all duration-200 placeholder:text-aura-text-muted hover:border-aura-border-accent focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
+      class="aura-console-input"
     />
     <button
-      class="rounded-lg border border-aura-border bg-white px-3 py-2.5 text-sm font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
+      class="aura-console-button"
       type="button"
       onclick={() => oncreate?.()}
     >
       另存为新方案
     </button>
     <button
-      class="rounded-lg border border-aura-border bg-white px-3 py-2.5 text-sm font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text disabled:cursor-not-allowed disabled:opacity-50"
+      class="aura-console-button"
       type="button"
       onclick={() => activeProfile && onrename?.(activeProfile.id)}
       disabled={!activeProfile}
@@ -114,31 +112,36 @@
   </div>
 
   {#if !store || store.profiles.length === 0}
-    <div class="rounded-md border border-dashed border-aura-border bg-aura-surface-soft px-3 py-3 text-xs leading-relaxed text-aura-text-dim">
+    <div class="border border-dashed border-aura-border px-3 py-3 text-xs leading-relaxed text-aura-text-dim">
       Aura 会自动创建一个默认翻译配置方案。
     </div>
   {:else}
-    <div class="space-y-2" data-testid="profile-list">
-      {#each store.profiles as profile (profile.id)}
-        <div class="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-aura-border bg-white px-3 py-3">
+    <div class="overflow-hidden border border-aura-border" data-testid="profile-list">
+      {#each store.profiles as profile, index (profile.id)}
+        <div
+          class={`grid gap-3 px-3 py-3 md:grid-cols-[minmax(0,1fr)_auto] ${
+            index === 0 ? '' : 'border-t border-aura-border'
+          }`}
+          data-testid="profile-row"
+        >
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
               <p class="truncate text-sm font-medium text-aura-text">{profile.name}</p>
               {#if profile.id === store.active_profile_id}
-                <span class="rounded-full bg-aura-accent-soft px-2.5 py-1 text-[11px] font-display font-medium text-aura-accent">
+                <span class="border border-aura-border bg-aura-accent-soft px-2 py-0.5 text-[11px] font-medium text-aura-accent">
                   当前
                 </span>
               {/if}
             </div>
-            <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
+            <p class="mt-1 font-mono text-[11px] text-aura-text-dim">
               {providerLabel(profile.provider)} · {profile.model} · {languageLabel(profile.source_lang)} → {languageLabel(profile.target_lang)}
             </p>
           </div>
 
-          <div class="flex flex-wrap gap-2">
+          <div class="flex flex-wrap items-center justify-end gap-2">
             {#if profile.id !== store.active_profile_id}
               <button
-                class="rounded-md border border-aura-border bg-white px-3 py-1.5 text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
+                class="aura-console-button"
                 type="button"
                 onclick={() => onactivate?.(profile.id)}
               >
@@ -149,7 +152,8 @@
             {#if confirmingDeleteId === profile.id}
               <div class="flex flex-wrap items-center gap-2" data-testid="delete-confirm-group">
                 <button
-                  class="rounded-md border border-aura-error bg-aura-error px-3 py-1.5 text-[11px] font-display font-semibold text-white transition-colors duration-150 hover:brightness-110"
+                  class="aura-console-button"
+                  data-variant="primary"
                   type="button"
                   data-testid="delete-confirm-commit"
                   onclick={() => commitDelete(profile.id)}
@@ -157,7 +161,7 @@
                   确认删除
                 </button>
                 <button
-                  class="rounded-md border border-aura-border bg-white px-3 py-1.5 text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
+                  class="aura-console-button"
                   type="button"
                   data-testid="delete-confirm-cancel"
                   onclick={cancelDeleteConfirm}
@@ -167,7 +171,7 @@
               </div>
             {:else}
               <button
-                class="rounded-md border border-aura-border bg-white px-3 py-1.5 text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-error/30 hover:text-aura-error"
+                class="aura-console-button"
                 type="button"
                 aria-label={`删除配置方案 ${profile.name}`}
                 data-testid="delete-profile-button"
