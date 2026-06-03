@@ -4,15 +4,26 @@
   import SettingsWindowView from '$lib/SettingsWindowView.svelte';
   import TranslationWindowView from '$lib/TranslationWindowView.svelte';
 
-  let windowLabel = $state<'translation' | 'settings' | ''>('');
+  type AuraWindowLabel = 'translation' | 'settings';
+
+  let windowLabel = $state<AuraWindowLabel | null>(null);
+
+  function resolveWindowLabel(label: string): AuraWindowLabel {
+    return label === 'settings' ? 'settings' : 'translation';
+  }
 
   onMount(() => {
-    windowLabel = getCurrentWindow().label as 'translation' | 'settings';
+    try {
+      windowLabel = resolveWindowLabel(getCurrentWindow().label);
+    } catch (e) {
+      console.error('Failed to resolve Aura window label:', e);
+      windowLabel = 'translation';
+    }
   });
 </script>
 
 {#if windowLabel === 'settings'}
   <SettingsWindowView />
-{:else}
+{:else if windowLabel === 'translation'}
   <TranslationWindowView />
 {/if}
