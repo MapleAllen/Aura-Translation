@@ -1,37 +1,37 @@
 ﻿{
-    "generatedAt":  "2026-06-03T09:06:19Z",
+    "generatedAt":  "2026-06-03T13:50:29Z",
     "repo":  "MapleAllen/Aura-Translation",
-    "branch":  "codex/operator-console-ui",
-    "sha":  "fa7bd0a439965d180a301c770acbc8f01fcc3ae9",
-    "runId":  "26873657300",
-    "runUrl":  "https://github.com/MapleAllen/Aura-Translation/actions/runs/26873657300",
+    "branch":  "codex/ui-light-comfort",
+    "sha":  "15990aa62cfa15509eb93e41200a791df6ae7443",
+    "runId":  "26889147881",
+    "runUrl":  "https://github.com/MapleAllen/Aura-Translation/actions/runs/26889147881",
     "eventName":  "push",
-    "phase":  "completed",
-    "status":  "passed",
-    "passed":  true,
+    "phase":  "started",
+    "status":  "running",
+    "passed":  null,
     "requiredFailures":  [
 
                          ],
     "gateOutcomes":  {
                          "install_dependencies":  {
                                                       "required":  true,
-                                                      "outcome":  "success"
+                                                      "outcome":  "pending"
                                                   },
                          "check":  {
                                        "required":  true,
-                                       "outcome":  "success"
+                                       "outcome":  "pending"
                                    },
                          "rust_tests":  {
                                             "required":  true,
-                                            "outcome":  "success"
+                                            "outcome":  "pending"
                                         },
                          "ui_tests":  {
                                           "required":  true,
-                                          "outcome":  "success"
+                                          "outcome":  "pending"
                                       },
                          "build_release_bundles":  {
                                                        "required":  true,
-                                                       "outcome":  "success"
+                                                       "outcome":  "pending"
                                                    },
                          "live_provider_smoke":  {
                                                      "required":  false,
@@ -39,433 +39,14 @@
                                                  },
                          "install_acceptance":  {
                                                     "required":  true,
-                                                    "outcome":  "success"
+                                                    "outcome":  "pending"
                                                 },
                          "resource_measurement":  {
                                                       "required":  true,
-                                                      "outcome":  "success"
+                                                      "outcome":  "pending"
                                                   }
                      },
     "smokeProviders":  null,
-    "acceptInstall":  {
-                          "GeneratedAt":  "2026-06-03T09:05:04",
-                          "Passed":  true,
-                          "NsisPackage":  "D:\\a\\Aura-Translation\\Aura-Translation\\src-tauri\\target\\release\\bundle\\nsis\\Aura Translation_0.2.0_x64-setup.exe",
-                          "MsiPackage":  "D:\\a\\Aura-Translation\\Aura-Translation\\src-tauri\\target\\release\\bundle\\msi\\Aura Translation_0.2.0_x64_en-US.msi",
-                          "InstallDir":  "C:\\Users\\runneradmin\\AppData\\Local\\Aura Translation",
-                          "ConfigPath":  "C:\\Users\\runneradmin\\AppData\\Roaming\\aura-translation\\config.json",
-                          "Checks":  [
-                                         {
-                                             "Name":  "nsis-package-size",
-                                             "Passed":  true,
-                                             "Detail":  "2.28 MB"
-                                         },
-                                         {
-                                             "Name":  "msi-package-size",
-                                             "Passed":  true,
-                                             "Detail":  "3.29 MB"
-                                         },
-                                         {
-                                             "Name":  "install-dir-created",
-                                             "Passed":  true,
-                                             "Detail":  "C:\\Users\\runneradmin\\AppData\\Local\\Aura Translation"
-                                         },
-                                         {
-                                             "Name":  "process-started",
-                                             "Passed":  true,
-                                             "Detail":  "C:\\Users\\runneradmin\\AppData\\Local\\Aura Translation\\aura-translation.exe"
-                                         },
-                                         {
-                                             "Name":  "config-created",
-                                             "Passed":  true,
-                                             "Detail":  "C:\\Users\\runneradmin\\AppData\\Roaming\\aura-translation\\config.json"
-                                         },
-                                         {
-                                             "Name":  "uninstall-clean",
-                                             "Passed":  true,
-                                             "Detail":  "Executable removed and process stopped."
-                                         }
-                                     ]
-                      },
-    "resourceMetrics":  {
-                            "GeneratedAt":  "2026-06-03T09:05:12",
-                            "Passed":  true,
-                            "SampleSeconds":  60,
-                            "WarmupSeconds":  5,
-                            "Metrics":  {
-                                            "MaxWorkingSetMB":  13.56,
-                                            "AvgWorkingSetMB":  13.55,
-                                            "MaxPrivateMemoryMB":  2.45,
-                                            "AvgPrivateMemoryMB":  2.41,
-                                            "ApproxCpuPercent":  0.01,
-                                            "SampleCount":  60,
-                                            "Samples":  [
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:17",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.062
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:18",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.062
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:19",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.062
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:20",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.062
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:21",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.062
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:22",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.062
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:23",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.062
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:24",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.062
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:25",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.062
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:26",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.062
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:27",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.062
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:28",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.062
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:29",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.062
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:30",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:31",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:32",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:33",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:34",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:35",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:36",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:37",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:38",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:39",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:40",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:41",
-                                                                "WorkingSetMB":  13.56,
-                                                                "PrivateMemoryMB":  2.45,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:42",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:43",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:44",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:45",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:46",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:47",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:48",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:49",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:50",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:51",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:52",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:53",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:54",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:55",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:56",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:57",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:58",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:05:59",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:00",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:01",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:02",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:03",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:04",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:05",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:06",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:07",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:08",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:09",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:10",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:11",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:12",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:13",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:14",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:15",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            },
-                                                            {
-                                                                "Timestamp":  "2026-06-03T09:06:16",
-                                                                "WorkingSetMB":  13.54,
-                                                                "PrivateMemoryMB":  2.39,
-                                                                "CpuSeconds":  0.078
-                                                            }
-                                                        ]
-                                        },
-                            "Artifacts":  {
-                                              "ReleaseExeMB":  8.35,
-                                              "NsisMB":  2.28,
-                                              "MsiMB":  3.29
-                                          }
-                        }
+    "acceptInstall":  null,
+    "resourceMetrics":  null
 }
