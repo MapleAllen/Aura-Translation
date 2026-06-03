@@ -1,7 +1,4 @@
 <script lang="ts">
-  /**
-   * TranslationPopup - Minimal floating translation bubble.
-   */
   import type { TranslationUsage } from './translationHistory';
 
   type Props = {
@@ -62,11 +59,46 @@
     onpasteback,
   }: Props = $props();
 
+  let sourceExpanded = $state(false);
+
   const isBusy = $derived(viewState === 'loading' || viewState === 'streaming');
 
   const canPasteBackDerived = $derived(
     canPasteBack ?? (Boolean(pasteBackSupported) && Boolean(pasteBackAvailable)),
   );
+
+  const statusLabel = $derived.by(() => {
+    if (viewState === 'loading') return '连接中';
+    if (retryAttempt !== null) return `重试 ${retryAttempt}/3`;
+    if (viewState === 'streaming') return '翻译中';
+    if (viewState === 'error') return '需要处理';
+    if (viewState === 'result') return '已就绪';
+    return 'Aura';
+  });
+
+  const contextSummary = $derived.by(() => {
+    const items: string[] = [];
+
+    if (sourceLangLabel || targetLangLabel) {
+      items.push(`${sourceLangLabel || '自动'} → ${targetLangLabel || '目标语言'}`);
+    }
+
+    if (providerLabel || modelLabel) {
+      items.push(`${providerLabel || 'Provider'} · ${modelLabel || 'Model'}`);
+    }
+
+    if (usage) {
+      items.push(`${usage.total_tokens.toLocaleString()} token`);
+    }
+
+    return items;
+  });
+
+  const showContextBar = $derived(
+    contextSummary.length > 0 || Boolean(sourceText) || showComposer,
+  );
+
+  const showSourceToggle = $derived(Boolean(sourceText) && !showComposer);
 
   const pasteBackTooltip = $derived.by(() => {
     if (!translatedText || isBusy) {
@@ -80,59 +112,57 @@
     }
     return '将译文回填到原应用。';
   });
+
+  $effect(() => {
+    if (showComposer) {
+      sourceExpanded = true;
+      return;
+    }
+
+    if (!sourceText || viewState === 'idle') {
+      sourceExpanded = false;
+    }
+  });
 </script>
 
-<div
-  class="aura-glass-panel flex flex-col"
->
+<div class="aura-glass-panel flex min-h-0 flex-col">
   <div
-    class="relative z-[2] flex shrink-0 items-center gap-3 px-4 pb-3 pt-4"
+    class="flex shrink-0 items-center gap-3 border-b border-aura-border px-3 py-2.5"
+    data-testid="popup-status-bar"
   >
-    <div
-      class="shrink-0 rounded-full border border-aura-border/70 bg-white/78 px-3 py-1.5 text-xs font-display font-medium text-aura-text-dim"
-      data-tauri-drag-region
-    >
-      {#if viewState === 'loading'}
-        连接中
-      {:else if retryAttempt !== null}
-        重试 {retryAttempt}
-      {:else if viewState === 'streaming'}
-        翻译中
-      {:else if viewState === 'error'}
-        需要处理
-      {:else if viewState === 'result'}
-        已就绪
-      {:else}
-        Aura
-      {/if}
+    <div class="flex shrink-0 items-center gap-2 text-[11px] font-display font-medium text-aura-text-dim">
+      <span class="h-1.5 w-1.5 rounded-full bg-aura-accent"></span>
+      <span>{statusLabel}</span>
     </div>
 
     <div
-      class="h-8 min-w-[88px] flex-1 cursor-move rounded-full"
+      class="min-w-[92px] flex-1 cursor-move select-none text-center text-[11px] font-medium uppercase tracking-[0.18em] text-aura-text-muted"
       data-tauri-drag-region
       data-testid="window-drag-handle"
       aria-label="拖动窗口"
       title="拖动窗口"
-    ></div>
+    >
+      Aura
+    </div>
 
-    <div class="flex shrink-0 items-center gap-2">
+    <div class="flex shrink-0 items-center gap-1.5">
       <button
-        class={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11px] font-display transition-colors duration-150 ${
+        class={`flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-display transition-colors duration-150 ${
           windowPinned
             ? 'border-aura-accent bg-aura-accent text-white'
-            : 'border-aura-border bg-white/84 text-aura-text-dim hover:border-aura-border-accent hover:text-aura-text'
+            : 'border-aura-border bg-aura-surface-strong text-aura-text-dim hover:border-aura-border-accent hover:text-aura-text'
         }`}
         type="button"
         aria-pressed={windowPinned}
         onclick={() => onTogglePinned?.(!windowPinned)}
       >
-        <span class="h-2.5 w-2.5 rounded-full bg-current"></span>
+        <span class="h-2 w-2 rounded-full bg-current"></span>
         <span>{windowPinned ? '已固定' : '固定'}</span>
       </button>
 
       {#if sourceText && !isBusy && !showComposer}
         <button
-          class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-accent"
+          class="aura-console-icon-button"
           onclick={() => onretry?.()}
           aria-label="重新翻译"
           type="button"
@@ -145,7 +175,7 @@
 
       {#if translatedText && !isBusy}
         <button
-          class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-aura-border disabled:hover:text-aura-text-dim"
+          class="aura-console-icon-button disabled:cursor-not-allowed disabled:opacity-40"
           onclick={() => onpasteback?.()}
           aria-label="回填译文"
           title={pasteBackTooltip}
@@ -160,7 +190,7 @@
 
       {#if translatedText && !isBusy}
         <button
-          class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-accent"
+          class="aura-console-icon-button"
           onclick={() => oncopy?.()}
           aria-label="复制译文"
           type="button"
@@ -173,7 +203,7 @@
 
       {#if isBusy}
         <button
-          class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-error/30 hover:text-aura-error"
+          class="aura-console-icon-button hover:border-aura-error/40 hover:text-aura-error"
           onclick={() => oncancel?.()}
           aria-label="取消翻译"
           type="button"
@@ -185,7 +215,7 @@
       {/if}
 
       <button
-        class="flex h-8 w-8 items-center justify-center rounded-full border border-aura-border bg-white/84 text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
+        class="aura-console-icon-button"
         onclick={() => ondismiss?.()}
         aria-label="关闭翻译窗"
         type="button"
@@ -197,45 +227,47 @@
     </div>
   </div>
 
-  <div class="flex min-h-0 flex-1 items-stretch px-5 pb-5 pt-1">
-    <div class="flex w-full min-h-0 flex-col">
-      {#if sourceText || showComposer}
-        <div class="mb-4 space-y-2">
-          <div class="flex flex-wrap gap-2">
-            <span class="rounded-full border border-aura-border/80 bg-white/84 px-3 py-1.5 text-[11px] font-display font-medium text-aura-text-dim">
-              {sourceLangLabel} → {targetLangLabel}
-            </span>
-            <span class="rounded-full border border-aura-border/80 bg-white/84 px-3 py-1.5 text-[11px] font-display font-medium text-aura-text-dim">
-              {providerLabel} · {modelLabel}
-            </span>
-            {#if retryAttempt !== null}
-              <span class="rounded-full border border-aura-accent/25 bg-aura-accent-soft px-3 py-1.5 text-[11px] font-display font-medium text-aura-accent">
-                第 {retryAttempt}/3 次重试
-              </span>
-            {/if}
-            {#if usage}
-              <span class="rounded-full border border-aura-accent/25 bg-aura-accent-soft px-3 py-1.5 text-[11px] font-display font-medium text-aura-accent">
-                {usage.total_tokens.toLocaleString()} token
-              </span>
+  <div class="min-h-0 flex-1 p-3">
+    <div
+      class="flex h-full min-h-0 flex-col overflow-hidden rounded-[10px] border border-aura-border bg-aura-surface-strong"
+      data-testid="popup-main-surface"
+    >
+      {#if showContextBar}
+        <div class="border-b border-aura-border px-4 py-3">
+          <div
+            class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] text-aura-text-dim"
+            data-testid="popup-context-row"
+          >
+            {#each contextSummary as item}
+              <span class="font-mono tracking-[0.02em]">{item}</span>
+            {/each}
+
+            {#if showSourceToggle}
+              <button
+                class="ml-auto text-[11px] font-medium text-aura-text transition-colors duration-150 hover:text-aura-accent"
+                type="button"
+                data-testid="source-toggle-button"
+                onclick={() => (sourceExpanded = !sourceExpanded)}
+              >
+                {sourceExpanded ? '收起原文' : '查看原文'}
+              </button>
             {/if}
           </div>
 
           {#if showComposer}
-            <div class="rounded-[16px] border border-aura-border bg-white/68 px-5 py-4">
+            <div class="mt-3 border-t border-aura-border pt-3">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p class="aura-section-title">
-                    原文草稿
-                  </p>
+                  <p class="aura-section-title">原文草稿</p>
                   <p class="mt-1 text-xs leading-relaxed text-aura-text-muted">
-                    在这里修改原文，按 Ctrl+Enter 可直接重新翻译全文。
+                    在这里修改原文，按 Ctrl+Enter 直接重译。
                   </p>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
                   {#if hasDraftChanges}
                     <button
-                      class="rounded-full border border-aura-border bg-white px-3 py-1.5 text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:border-aura-border-accent hover:text-aura-text"
+                      class="aura-console-button"
                       type="button"
                       onclick={() => onresetdraft?.()}
                     >
@@ -244,7 +276,8 @@
                   {/if}
 
                   <button
-                    class="rounded-full border border-aura-accent/30 bg-aura-accent-soft px-3 py-1.5 text-[11px] font-medium text-aura-accent transition-colors duration-150 hover:border-aura-accent hover:bg-aura-accent hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    class="aura-console-button"
+                    data-variant="primary"
                     type="button"
                     onclick={() => ontranslatedraft?.()}
                     disabled={!draftSourceText.trim() || isBusy}
@@ -264,17 +297,16 @@
                   }
                 }}
                 placeholder="在这里输入或修改原文"
-                class="mt-3 min-h-[112px] w-full resize-none rounded-[14px] border border-aura-border bg-white px-4 py-3 text-sm leading-7 text-aura-text outline-none transition-colors duration-150 placeholder:text-aura-text-muted focus:border-aura-accent focus:ring-2 focus:ring-aura-accent/15"
+                class="aura-console-textarea mt-3 min-h-[116px]"
               ></textarea>
             </div>
-          {:else}
-            <div class="rounded-[16px] border border-aura-border bg-white/68 px-5 py-4">
-              <p class="aura-section-title">
-                原文
-              </p>
-              <p
-                class="mt-2 max-h-[76px] overflow-y-auto pr-1 text-sm leading-7 text-aura-text-dim"
-              >
+          {:else if showSourceToggle && sourceExpanded}
+            <div
+              class="mt-3 border-t border-aura-border pt-3"
+              data-testid="popup-source-panel"
+            >
+              <p class="aura-section-title">原文</p>
+              <p class="mt-2 max-h-[96px] overflow-y-auto pr-1 text-sm leading-7 text-aura-text-dim">
                 {sourceText}
               </p>
             </div>
@@ -282,56 +314,66 @@
         </div>
       {/if}
 
-      {#if viewState === 'idle'}
-        <div class="flex min-h-[88px] w-full items-center justify-center rounded-[16px] border border-dashed border-aura-border bg-white/62 px-6 text-center">
-          <p class="max-w-[280px] text-sm leading-7 text-aura-text-dim">
-            {showComposer
-              ? '在草稿区输入或粘贴原文，然后按 Ctrl+Enter 重新翻译全文。'
-              : '复制要翻译的文本，按快捷键即可唤起 Aura。'}
-          </p>
-        </div>
-      {:else if viewState === 'loading'}
-        <div class="flex min-h-[88px] w-full flex-1 items-center justify-center">
-          <div class="flex items-center gap-3 rounded-full border border-aura-border bg-white/78 px-4 py-2.5 text-sm text-aura-text-dim">
-            <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-aura-accent"></span>
-            <span>{retryAttempt !== null ? `正在重试请求（${retryAttempt}/3）...` : '正在翻译...'}</span>
-          </div>
-        </div>
-      {:else if viewState === 'streaming' || viewState === 'result'}
-        <div class="w-full min-h-0 flex-1 overflow-y-auto pb-2 pr-2">
-          <p class="select-text whitespace-pre-wrap break-words text-[15px] leading-8 text-aura-text">
-            {translatedText}{#if viewState === 'streaming'}<span class="ml-0.5 inline-block h-5 w-0.5 animate-pulse bg-aura-accent align-text-bottom"></span>{/if}
-          </p>
-          {#if usage}
-            <div class="mt-4 flex flex-wrap gap-2 text-[11px] text-aura-text-muted">
-              <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
-                输入 {usage.prompt_tokens.toLocaleString()}
-              </span>
-              <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
-                输出 {usage.completion_tokens.toLocaleString()}
-              </span>
-              <span class="rounded-full border border-aura-border bg-aura-surface-soft px-2.5 py-1">
-                总计 {usage.total_tokens.toLocaleString()}
-              </span>
-            </div>
-          {/if}
-        </div>
-      {:else}
-        <div class="flex min-h-[88px] w-full flex-1 flex-col items-center justify-center gap-3 px-3 text-center">
-          <p class="max-w-[280px] text-sm leading-7 text-aura-error/90">
-            {errorMessage || '翻译失败。'}
-          </p>
-          <button
-            type="button"
-            data-testid="try-again-button"
-            class="rounded-full bg-aura-accent px-5 py-2 text-[12px] font-display font-medium text-white transition-all duration-200 hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
-            onclick={() => onretry?.()}
-            disabled={!draftSourceText.trim()}
+      <div class="flex-1 min-h-0 px-4 py-4">
+        {#if viewState === 'idle'}
+          <div
+            class="flex h-full items-center justify-center text-center"
+            data-testid="popup-empty-state"
           >
-            重试
-          </button>
-        </div>
-      {/if}
+            <p class="max-w-[280px] text-sm leading-7 text-aura-text-dim">
+              {showComposer
+                ? '在草稿区输入或粘贴原文，然后按 Ctrl+Enter 重新翻译全文。'
+                : '复制要翻译的文本，按快捷键即可唤起 Aura。'}
+            </p>
+          </div>
+        {:else if viewState === 'loading'}
+          <div
+            class="flex h-full items-center justify-center"
+            data-testid="popup-loading-state"
+          >
+            <div class="flex items-center gap-3 text-sm text-aura-text-dim">
+              <span class="h-2 w-2 animate-pulse rounded-full bg-aura-accent"></span>
+              <span>{retryAttempt !== null ? `正在重试请求 ${retryAttempt}/3...` : '正在翻译...'}</span>
+            </div>
+          </div>
+        {:else if viewState === 'streaming' || viewState === 'result'}
+          <div class="flex h-full min-h-0 flex-col">
+            <div class="min-h-0 flex-1 overflow-y-auto pr-1">
+              <p class="select-text whitespace-pre-wrap break-words text-[15px] leading-8 text-aura-text">
+                {translatedText}{#if viewState === 'streaming'}<span class="ml-0.5 inline-block h-5 w-0.5 animate-pulse bg-aura-accent align-text-bottom"></span>{/if}
+              </p>
+            </div>
+
+            {#if usage}
+              <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-aura-border pt-3 text-[11px] text-aura-text-muted">
+                <span class="font-mono">输入 {usage.prompt_tokens.toLocaleString()}</span>
+                <span class="font-mono">输出 {usage.completion_tokens.toLocaleString()}</span>
+                <span class="font-mono">总计 {usage.total_tokens.toLocaleString()}</span>
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <div class="flex h-full flex-col items-start justify-center gap-4">
+            <div>
+              <p class="aura-section-title text-aura-error">翻译失败</p>
+              <p class="mt-2 max-w-[320px] text-sm leading-7 text-aura-error/90">
+                {errorMessage || '翻译失败。'}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              data-testid="try-again-button"
+              class="aura-console-button"
+              data-variant="primary"
+              onclick={() => onretry?.()}
+              disabled={!draftSourceText.trim()}
+            >
+              重试
+            </button>
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 </div>
