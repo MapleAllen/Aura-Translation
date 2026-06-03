@@ -87,7 +87,7 @@
     </p>
   </div>
 
-  <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto]">
+  <div class="grid gap-2.5 md:grid-cols-[minmax(0,1fr)_auto_auto]">
     <input
       value={draftName}
       oninput={(event) => ondraftnamechange?.((event.currentTarget as HTMLInputElement).value)}
@@ -112,14 +112,14 @@
   </div>
 
   {#if !store || store.profiles.length === 0}
-    <div class="border border-dashed border-aura-border px-3 py-3 text-xs leading-relaxed text-aura-text-dim">
+    <div class="rounded-lg border border-dashed border-aura-border bg-aura-surface-soft px-3.5 py-3 text-xs leading-relaxed text-aura-text-dim">
       Aura 会自动创建一个默认翻译配置方案。
     </div>
   {:else}
-    <div class="overflow-hidden border border-aura-border" data-testid="profile-list">
+    <div class="overflow-hidden rounded-lg border border-aura-border bg-white/80" data-testid="profile-list">
       {#each store.profiles as profile, index (profile.id)}
         <div
-          class={`grid gap-3 px-3 py-3 md:grid-cols-[minmax(0,1fr)_auto] ${
+          class={`grid gap-3 px-4 py-3.5 md:grid-cols-[minmax(0,1fr)_auto] ${
             index === 0 ? '' : 'border-t border-aura-border'
           }`}
           data-testid="profile-row"
@@ -128,7 +128,7 @@
             <div class="flex flex-wrap items-center gap-2">
               <p class="truncate text-sm font-medium text-aura-text">{profile.name}</p>
               {#if profile.id === store.active_profile_id}
-                <span class="border border-aura-border bg-aura-accent-soft px-2 py-0.5 text-[11px] font-medium text-aura-accent">
+                <span class="rounded-full border border-aura-border-accent bg-aura-accent-soft px-2.5 py-0.5 text-[11px] font-medium text-aura-accent">
                   当前
                 </span>
               {/if}

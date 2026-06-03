@@ -332,7 +332,7 @@
     class="aura-glass-panel z-50 flex min-h-0 flex-col"
     style="animation: fade-in-up 0.25s ease-out both;"
   >
-    <div class="flex items-start justify-between border-b border-aura-border px-5 py-4">
+    <div class="flex items-start justify-between border-b border-aura-border bg-white/70 px-5 py-4">
       <div class="flex-1 pr-4" data-tauri-drag-region>
         <h2 class="text-base font-display font-semibold text-aura-text" data-tauri-drag-region>
           设置
@@ -355,20 +355,20 @@
 
     <div class="min-h-0 flex-1 px-4 py-4">
       <div
-        class="flex h-full min-h-0 overflow-hidden border border-aura-border bg-aura-surface-strong"
+        class="flex h-full min-h-0 overflow-hidden rounded-lg border border-aura-border bg-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
         data-testid="settings-workspace"
       >
         <aside
-          class="w-[190px] shrink-0 border-r border-aura-border bg-aura-surface-soft/80 p-2"
+          class="w-[190px] shrink-0 border-r border-aura-border bg-aura-surface-soft/70 p-2.5"
           data-testid="settings-nav"
         >
-          <div class="space-y-1">
+          <div class="space-y-1.5">
             {#each SETTINGS_SECTIONS as section}
               <button
-                class={`w-full border px-3 py-3 text-left transition-colors duration-150 ${
+                class={`w-full rounded-lg border px-3 py-3 text-left transition-colors duration-150 ${
                   activeSection === section.id
-                    ? 'border-aura-accent bg-aura-accent-soft text-aura-text'
-                    : 'border-transparent text-aura-text-dim hover:border-aura-border hover:bg-white'
+                    ? 'border-aura-border-accent bg-white text-aura-text shadow-[0_4px_12px_rgba(24,39,56,0.05)]'
+                    : 'border-transparent text-aura-text-dim hover:border-aura-border hover:bg-white/80'
                 }`}
                 type="button"
                 data-testid={`settings-nav-${section.id}`}
@@ -383,20 +383,20 @@
         </aside>
 
         <div class="min-w-0 flex flex-1 min-h-0 flex-col">
-          <div class="border-b border-aura-border px-5 py-4">
+          <div class="border-b border-aura-border bg-aura-surface-soft/35 px-5 py-4">
             <p class="aura-section-title" data-testid="settings-active-section">{activeSectionMeta.label}</p>
             <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">{activeSectionMeta.hint}</p>
           </div>
 
-          <div class="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          <div class="min-h-0 flex-1 overflow-y-auto px-6 py-6">
             {#if panelErrorMessage}
-              <div class="mb-5 border border-aura-error/25 bg-[#fff8f9] px-4 py-3 text-sm leading-relaxed text-aura-error">
+              <div class="mb-5 rounded-lg border border-aura-error/25 bg-[#fff8f9] px-4 py-3 text-sm leading-relaxed text-aura-error">
                 {panelErrorMessage}
               </div>
             {/if}
 
             {#if activeSection === 'general'}
-              <div class="space-y-6">
+              <div class="space-y-7">
                 <SetupStatusCard
                   status={runtimeStatus}
                   testing={testingProvider}
@@ -422,7 +422,7 @@
                 </section>
               </div>
             {:else if activeSection === 'provider'}
-              <div class="space-y-6">
+              <div class="space-y-7">
                 <SetupStatusCard
                   status={runtimeStatus}
                   testing={testingProvider}
@@ -470,14 +470,14 @@
 
                         {#if shouldShowPlaintextApiKeyWarning(config.provider, config.api_key_storage)}
                           <div
-                            class="border border-[#e6c683] bg-[#fff7e4] px-4 py-3 text-xs leading-relaxed text-[#8a6226]"
+                            class="rounded-lg border border-[#e6c683] bg-[#fff7e4] px-4 py-3 text-xs leading-relaxed text-[#8a6226]"
                             data-testid="plaintext-api-key-warning"
                           >
                             明文备用模式会把 API Key 写入本机 Aura 配置。尽量使用试用或低权限密钥。
                           </div>
                         {:else if usesSystemCredentialStorage(config.api_key_storage)}
                           <div
-                            class="border border-aura-border bg-aura-surface-soft px-4 py-3 text-xs leading-relaxed text-aura-text-dim"
+                            class="rounded-lg border border-aura-border bg-aura-surface-soft px-4 py-3 text-xs leading-relaxed text-aura-text-dim"
                             data-testid="system-api-key-storage-note"
                           >
                             系统模式会把 API Key 存入操作系统凭据库，而不是 `config.json`。
@@ -546,7 +546,7 @@
             {:else if activeSection === 'behavior'}
               <div class="space-y-5">
                 <section class="space-y-2">
-                  <div class="grid gap-3 border border-aura-border px-3 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                  <div class="grid gap-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                     <div>
                       <p class="text-sm font-medium text-aura-text">Aura 模式</p>
                       <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
@@ -570,7 +570,7 @@
                 </section>
 
                 <section class="space-y-2">
-                  <div class="grid gap-3 border border-aura-border px-3 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                  <div class="grid gap-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                     <div>
                       <p class="text-sm font-medium text-aura-text">敏感剪贴板保护</p>
                       <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
@@ -594,7 +594,7 @@
                 </section>
 
                 <section class="space-y-2">
-                  <div class="grid gap-3 border border-aura-border px-3 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                  <div class="grid gap-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                     <div>
                       <p class="text-sm font-medium text-aura-text">固定窗口</p>
                       <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
@@ -613,10 +613,10 @@
                     </button>
                   </div>
                   <div class="grid gap-2 text-xs text-aura-text-dim sm:grid-cols-2">
-                    <div class="border border-aura-border px-3 py-3">
+                    <div class="rounded-lg border border-aura-border bg-aura-surface-soft px-3 py-3">
                       未固定：在光标附近唤起，失焦后自动隐藏。
                     </div>
-                    <div class="border border-aura-border px-3 py-3">
+                    <div class="rounded-lg border border-aura-border bg-aura-surface-soft px-3 py-3">
                       已固定：记住上次拖动后的位置和大小。
                     </div>
                   </div>
@@ -664,7 +664,7 @@
 
                       {#if hotkeyConflictMessage}
                         <div
-                          class="border border-[#e6c683] bg-[#fff7e4] px-4 py-3 text-xs leading-relaxed text-[#8a6226]"
+                          class="rounded-lg border border-[#e6c683] bg-[#fff7e4] px-4 py-3 text-xs leading-relaxed text-[#8a6226]"
                           data-testid="hotkey-conflict-inline"
                         >
                           {hotkeyConflictMessage}
@@ -700,7 +700,7 @@
       </div>
     </div>
 
-    <div class="border-t border-aura-border px-4 py-3">
+    <div class="border-t border-aura-border bg-white/70 px-4 py-3">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="min-h-[1.25rem] text-sm">
           {#if saveErrorMessage}

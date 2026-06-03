@@ -9,9 +9,9 @@
   let { notifications, ondismiss }: Props = $props();
 
   const accentByKind = {
-    error: 'border-aura-error bg-white text-aura-text',
+    error: 'border-aura-error bg-white/95 text-aura-text',
     warning: 'border-[#d39d2f] bg-[#fffaf0] text-aura-text',
-    info: 'border-aura-accent bg-white text-aura-text',
+    info: 'border-aura-accent bg-white/95 text-aura-text',
   } as const;
 
   const iconByKind = {
@@ -26,13 +26,13 @@
     <div class="flex flex-col items-end gap-2">
       {#each notifications as notification (notification.id)}
         <section
-          class={`pointer-events-auto w-full max-w-[420px] border-l-2 border-y border-r px-3 py-2 shadow-[0_6px_14px_rgba(25,39,54,0.08)] ${accentByKind[notification.kind]}`}
+          class={`pointer-events-auto w-full max-w-[420px] rounded-lg border-l-2 border-y border-r px-3.5 py-2.5 shadow-[0_8px_18px_rgba(25,39,54,0.09)] ${accentByKind[notification.kind]}`}
           role="alert"
           aria-live="assertive"
           data-testid="notification-strip"
         >
           <div class="flex items-start gap-3">
-            <div class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center border border-current/10 text-[10px] font-semibold text-aura-text-dim">
+            <div class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-current/10 bg-aura-surface-soft text-[10px] font-semibold text-aura-text-dim">
               {iconByKind[notification.kind]}
             </div>
             <div class="min-w-0 flex-1">

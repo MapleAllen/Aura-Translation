@@ -119,16 +119,16 @@
 
   {#if entries.length === 0}
     <div
-      class="border border-dashed border-aura-border px-3 py-3 text-xs leading-relaxed text-aura-text-dim"
+      class="rounded-lg border border-dashed border-aura-border bg-aura-surface-soft px-3.5 py-3 text-xs leading-relaxed text-aura-text-dim"
       data-testid="history-empty"
     >
       暂无翻译历史。开始翻译后，最近的成功和失败记录会显示在这里。
     </div>
   {:else}
-    <div class="overflow-hidden border border-aura-border bg-aura-surface-strong" data-testid="history-list">
+    <div class="overflow-hidden rounded-lg border border-aura-border bg-white/80" data-testid="history-list">
       {#each entries as entry, index (entry.id)}
         <article class={index === 0 ? '' : 'border-t border-aura-border'}>
-          <div class="grid gap-3 px-3 py-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+          <div class="grid gap-3 px-4 py-3.5 lg:grid-cols-[minmax(0,1fr)_auto]">
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-aura-text-dim">
                 <span class={entry.status === 'success' ? 'text-aura-accent' : 'text-aura-error'}>
@@ -190,7 +190,7 @@
 
           {#if expandedEntryId === entry.id}
             <div
-              class="grid gap-4 border-t border-aura-border px-3 py-3 md:grid-cols-2"
+              class="grid gap-4 border-t border-aura-border bg-aura-surface-soft/50 px-4 py-4 md:grid-cols-2"
               data-testid={`history-details-${entry.id}`}
             >
               <div>
