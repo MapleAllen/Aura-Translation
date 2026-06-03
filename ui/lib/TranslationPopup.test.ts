@@ -31,7 +31,7 @@ describe('TranslationPopup', () => {
       onpasteback: vi.fn(),
     });
 
-    expect(screen.getByText(/copy text to translate/i)).toBeInTheDocument();
+    expect(screen.getByText(/复制要翻译的文本/)).toBeInTheDocument();
   });
 
   it('shows pin state and notifies when the user toggles it', async () => {
@@ -41,8 +41,8 @@ describe('TranslationPopup', () => {
       viewState: 'result',
       sourceText: 'Hello world',
       draftSourceText: 'Hello world',
-      sourceLangLabel: 'English',
-      targetLangLabel: 'Chinese',
+      sourceLangLabel: '英语',
+      targetLangLabel: '中文',
       providerLabel: 'DeepSeek',
       modelLabel: 'deepseek-chat',
       retryAttempt: null,
@@ -68,9 +68,9 @@ describe('TranslationPopup', () => {
       onpasteback: vi.fn(),
     });
 
-    const pinButton = screen.getByRole('button', { name: /pin/i });
+    const pinButton = screen.getByRole('button', { name: '固定' });
     expect(pinButton).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByText(/15 tokens/i)).toBeInTheDocument();
+    expect(screen.getByText(/15 token/i)).toBeInTheDocument();
     expect(screen.getByTestId('window-drag-handle')).toBeInTheDocument();
 
     await fireEvent.click(pinButton);
@@ -82,8 +82,8 @@ describe('TranslationPopup', () => {
       viewState: 'result',
       sourceText: 'Render this result',
       draftSourceText: 'Render this result',
-      sourceLangLabel: 'English',
-      targetLangLabel: 'Chinese',
+      sourceLangLabel: '英语',
+      targetLangLabel: '中文',
       providerLabel: 'DeepSeek',
       modelLabel: 'deepseek-chat',
       retryAttempt: null,
@@ -110,7 +110,7 @@ describe('TranslationPopup', () => {
     });
 
     expect(screen.getByText('请把这段结果显示出来。')).toBeInTheDocument();
-    expect(screen.getByText(/total 19/i)).toBeInTheDocument();
+    expect(screen.getByText(/总计 19/i)).toBeInTheDocument();
   });
 
   it('shows request context and retries when asked', async () => {
@@ -120,13 +120,13 @@ describe('TranslationPopup', () => {
       viewState: 'error',
       sourceText: 'Retry this translation',
       draftSourceText: 'Retry this translation',
-      sourceLangLabel: 'English',
-      targetLangLabel: 'Chinese',
+      sourceLangLabel: '英语',
+      targetLangLabel: '中文',
       providerLabel: 'OpenRouter',
       modelLabel: 'mistralai/mistral-7b-instruct',
       retryAttempt: 2,
       translatedText: '',
-      errorMessage: 'Translation failed.',
+      errorMessage: '翻译失败。',
       showComposer: false,
       hasDraftChanges: false,
       usage: null,
@@ -143,11 +143,11 @@ describe('TranslationPopup', () => {
       onpasteback: vi.fn(),
     });
 
-    expect(screen.getByText(/source/i)).toBeInTheDocument();
-    expect(screen.getByText(/english to chinese/i)).toBeInTheDocument();
-    expect(screen.getByText(/retry 2\/3/i)).toBeInTheDocument();
+    expect(screen.getByText(/原文/)).toBeInTheDocument();
+    expect(screen.getByText(/英语 → 中文/)).toBeInTheDocument();
+    expect(screen.getByText(/第 2\/3 次重试/)).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole('button', { name: /retry translation/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /重新翻译/ }));
     expect(onretry).toHaveBeenCalledTimes(1);
   });
 
@@ -158,13 +158,13 @@ describe('TranslationPopup', () => {
       viewState: 'error',
       sourceText: 'Hello world',
       draftSourceText: 'Hello world',
-      sourceLangLabel: 'English',
-      targetLangLabel: 'Chinese',
+      sourceLangLabel: '英语',
+      targetLangLabel: '中文',
       providerLabel: 'DeepSeek',
       modelLabel: 'deepseek-chat',
       retryAttempt: null,
       translatedText: '',
-      errorMessage: 'Network error: connection refused',
+      errorMessage: '网络错误：连接被拒绝',
       showComposer: false,
       hasDraftChanges: false,
       usage: null,
@@ -183,7 +183,7 @@ describe('TranslationPopup', () => {
 
     const tryAgain = screen.getByTestId('try-again-button');
     expect(tryAgain).toBeInTheDocument();
-    expect(tryAgain).toHaveTextContent(/try again/i);
+    expect(tryAgain).toHaveTextContent('重试');
     expect(tryAgain).not.toBeDisabled();
 
     await fireEvent.click(tryAgain);
@@ -201,7 +201,7 @@ describe('TranslationPopup', () => {
       modelLabel: '',
       retryAttempt: null,
       translatedText: '',
-      errorMessage: 'Translation failed.',
+      errorMessage: '翻译失败。',
       showComposer: false,
       hasDraftChanges: false,
       usage: null,
@@ -228,8 +228,8 @@ describe('TranslationPopup', () => {
       viewState: 'result',
       sourceText: 'Paste this back',
       draftSourceText: 'Paste this back',
-      sourceLangLabel: 'English',
-      targetLangLabel: 'Chinese',
+      sourceLangLabel: '英语',
+      targetLangLabel: '中文',
       providerLabel: 'DeepSeek',
       modelLabel: 'deepseek-chat',
       retryAttempt: null,
@@ -251,7 +251,7 @@ describe('TranslationPopup', () => {
       onpasteback,
     });
 
-    await fireEvent.click(screen.getByRole('button', { name: /paste translation back/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /回填译文/ }));
     expect(onpasteback).toHaveBeenCalledTimes(1);
   });
 
@@ -262,8 +262,8 @@ describe('TranslationPopup', () => {
       viewState: 'result',
       sourceText: 'Copy this result',
       draftSourceText: 'Copy this result',
-      sourceLangLabel: 'English',
-      targetLangLabel: 'Chinese',
+      sourceLangLabel: '英语',
+      targetLangLabel: '中文',
       providerLabel: 'DeepSeek',
       modelLabel: 'deepseek-chat',
       retryAttempt: null,
@@ -285,7 +285,7 @@ describe('TranslationPopup', () => {
       onpasteback: vi.fn(),
     });
 
-    await fireEvent.click(screen.getByRole('button', { name: /copy translation/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /复制译文/ }));
     expect(oncopy).toHaveBeenCalledTimes(1);
   });
 
@@ -294,8 +294,8 @@ describe('TranslationPopup', () => {
       viewState: 'result',
       sourceText: 'Paste this back',
       draftSourceText: 'Paste this back',
-      sourceLangLabel: 'English',
-      targetLangLabel: 'Chinese',
+      sourceLangLabel: '英语',
+      targetLangLabel: '中文',
       providerLabel: 'DeepSeek',
       modelLabel: 'deepseek-chat',
       retryAttempt: null,
@@ -319,9 +319,9 @@ describe('TranslationPopup', () => {
       onpasteback: vi.fn(),
     });
 
-    const button = screen.getByRole('button', { name: /paste translation back/i });
+    const button = screen.getByRole('button', { name: /回填译文/ });
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute('title', 'Paste-back is only available on Windows.');
+    expect(button).toHaveAttribute('title', '回填功能目前仅支持 Windows。');
   });
 
   it('disables paste-back on Windows when no foreground source app is captured', () => {
@@ -329,8 +329,8 @@ describe('TranslationPopup', () => {
       viewState: 'result',
       sourceText: 'Paste this back',
       draftSourceText: 'Paste this back',
-      sourceLangLabel: 'English',
-      targetLangLabel: 'Chinese',
+      sourceLangLabel: '英语',
+      targetLangLabel: '中文',
       providerLabel: 'DeepSeek',
       modelLabel: 'deepseek-chat',
       retryAttempt: null,
@@ -354,11 +354,11 @@ describe('TranslationPopup', () => {
       onpasteback: vi.fn(),
     });
 
-    const button = screen.getByRole('button', { name: /paste translation back/i });
+    const button = screen.getByRole('button', { name: /回填译文/ });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute(
       'title',
-      'Copy text from a foreground app first, then paste-back will be available.',
+      '请先从前台应用复制文本，Aura 才能回填。',
     );
   });
 
@@ -367,8 +367,8 @@ describe('TranslationPopup', () => {
       viewState: 'streaming',
       sourceText: 'Hello world',
       draftSourceText: 'Hello world',
-      sourceLangLabel: 'English',
-      targetLangLabel: 'Chinese',
+      sourceLangLabel: '英语',
+      targetLangLabel: '中文',
       providerLabel: 'DeepSeek',
       modelLabel: 'deepseek-chat',
       retryAttempt: null,
@@ -393,7 +393,7 @@ describe('TranslationPopup', () => {
     });
 
     expect(
-      screen.queryByRole('button', { name: /paste translation back/i }),
+      screen.queryByRole('button', { name: /回填译文/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -428,7 +428,7 @@ describe('TranslationPopup', () => {
     });
 
     expect(
-      screen.queryByRole('button', { name: /paste translation back/i }),
+      screen.queryByRole('button', { name: /回填译文/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -441,8 +441,8 @@ describe('TranslationPopup', () => {
       viewState: 'result',
       sourceText: 'Original text',
       draftSourceText: 'Edited text',
-      sourceLangLabel: 'English',
-      targetLangLabel: 'Chinese',
+      sourceLangLabel: '英语',
+      targetLangLabel: '中文',
       providerLabel: 'DeepSeek',
       modelLabel: 'deepseek-chat',
       retryAttempt: null,
@@ -464,19 +464,19 @@ describe('TranslationPopup', () => {
       onpasteback: vi.fn(),
     });
 
-    await fireEvent.input(screen.getByPlaceholderText(/type or revise source text here/i), {
+    await fireEvent.input(screen.getByPlaceholderText(/在这里输入或修改原文/), {
       target: { value: 'Edited again' },
     });
     expect(ondraftsourcechange).toHaveBeenCalledWith('Edited again');
 
     expect(
-      screen.getByText(/run the full translation again without leaving aura/i),
+      screen.getByText(/按 Ctrl\+Enter 可直接重新翻译全文/),
     ).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole('button', { name: /re-run full translation/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /重新翻译全文/ }));
     expect(ontranslatedraft).toHaveBeenCalledTimes(1);
 
-    await fireEvent.click(screen.getByRole('button', { name: /reset/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /还原/ }));
     expect(onresetdraft).toHaveBeenCalledTimes(1);
   });
 });

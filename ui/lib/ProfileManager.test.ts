@@ -66,8 +66,8 @@ describe('ProfileManager delete inline confirm', () => {
     await fireEvent.click(deleteButtons[0]);
 
     expect(screen.getByTestId('delete-confirm-group')).toBeInTheDocument();
-    expect(screen.getByTestId('delete-confirm-commit')).toHaveTextContent(/confirm delete/i);
-    expect(screen.getByTestId('delete-confirm-cancel')).toHaveTextContent(/cancel/i);
+    expect(screen.getByTestId('delete-confirm-commit')).toHaveTextContent('确认删除');
+    expect(screen.getByTestId('delete-confirm-cancel')).toHaveTextContent('取消');
   });
 
   it('calls ondelete only when the user confirms', async () => {

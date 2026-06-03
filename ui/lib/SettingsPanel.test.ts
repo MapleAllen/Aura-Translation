@@ -28,25 +28,25 @@ const baseConfig = {
 
 const readyStatus = {
   level: 'ready',
-  summary: 'Aura is ready to translate with DeepSeek and model deepseek-chat.',
+  summary: 'Aura 已准备好使用 DeepSeek 和模型 deepseek-chat 翻译。',
   can_translate_now: true,
   checklist: [
-    { code: 'provider', label: 'Provider: DeepSeek', ok: true },
-    { code: 'base_url', label: 'API base URL configured', ok: true },
-    { code: 'model', label: 'Default model selected', ok: true },
-    { code: 'api_key', label: 'API key saved', ok: true },
+    { code: 'provider', label: '服务商：DeepSeek', ok: true },
+    { code: 'base_url', label: 'API 地址已配置', ok: true },
+    { code: 'model', label: '默认模型已选择', ok: true },
+    { code: 'api_key', label: 'API Key 已保存', ok: true },
   ],
 };
 
 const needsSetupStatus = {
   level: 'needs_setup',
-  summary: 'Save an API key, or switch to Ollama if you want a local provider.',
+  summary: '请保存 API Key；如果想使用本地服务商，可以切换到 Ollama。',
   can_translate_now: false,
   checklist: [
-    { code: 'provider', label: 'Provider: DeepSeek', ok: true },
-    { code: 'base_url', label: 'API base URL configured', ok: true },
-    { code: 'model', label: 'Default model selected', ok: true },
-    { code: 'api_key', label: 'API key saved', ok: false },
+    { code: 'provider', label: '服务商：DeepSeek', ok: true },
+    { code: 'base_url', label: 'API 地址已配置', ok: true },
+    { code: 'model', label: '默认模型已选择', ok: true },
+    { code: 'api_key', label: 'API Key 已保存', ok: false },
   ],
 };
 
@@ -117,7 +117,7 @@ describe('SettingsPanel', () => {
         case 'probe_provider':
           return Promise.resolve({
             ok: true,
-            message: `Provider test succeeded for ${payload?.config?.provider ?? 'deepseek'}.`,
+            message: `${payload?.config?.provider ?? 'deepseek'} 的服务商测试成功。`,
           });
         case 'load_provider_api_key':
           return Promise.resolve('sk-loaded');
@@ -142,15 +142,15 @@ describe('SettingsPanel', () => {
     render(SettingsPanel, {
       visible: true,
       onclose: () => {},
-      hotkeyConflictMessage: 'Could not register "Alt+Shift+T": already in use.',
+      hotkeyConflictMessage: '无法注册 "Alt+Shift+T"：已被占用。',
     });
 
     expect(await screen.findByTestId('system-api-key-storage-note')).toHaveTextContent(
-      'OS credential store',
+      '操作系统凭据库',
     );
-    expect(screen.getByTestId('runtime-status-card')).toHaveTextContent('Aura is ready to translate');
+    expect(screen.getByTestId('runtime-status-card')).toHaveTextContent('Aura 已准备好');
     expect(screen.getByTestId('hotkey-conflict-inline')).toHaveTextContent(
-      'Could not register "Alt+Shift+T"',
+      '无法注册 "Alt+Shift+T"',
     );
     expect(screen.getByTestId('history-list')).toHaveTextContent('Hello world');
     expect(screen.getByTestId('profile-list')).toHaveTextContent('Default');
@@ -176,7 +176,7 @@ describe('SettingsPanel', () => {
         case 'get_runtime_status':
           return Promise.resolve({
             ...readyStatus,
-            summary: 'Aura is ready to translate with Ollama and model qwen2.5.',
+            summary: 'Aura 已准备好使用 Ollama 和模型 qwen2.5 翻译。',
           });
         case 'get_translation_history':
           return Promise.resolve(baseHistoryEntries);
@@ -217,14 +217,14 @@ describe('SettingsPanel', () => {
       hotkeyConflictMessage: '',
     });
 
-    const storageSelect = await screen.findByLabelText(/api key storage/i);
+    const storageSelect = await screen.findByLabelText(/API Key 存储/);
     await fireEvent.change(storageSelect, { target: { value: 'plaintext_fallback' } });
 
     expect(screen.getByTestId('plaintext-api-key-warning')).toHaveTextContent(
-      'written to the local Aura config',
+      '写入本机 Aura 配置',
     );
 
-    await fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /保存设置/ }));
 
     expect(invokeMock).toHaveBeenCalledWith(
       'save_config',
@@ -246,7 +246,7 @@ describe('SettingsPanel', () => {
     await fireEvent.keyDown(input, { key: 't' });
 
     expect(screen.getByTestId('hotkey-input-message')).toHaveTextContent(
-      'Include at least one modifier key.',
+      '快捷键至少需要包含一个修饰键。',
     );
     expect(input).toHaveValue('CmdOrCtrl+T');
   });
@@ -277,13 +277,13 @@ describe('SettingsPanel', () => {
       hotkeyConflictMessage: '',
     });
 
-    const pinSwitch = await screen.findByRole('switch', { name: /pin window/i });
+    const pinSwitch = await screen.findByRole('switch', { name: /固定窗口/ });
     expect(pinSwitch).toHaveAttribute('aria-checked', 'false');
 
     await fireEvent.click(pinSwitch);
     expect(pinSwitch).toHaveAttribute('aria-checked', 'true');
 
-    await fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /保存设置/ }));
 
     expect(invokeMock).toHaveBeenCalledWith(
       'save_config',
@@ -303,13 +303,13 @@ describe('SettingsPanel', () => {
       hotkeyConflictMessage: '',
     });
 
-    const auraSwitch = await screen.findByRole('switch', { name: /aura mode/i });
+    const auraSwitch = await screen.findByRole('switch', { name: /Aura 模式/ });
     expect(auraSwitch).toHaveAttribute('aria-checked', 'false');
 
     await fireEvent.click(auraSwitch);
     expect(auraSwitch).toHaveAttribute('aria-checked', 'true');
 
-    await fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /保存设置/ }));
 
     expect(invokeMock).toHaveBeenCalledWith(
       'save_config',
@@ -326,13 +326,13 @@ describe('SettingsPanel', () => {
       hotkeyConflictMessage: '',
     });
 
-    const guardSwitch = await screen.findByRole('switch', { name: /sensitive clipboard guard/i });
+    const guardSwitch = await screen.findByRole('switch', { name: /敏感剪贴板保护/ });
     expect(guardSwitch).toHaveAttribute('aria-checked', 'true');
 
     await fireEvent.click(guardSwitch);
     expect(guardSwitch).toHaveAttribute('aria-checked', 'false');
 
-    await fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /保存设置/ }));
 
     expect(invokeMock).toHaveBeenCalledWith(
       'save_config',
@@ -367,9 +367,9 @@ describe('SettingsPanel', () => {
       hotkeyConflictMessage: '',
     });
 
-    expect(await screen.findByTestId('runtime-status-card')).toHaveTextContent('Action needed');
+    expect(await screen.findByTestId('runtime-status-card')).toHaveTextContent('需要配置');
     expect(screen.getByTestId('runtime-status-card')).toHaveTextContent(
-      'Save an API key, or switch to Ollama if you want a local provider.',
+      '请保存 API Key；如果想使用本地服务商，可以切换到 Ollama。',
     );
   });
 
@@ -392,7 +392,7 @@ describe('SettingsPanel', () => {
       }),
     );
     expect(await screen.findByTestId('provider-probe-message')).toHaveTextContent(
-      'Provider test succeeded',
+      '服务商测试成功',
     );
   });
 
@@ -454,10 +454,10 @@ describe('SettingsPanel', () => {
       hotkeyConflictMessage: '',
     });
 
-    await fireEvent.input(await screen.findByPlaceholderText('Profile name'), {
+    await fireEvent.input(await screen.findByPlaceholderText('配置方案名称'), {
       target: { value: 'Focus JP' },
     });
-    await fireEvent.click(screen.getByRole('button', { name: /save as new/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /另存为新方案/ }));
     expect(invokeMock).toHaveBeenCalledWith(
       'create_translation_profile',
       expect.objectContaining({
@@ -466,10 +466,10 @@ describe('SettingsPanel', () => {
       }),
     );
 
-    await fireEvent.input(screen.getByPlaceholderText('Profile name'), {
+    await fireEvent.input(screen.getByPlaceholderText('配置方案名称'), {
       target: { value: 'Renamed' },
     });
-    await fireEvent.click(screen.getByRole('button', { name: /rename active/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /重命名当前方案/ }));
     expect(invokeMock).toHaveBeenCalledWith('rename_translation_profile', {
       profileId: 'focus-jp',
       name: 'Renamed',
@@ -485,17 +485,17 @@ describe('SettingsPanel', () => {
 
     expect(await screen.findByTestId('history-list')).toHaveTextContent('Hello world');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await fireEvent.click(screen.getByRole('button', { name: '重试' }));
     expect(invokeMock).toHaveBeenCalledWith('replay_translation_history_entry', {
       entryId: 'history-1',
     });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    await fireEvent.click(screen.getByRole('button', { name: '复制' }));
     expect(invokeMock).toHaveBeenCalledWith('copy_result_to_clipboard', {
       text: '你好，世界',
     });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await fireEvent.click(screen.getByRole('button', { name: '删除' }));
     expect(invokeMock).toHaveBeenCalledWith('delete_translation_history_entry', {
       entryId: 'history-1',
     });
@@ -521,10 +521,10 @@ describe('SettingsPanel', () => {
       hotkeyConflictMessage: '',
     });
 
-    await fireEvent.click(await screen.findByRole('button', { name: /clear all/i }));
+    await fireEvent.click(await screen.findByRole('button', { name: /清空全部/ }));
     expect(invokeMock).not.toHaveBeenCalledWith('clear_translation_history');
 
-    await fireEvent.click(await screen.findByRole('button', { name: /confirm clear all/i }));
+    await fireEvent.click(await screen.findByRole('button', { name: /确认清空/ }));
     expect(invokeMock).toHaveBeenCalledWith('clear_translation_history');
   });
 });

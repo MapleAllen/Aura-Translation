@@ -10,18 +10,18 @@ describe('NotificationCenter', () => {
       {
         id: 'daemon-1',
         kind: 'error',
-        title: 'Daemon error',
-        message: 'Tray icon could not be created.',
+        title: '后台错误',
+        message: '无法创建托盘图标。',
         scope: 'global',
       },
     ];
 
     render(NotificationCenter, { notifications, ondismiss });
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Daemon error');
-    expect(screen.getByRole('alert')).toHaveTextContent('Tray icon could not be created.');
+    expect(screen.getByRole('alert')).toHaveTextContent('后台错误');
+    expect(screen.getByRole('alert')).toHaveTextContent('无法创建托盘图标。');
 
-    await fireEvent.click(screen.getByRole('button', { name: /dismiss daemon error/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /关闭通知：后台错误/ }));
     expect(ondismiss).toHaveBeenCalledWith('daemon-1');
   });
 });

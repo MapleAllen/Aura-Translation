@@ -55,8 +55,8 @@ describe('HistoryList clear all inline confirm', () => {
 
     expect(screen.queryByTestId('clear-all-button')).not.toBeInTheDocument();
     expect(screen.getByTestId('clear-confirm-group')).toBeInTheDocument();
-    expect(screen.getByTestId('clear-confirm-commit')).toHaveTextContent(/confirm clear all/i);
-    expect(screen.getByTestId('clear-confirm-cancel')).toHaveTextContent(/cancel/i);
+    expect(screen.getByTestId('clear-confirm-commit')).toHaveTextContent('确认清空');
+    expect(screen.getByTestId('clear-confirm-cancel')).toHaveTextContent('取消');
   });
 
   it('calls onclear only when the user confirms', async () => {
