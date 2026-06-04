@@ -47,7 +47,7 @@ button, input, select, textarea {
   position: relative;
   width: 100vw;
   height: 100vh;
-  padding: 8px;
+  padding: 0;
   overflow: hidden;
 }
 
@@ -57,7 +57,7 @@ button, input, select, textarea {
   height: 100%;
   overflow: hidden;
   border: 1px solid var(--color-aura-border);
-  border-radius: 10px;
+  border-radius: 0;
   background:
     linear-gradient(180deg, rgba(253, 254, 255, 0.98), rgba(247, 249, 252, 0.98));
   box-shadow: 0 14px 30px var(--color-aura-shadow);
