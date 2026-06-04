@@ -38,7 +38,7 @@
   const TRANSLATION_WINDOW_WIDTH = 392;
   const TRANSLATION_MIN_HEIGHT = 156;
   const TRANSLATION_MAX_HEIGHT = 492;
-  const WINDOW_SAFE_AREA_HEIGHT = 18;
+  const WINDOW_SAFE_AREA_HEIGHT = 2;
 
   const popupScale = new Spring(0.94, { stiffness: 0.16, damping: 0.72 });
   const popupOpacity = new Spring(0, { stiffness: 0.18, damping: 0.82 });
