@@ -365,18 +365,45 @@
           <div class="space-y-1.5">
             {#each SETTINGS_SECTIONS as section}
               <button
-                class={`w-full rounded-lg border px-3 py-3 text-left transition-colors duration-150 ${
+                class={`flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[12px] font-medium leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:border-aura-border-accent focus-visible:shadow-[0_0_0_3px_var(--color-aura-focus-ring)] ${
                   activeSection === section.id
-                    ? 'border-aura-border-accent bg-white text-aura-text shadow-[0_4px_12px_rgba(24,39,56,0.05)]'
-                    : 'border-transparent text-aura-text-dim hover:border-aura-border hover:bg-white/80'
+                    ? 'border-transparent bg-[#e8edf2] text-aura-text'
+                    : 'border-transparent text-aura-text-dim hover:bg-[#eef3f7] hover:text-aura-text'
                 }`}
                 type="button"
                 data-testid={`settings-nav-${section.id}`}
                 aria-pressed={activeSection === section.id}
                 onclick={() => (activeSection = section.id)}
               >
-                <span class="block text-sm font-medium">{section.label}</span>
-                <span class="mt-1 block text-[11px] text-aura-text-muted">{section.hint}</span>
+                <svg
+                  class="h-4 w-4 shrink-0"
+                  aria-hidden="true"
+                  focusable="false"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                >
+                  {#if section.id === 'general'}
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.4 4.4 11 3h2l.6 1.4a7.6 7.6 0 0 1 1.7.7l1.4-.6 1.4 1.4-.6 1.4c.3.5.5 1.1.7 1.7l1.4.6v2l-1.4.6a7.6 7.6 0 0 1-.7 1.7l.6 1.4-1.4 1.4-1.4-.6a7.6 7.6 0 0 1-1.7.7L13 21h-2l-.6-1.4a7.6 7.6 0 0 1-1.7-.7l-1.4.6-1.4-1.4.6-1.4a7.6 7.6 0 0 1-.7-1.7L4.4 14v-2l1.4-.6c.2-.6.4-1.2.7-1.7l-.6-1.4 1.4-1.4 1.4.6c.5-.3 1.1-.5 1.7-.7Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.4 12a2.6 2.6 0 1 0 5.2 0 2.6 2.6 0 0 0-5.2 0Z" />
+                  {:else if section.id === 'provider'}
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v3.5A1.5 1.5 0 0 1 19 12H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14a1.5 1.5 0 0 1 1.5 1.5V17A1.5 1.5 0 0 1 19 18.5H5A1.5 1.5 0 0 1 3.5 17v-3.5A1.5 1.5 0 0 1 5 12Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.8h.01M7.5 15.3h.01" />
+                  {:else if section.id === 'behavior'}
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 7.5h13A1.5 1.5 0 0 1 20 9v6a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 15V9a1.5 1.5 0 0 1 1.5-1.5Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 10.5h.01M10.5 10.5h.01M13.5 10.5h.01M16.5 10.5h.01M8.5 13.5h7" />
+                  {:else if section.id === 'profiles'}
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 6.5h4l1.8 2h7.2A1.5 1.5 0 0 1 20 10v6.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 16.5V8a1.5 1.5 0 0 1 1.5-1.5Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 13h8" />
+                  {:else}
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 1.8" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3L5 8.4" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.8 5.4V9h3.6" />
+                  {/if}
+                </svg>
+                <span class="min-w-0 truncate">{section.label}</span>
               </button>
             {/each}
           </div>
