@@ -47,11 +47,9 @@
   }
 
   async function closeWindow() {
-    try {
-      await persistCurrentWindowPlacement('settings');
-    } catch (e) {
+    void persistCurrentWindowPlacement('settings').catch((e) => {
       console.error('Failed to persist settings placement on close:', e);
-    }
+    });
 
     try {
       await getCurrentWindow().close();

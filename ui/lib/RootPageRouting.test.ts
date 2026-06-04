@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/svelte';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Page from '../routes/+page.svelte';
 
 let windowLabel: 'translation' | 'settings' = 'translation';
@@ -8,17 +8,22 @@ const invokeMock = vi.fn();
 const listenMock = vi.fn();
 const onMovedMock = vi.fn();
 const onResizedMock = vi.fn();
+const closeMock = vi.fn();
+const hideMock = vi.fn();
+const outerPositionMock = vi.fn();
+const outerSizeMock = vi.fn();
+const scaleFactorMock = vi.fn();
 
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({
     label: windowLabel,
-    close: vi.fn(),
-    hide: vi.fn(),
+    close: closeMock,
+    hide: hideMock,
     onMoved: onMovedMock,
     onResized: onResizedMock,
-    outerPosition: vi.fn(),
-    outerSize: vi.fn(),
-    scaleFactor: vi.fn(),
+    outerPosition: outerPositionMock,
+    outerSize: outerSizeMock,
+    scaleFactor: scaleFactorMock,
     setSize: vi.fn(),
     startResizeDragging: vi.fn(),
   }),
@@ -88,10 +93,21 @@ describe('root page window routing', () => {
     listenMock.mockReset();
     onMovedMock.mockReset();
     onResizedMock.mockReset();
+    closeMock.mockReset();
+    hideMock.mockReset();
+    outerPositionMock.mockReset();
+    outerSizeMock.mockReset();
+    scaleFactorMock.mockReset();
 
     listenMock.mockResolvedValue(() => {});
     onMovedMock.mockResolvedValue(() => {});
     onResizedMock.mockResolvedValue(() => {});
+    closeMock.mockResolvedValue(undefined);
+    hideMock.mockResolvedValue(undefined);
+    outerPositionMock.mockResolvedValue({ x: 160, y: 120 });
+    outerSizeMock.mockResolvedValue({ width: 480, height: 680 });
+    scaleFactorMock.mockResolvedValue(1);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     invokeMock.mockImplementation((command: string) => {
       switch (command) {
         case 'get_config':
@@ -112,6 +128,10 @@ describe('root page window routing', () => {
     });
   });
 
+  afterEach(() => {
+    vi.mocked(console.error).mockRestore();
+  });
+
   it('does not mount the translation popup while bootstrapping the settings window', async () => {
     windowLabel = 'settings';
 
@@ -124,5 +144,39 @@ describe('root page window routing', () => {
       const readyCalls = invokeMock.mock.calls.filter(([command]) => command === 'mark_ui_ready');
       expect(readyCalls).toHaveLength(1);
     });
+  });
+
+  it('closes the settings window without waiting for placement persistence', async () => {
+    windowLabel = 'settings';
+    outerPositionMock.mockReturnValue(new Promise(() => {}));
+
+    render(Page);
+
+    await fireEvent.click(await screen.findByRole('button', { name: '关闭设置' }));
+
+    expect(closeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the settings window even when placement persistence fails', async () => {
+    windowLabel = 'settings';
+    outerPositionMock.mockRejectedValue(new Error('placement failed'));
+
+    render(Page);
+
+    await fireEvent.click(await screen.findByRole('button', { name: '关闭设置' }));
+
+    expect(closeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the same non-blocking close path for Escape in the settings window', async () => {
+    windowLabel = 'settings';
+    outerPositionMock.mockReturnValue(new Promise(() => {}));
+
+    render(Page);
+
+    await screen.findByTestId('settings-workspace');
+    await fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(closeMock).toHaveBeenCalledTimes(1);
   });
 });
