@@ -160,6 +160,9 @@ describe('SettingsPanel operator console layout', () => {
 
     expect(await screen.findByTestId('settings-nav')).toBeInTheDocument();
     expect(screen.getByTestId('settings-nav-general')).toHaveAttribute('aria-pressed', 'true');
+    for (const section of ['general', 'provider', 'behavior', 'profiles', 'history']) {
+      expect(screen.getByTestId(`settings-nav-${section}`).querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    }
     expect(screen.getByTestId('runtime-status-card')).toHaveTextContent('Aura 已准备好');
     expect(invokeMock).toHaveBeenCalledWith('get_config');
     expect(invokeMock).toHaveBeenCalledWith('get_runtime_status');
