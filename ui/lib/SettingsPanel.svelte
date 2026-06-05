@@ -4,8 +4,7 @@
   import HistoryList from './HistoryList.svelte';
   import LanguageSelector from './LanguageSelector.svelte';
   import ProfileManager from './ProfileManager.svelte';
-  import SetupStatusCard from './SetupStatusCard.svelte';
-  import type { ApiKeyStorage, AppConfig, Provider } from './appConfig';
+  import type { AppConfig, Provider } from './appConfig';
   import { cloneAppConfig, createDefaultAppConfig } from './appConfig';
   import {
     shouldShowPlaintextApiKeyWarning,
@@ -26,14 +25,25 @@
     models: string[];
   };
 
-  type SettingsSection = 'general' | 'provider' | 'behavior' | 'profiles' | 'history';
+  type SettingsSection = 'overview' | 'general' | 'provider' | 'behavior' | 'profiles' | 'history';
 
   const SETTINGS_SECTIONS: Array<{ id: SettingsSection; label: string; hint: string }> = [
-    { id: 'general', label: '常规', hint: '语言与状态' },
-    { id: 'provider', label: '服务商', hint: '模型与凭据' },
-    { id: 'behavior', label: '快捷键与行为', hint: '触发与窗口' },
+    { id: 'overview', label: '概览', hint: '就绪状态与当前配置' },
+    { id: 'general', label: '翻译默认值', hint: '语言方向' },
+    { id: 'provider', label: '模型与密钥', hint: '服务商访问' },
+    { id: 'behavior', label: '触发方式', hint: '快捷键与窗口' },
     { id: 'profiles', label: '配置方案', hint: '工作流切换' },
     { id: 'history', label: '历史记录', hint: '最近请求日志' },
+  ];
+
+  const SETTINGS_GROUPS: Array<{
+    label: string;
+    sections: SettingsSection[];
+  }> = [
+    { label: '常用', sections: ['overview', 'general'] },
+    { label: '连接', sections: ['provider'] },
+    { label: '工作流', sections: ['behavior', 'profiles'] },
+    { label: '数据', sections: ['history'] },
   ];
 
   type Props = {
@@ -46,7 +56,7 @@
   let { visible, onclose, onsaved, hotkeyConflictMessage = '' }: Props = $props();
 
   let config: AppConfig = $state(createDefaultAppConfig());
-  let activeSection = $state<SettingsSection>('general');
+  let activeSection = $state<SettingsSection>('overview');
   let showApiKey = $state(false);
   let saving = $state(false);
   let testingProvider = $state(false);
@@ -60,12 +70,32 @@
   let profileDraftName = $state('');
   let runtimeStatus = $state<RuntimeStatus | null>(null);
   let probeResult = $state<ProviderProbeResult | null>(null);
+  let savedConfigSnapshot = $state('');
 
   const saveScale = new Spring(1, { stiffness: 0.4, damping: 0.5 });
 
   const activeSectionMeta = $derived(
     SETTINGS_SECTIONS.find((section) => section.id === activeSection) ?? SETTINGS_SECTIONS[0],
   );
+
+  const activeProfileName = $derived(getActiveProfileName(profileStore) || 'Default');
+
+  const currentLanguageSummary = $derived(
+    `${languageLabel(config.source_lang) || '自动'} → ${languageLabel(config.target_lang) || '目标语言'}`,
+  );
+
+  const hasUnsavedChanges = $derived.by(() => {
+    if (!savedConfigSnapshot) return false;
+    return snapshotConfig(config) !== savedConfigSnapshot;
+  });
+
+  const saveStatusLabel = $derived.by(() => {
+    if (saving) return '正在保存到本地配置...';
+    if (saveErrorMessage) return saveErrorMessage;
+    if (saveMessage) return saveMessage;
+    if (hasUnsavedChanges) return '有未保存的更改';
+    return '当前配置已同步';
+  });
 
   $effect(() => {
     if (visible) {
@@ -91,6 +121,7 @@
       if (config.api_key_storage === 'legacy_plaintext') {
         config.api_key_storage = 'plaintext_fallback';
       }
+      savedConfigSnapshot = snapshotConfig(config);
       runtimeStatus = nextRuntimeStatus;
       historyEntries = nextHistoryEntries;
       profileStore = nextProfileStore;
@@ -107,6 +138,46 @@
     }
 
     return store.profiles.find((profile) => profile.id === store.active_profile_id)?.name ?? '';
+  }
+
+  function providerLabel(provider: Provider): string {
+    switch (provider) {
+      case 'deepseek':
+        return 'DeepSeek';
+      case 'openrouter':
+        return 'OpenRouter';
+      case 'ollama':
+        return 'Ollama';
+    }
+  }
+
+  function languageLabel(code: string): string {
+    if (code === 'auto') {
+      return '自动';
+    }
+    return code;
+  }
+
+  function sectionMeta(sectionId: SettingsSection) {
+    return SETTINGS_SECTIONS.find((section) => section.id === sectionId) ?? SETTINGS_SECTIONS[0];
+  }
+
+  function snapshotConfig(value: AppConfig): string {
+    return JSON.stringify({
+      api_key: value.api_key,
+      api_key_storage: value.api_key_storage,
+      active_profile_id: value.active_profile_id,
+      model: value.model,
+      source_lang: value.source_lang,
+      target_lang: value.target_lang,
+      hotkey: value.hotkey,
+      aura_mode_enabled: value.aura_mode_enabled,
+      aura_guard_enabled: value.aura_guard_enabled,
+      window_pinned: value.window_pinned,
+      provider: value.provider,
+      api_base_url: value.api_base_url,
+      available_models: value.available_models,
+    });
   }
 
   async function handleProviderChange(newProvider: Provider) {
@@ -305,6 +376,7 @@
     try {
       await invoke('save_config', { config: cloneAppConfig(config) });
       await refreshRuntimeStatus();
+      savedConfigSnapshot = snapshotConfig(config);
       saveMessage = '设置已保存';
       onsaved?.(cloneAppConfig(config));
       hotkeyInputMessage = '';
@@ -332,13 +404,13 @@
     class="aura-glass-panel z-50 flex min-h-0 flex-col"
     style="animation: fade-in-up 0.25s ease-out both;"
   >
-    <div class="flex items-start justify-between border-b border-aura-border bg-white/70 px-5 py-4">
+    <div class="flex items-start justify-between border-b border-aura-border bg-white/75 px-5 py-3.5">
       <div class="flex-1 pr-4" data-tauri-drag-region>
         <h2 class="text-base font-display font-semibold text-aura-text" data-tauri-drag-region>
-          设置
+          设置操作台
         </h2>
         <p class="mt-1 text-xs leading-relaxed text-aura-text-dim" data-tauri-drag-region>
-          配置语言、触发方式、服务商访问和窗口记忆。
+          查看 Aura 是否可用，并快速进入常用配置。
         </p>
       </div>
       <button
@@ -353,38 +425,48 @@
       </button>
     </div>
 
-    <div class="min-h-0 flex-1 px-4 py-4">
+    <div class="min-h-0 flex-1 px-4 py-3.5">
       <div
-        class="flex h-full min-h-0 overflow-hidden rounded-lg border border-aura-border bg-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+        class="flex h-full min-h-0 overflow-hidden border-y border-aura-border bg-white/72"
         data-testid="settings-workspace"
       >
         <aside
-          class="w-[190px] shrink-0 border-r border-aura-border bg-aura-surface-soft/70 p-2.5"
+          class="w-[206px] shrink-0 border-r border-aura-border bg-aura-surface-soft/70 p-2.5"
           data-testid="settings-nav"
         >
-          <div class="space-y-1.5">
-            {#each SETTINGS_SECTIONS as section}
-              <button
-                class={`flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[12px] font-medium leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:border-aura-border-accent focus-visible:shadow-[0_0_0_3px_var(--color-aura-focus-ring)] ${
-                  activeSection === section.id
-                    ? 'border-transparent bg-[#e8edf2] text-aura-text'
-                    : 'border-transparent text-aura-text-dim hover:bg-[#eef3f7] hover:text-aura-text'
-                }`}
-                type="button"
-                data-testid={`settings-nav-${section.id}`}
-                aria-pressed={activeSection === section.id}
-                onclick={() => (activeSection = section.id)}
-              >
-                <svg
-                  class="h-4 w-4 shrink-0"
-                  aria-hidden="true"
-                  focusable="false"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                >
-                  {#if section.id === 'general'}
+          <div class="space-y-3">
+            {#each SETTINGS_GROUPS as group}
+              <div class="space-y-0.5">
+                <p class="px-2.5 pb-1 text-[10px] font-display font-semibold uppercase tracking-[0.12em] text-aura-text-muted">
+                  {group.label}
+                </p>
+                {#each group.sections as sectionId}
+                  {@const section = sectionMeta(sectionId)}
+                  <button
+                    class={`flex w-full items-center gap-2 border-l-2 px-2.5 py-2 text-left text-[12px] font-medium leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:border-aura-border-accent focus-visible:shadow-[0_0_0_3px_var(--color-aura-focus-ring)] ${
+                      activeSection === section.id
+                        ? 'border-l-aura-accent bg-white/82 text-aura-text'
+                        : 'border-l-transparent text-aura-text-dim hover:bg-white/60 hover:text-aura-text'
+                    }`}
+                    type="button"
+                    data-testid={`settings-nav-${section.id}`}
+                    aria-pressed={activeSection === section.id}
+                    onclick={() => (activeSection = section.id)}
+                  >
+                    <svg
+                      class="h-4 w-4 shrink-0"
+                      aria-hidden="true"
+                      focusable="false"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                    >
+                      {#if section.id === 'overview'}
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 5.5A1.5 1.5 0 0 1 6 4h4.5A1.5 1.5 0 0 1 12 5.5v4A1.5 1.5 0 0 1 10.5 11H6a1.5 1.5 0 0 1-1.5-1.5v-4Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M14 5.5A1.5 1.5 0 0 1 15.5 4H18a1.5 1.5 0 0 1 1.5 1.5V18a1.5 1.5 0 0 1-1.5 1.5h-2.5A1.5 1.5 0 0 1 14 18V5.5Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 14.5A1.5 1.5 0 0 1 6 13h4.5a1.5 1.5 0 0 1 1.5 1.5V18a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18v-3.5Z" />
+                  {:else if section.id === 'general'}
                     <path stroke-linecap="round" stroke-linejoin="round" d="M10.4 4.4 11 3h2l.6 1.4a7.6 7.6 0 0 1 1.7.7l1.4-.6 1.4 1.4-.6 1.4c.3.5.5 1.1.7 1.7l1.4.6v2l-1.4.6a7.6 7.6 0 0 1-.7 1.7l.6 1.4-1.4 1.4-1.4-.6a7.6 7.6 0 0 1-1.7.7L13 21h-2l-.6-1.4a7.6 7.6 0 0 1-1.7-.7l-1.4.6-1.4-1.4.6-1.4a7.6 7.6 0 0 1-.7-1.7L4.4 14v-2l1.4-.6c.2-.6.4-1.2.7-1.7l-.6-1.4 1.4-1.4 1.4.6c.5-.3 1.1-.5 1.7-.7Z" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9.4 12a2.6 2.6 0 1 0 5.2 0 2.6 2.6 0 0 0-5.2 0Z" />
                   {:else if section.id === 'provider'}
@@ -401,10 +483,12 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 1.8" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3L5 8.4" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M4.8 5.4V9h3.6" />
-                  {/if}
-                </svg>
-                <span class="min-w-0 truncate">{section.label}</span>
-              </button>
+                      {/if}
+                    </svg>
+                    <span class="min-w-0 truncate">{section.label}</span>
+                  </button>
+                {/each}
+              </div>
             {/each}
           </div>
         </aside>
@@ -422,16 +506,141 @@
               </div>
             {/if}
 
-            {#if activeSection === 'general'}
-              <div class="space-y-7">
-                <SetupStatusCard
-                  status={runtimeStatus}
-                  testing={testingProvider}
-                  {probeResult}
-                  ontest={handleProviderProbe}
-                />
+            {#if activeSection === 'overview'}
+              <div class="space-y-5" data-testid="settings-overview">
+                <section class="rounded-lg border border-aura-border bg-white/70 px-4 py-4" data-testid="runtime-status-card">
+                  <div class="flex flex-wrap items-start justify-between gap-4">
+                    <div class="min-w-0">
+                      <p class="aura-section-title">就绪状态</p>
+                      <p class="mt-1 max-w-[620px] text-sm leading-6 text-aura-text">
+                        {runtimeStatus?.summary ?? '正在检查 Aura 是否已准备好翻译...'}
+                      </p>
+                    </div>
 
-                <section class="space-y-4 border-t border-aura-border pt-5">
+                    <span class={`rounded-full border px-2.5 py-1 text-[11px] font-display font-semibold tracking-[0.06em] ${
+                      runtimeStatus?.level === 'ready'
+                        ? 'border-[#d9efe4] bg-[#f5fbf8] text-aura-success'
+                        : 'border-[#f4d4da] bg-[#fff8f9] text-aura-error'
+                    }`}>
+                      {runtimeStatus?.level === 'ready' ? '已就绪' : '需要配置'}
+                    </span>
+                  </div>
+
+                  {#if runtimeStatus}
+                    <div class="mt-3 grid gap-x-6 gap-y-1 text-xs text-aura-text-dim md:grid-cols-2">
+                      {#each runtimeStatus.checklist as item}
+                        <div class={`flex items-center gap-2 ${item.ok ? 'text-aura-text-dim' : 'text-aura-error/90'}`}>
+                          <span class={item.ok ? 'text-aura-success' : 'text-aura-error'}>
+                            {item.ok ? '✓' : '!'}
+                          </span>
+                          <span>{item.label}</span>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+
+                  <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-aura-border bg-aura-surface-soft/70 px-3.5 py-3">
+                    <div class="min-w-0">
+                      <p class="text-sm font-medium text-aura-text">测试服务商连接</p>
+                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
+                        使用当前设置发起一次轻量请求，保存前也可以测试。
+                      </p>
+                      {#if probeResult}
+                        <p
+                          class={`mt-2 text-xs leading-relaxed ${probeResult.ok ? 'text-aura-success' : 'text-aura-error'}`}
+                          data-testid="provider-probe-message"
+                        >
+                          {probeResult.message}
+                        </p>
+                      {/if}
+                    </div>
+
+                    <button
+                      class="aura-console-button rounded-md"
+                      onclick={handleProviderProbe}
+                      disabled={testingProvider}
+                      data-testid="probe-provider-button"
+                      type="button"
+                    >
+                      {testingProvider ? '测试中...' : '测试服务商'}
+                    </button>
+                  </div>
+                </section>
+
+                <section class="grid gap-3 md:grid-cols-2">
+                  <button
+                    class="group grid min-h-[92px] w-full gap-1 rounded-lg border border-aura-border bg-white/68 px-4 py-3.5 text-left transition-colors duration-150 hover:border-aura-border-accent hover:bg-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-aura-focus-ring)]"
+                    type="button"
+                    data-testid="overview-general-card"
+                    onclick={() => (activeSection = 'general')}
+                  >
+                    <p class="aura-section-title">翻译语言</p>
+                    <div>
+                      <p class="text-sm font-medium text-aura-text">{currentLanguageSummary}</p>
+                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">调整每次请求默认使用的语言方向。</p>
+                    </div>
+                  </button>
+
+                  <button
+                    class="group grid min-h-[92px] w-full gap-1 rounded-lg border border-aura-border bg-white/68 px-4 py-3.5 text-left transition-colors duration-150 hover:border-aura-border-accent hover:bg-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-aura-focus-ring)]"
+                    type="button"
+                    data-testid="overview-provider-card"
+                    onclick={() => (activeSection = 'provider')}
+                  >
+                    <p class="aura-section-title">模型与密钥</p>
+                    <div>
+                      <p class="truncate text-sm font-medium text-aura-text">
+                        {providerLabel(config.provider)} · {config.model}
+                      </p>
+                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">切换服务商、模型和 API Key 存储。</p>
+                    </div>
+                  </button>
+
+                  <button
+                    class="group grid min-h-[92px] w-full gap-1 rounded-lg border border-aura-border bg-white/68 px-4 py-3.5 text-left transition-colors duration-150 hover:border-aura-border-accent hover:bg-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-aura-focus-ring)]"
+                    type="button"
+                    data-testid="overview-behavior-card"
+                    onclick={() => (activeSection = 'behavior')}
+                  >
+                    <p class="aura-section-title">触发方式</p>
+                    <div>
+                      <p class="text-sm font-medium text-aura-text">
+                        {config.aura_mode_enabled ? 'Aura 模式' : '手动快捷键'} · {config.hotkey}
+                      </p>
+                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">管理自动翻译、剪贴板保护和固定窗口。</p>
+                    </div>
+                  </button>
+
+                  <button
+                    class="group grid min-h-[92px] w-full gap-1 rounded-lg border border-aura-border bg-white/68 px-4 py-3.5 text-left transition-colors duration-150 hover:border-aura-border-accent hover:bg-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-aura-focus-ring)]"
+                    type="button"
+                    data-testid="overview-profiles-card"
+                    onclick={() => (activeSection = 'profiles')}
+                  >
+                    <p class="aura-section-title">当前方案</p>
+                    <div>
+                      <p class="truncate text-sm font-medium text-aura-text">{activeProfileName}</p>
+                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">保存并切换常用翻译工作流。</p>
+                    </div>
+                  </button>
+
+                  <button
+                    class="group grid min-h-[92px] w-full gap-1 rounded-lg border border-aura-border bg-white/68 px-4 py-3.5 text-left transition-colors duration-150 hover:border-aura-border-accent hover:bg-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-aura-focus-ring)]"
+                    type="button"
+                    data-testid="overview-history-card"
+                    onclick={() => (activeSection = 'history')}
+                  >
+                    <p class="aura-section-title">最近历史</p>
+                    <div>
+                      <p class="text-sm font-medium text-aura-text">{historyEntries.length} 条记录</p>
+                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">复制、重试或清理最近的翻译请求。</p>
+                    </div>
+                  </button>
+                </section>
+              </div>
+            {:else if activeSection === 'general'}
+              <div class="space-y-5">
+                <section class="space-y-4">
                   <div>
                     <p class="aura-section-title">翻译语言</p>
                     <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
@@ -449,16 +658,43 @@
                 </section>
               </div>
             {:else if activeSection === 'provider'}
-              <div class="space-y-7">
-                <SetupStatusCard
-                  status={runtimeStatus}
-                  testing={testingProvider}
-                  {probeResult}
-                  ontest={handleProviderProbe}
-                />
+              <div class="space-y-5">
+                <section class="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-aura-border bg-aura-surface-soft px-4 py-3.5">
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium text-aura-text">连接测试</p>
+                    <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
+                      使用当前未保存的服务商、模型和密钥发起一次轻量请求。
+                    </p>
+                    {#if probeResult}
+                      <p
+                        class={`mt-2 text-xs leading-relaxed ${probeResult.ok ? 'text-aura-success' : 'text-aura-error'}`}
+                        data-testid="provider-probe-message"
+                      >
+                        {probeResult.message}
+                      </p>
+                    {/if}
+                  </div>
 
-                <section class="space-y-5 border-t border-aura-border pt-5">
-                  <div class="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <button
+                    class="aura-console-button"
+                    onclick={handleProviderProbe}
+                    disabled={testingProvider}
+                    data-testid="probe-provider-button"
+                    type="button"
+                  >
+                    {testingProvider ? '测试中...' : '测试服务商'}
+                  </button>
+                </section>
+
+                <section class="space-y-5 rounded-lg border border-aura-border bg-white/68 px-4 py-4">
+                  <div>
+                    <p class="aura-section-title">连接配置</p>
+                    <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
+                      按服务商、密钥、模型的顺序配置；完成后在上方测试连接。
+                    </p>
+                  </div>
+
+                  <div class="grid gap-3 border-t border-aura-border pt-4 lg:grid-cols-[220px_minmax(0,1fr)]">
                     <div>
                       <label class="aura-section-title" for="provider">服务商</label>
                       <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
@@ -478,7 +714,7 @@
                   </div>
 
                   {#if config.provider !== 'ollama'}
-                    <div class="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+                    <div class="grid gap-3 border-t border-aura-border pt-4 lg:grid-cols-[220px_minmax(0,1fr)]">
                       <div>
                         <label class="aura-section-title" for="api-key-storage">API Key 存储</label>
                         <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
@@ -513,7 +749,7 @@
                       </div>
                     </div>
 
-                    <div class="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+                    <div class="grid gap-3 border-t border-aura-border pt-4 lg:grid-cols-[220px_minmax(0,1fr)]">
                       <div>
                         <label class="aura-section-title" for="api-key">API Key</label>
                         <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
@@ -551,7 +787,7 @@
                     </div>
                   {/if}
 
-                  <div class="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <div class="grid gap-3 border-t border-aura-border pt-4 lg:grid-cols-[220px_minmax(0,1fr)]">
                     <div>
                       <label class="aura-section-title" for="model">模型</label>
                       <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
@@ -573,7 +809,7 @@
             {:else if activeSection === 'behavior'}
               <div class="space-y-5">
                 <section class="space-y-2">
-                  <div class="grid gap-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                  <div class="grid gap-3 rounded-lg border border-aura-border bg-white/68 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                     <div>
                       <p class="text-sm font-medium text-aura-text">Aura 模式</p>
                       <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
@@ -597,7 +833,7 @@
                 </section>
 
                 <section class="space-y-2">
-                  <div class="grid gap-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                  <div class="grid gap-3 rounded-lg border border-aura-border bg-white/68 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                     <div>
                       <p class="text-sm font-medium text-aura-text">敏感剪贴板保护</p>
                       <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
@@ -621,7 +857,7 @@
                 </section>
 
                 <section class="space-y-2">
-                  <div class="grid gap-3 rounded-lg border border-aura-border bg-white/80 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                  <div class="grid gap-3 rounded-lg border border-aura-border bg-white/68 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                     <div>
                       <p class="text-sm font-medium text-aura-text">固定窗口</p>
                       <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
@@ -640,16 +876,16 @@
                     </button>
                   </div>
                   <div class="grid gap-2 text-xs text-aura-text-dim sm:grid-cols-2">
-                    <div class="rounded-lg border border-aura-border bg-aura-surface-soft px-3 py-3">
+                    <div class="rounded-md border border-aura-border bg-aura-surface-soft px-3 py-3">
                       未固定：在光标附近唤起，失焦后自动隐藏。
                     </div>
-                    <div class="rounded-lg border border-aura-border bg-aura-surface-soft px-3 py-3">
+                    <div class="rounded-md border border-aura-border bg-aura-surface-soft px-3 py-3">
                       已固定：记住上次拖动后的位置和大小。
                     </div>
                   </div>
                 </section>
 
-                <section class="space-y-3 border-t border-aura-border pt-5">
+                <section class="space-y-3 rounded-lg border border-aura-border bg-white/68 px-4 py-4">
                   <div class="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
                     <div>
                       <label class="aura-section-title" for="hotkey-capture">快捷键</label>
@@ -727,14 +963,28 @@
       </div>
     </div>
 
-    <div class="border-t border-aura-border bg-white/70 px-4 py-3">
+    <div class="border-t border-aura-border bg-white/78 px-4 py-3">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="min-h-[1.25rem] text-sm">
-          {#if saveErrorMessage}
-            <p class="text-aura-error" data-testid="save-error-message">{saveErrorMessage}</p>
-          {:else if saveMessage}
-            <p class="text-aura-success">{saveMessage}</p>
-          {/if}
+        <div class="flex min-h-[1.25rem] items-center gap-2 text-sm">
+          <span class={`h-2 w-2 rounded-full ${
+            saveErrorMessage
+              ? 'bg-aura-error'
+              : saveMessage || !hasUnsavedChanges
+                ? 'bg-aura-success'
+                : 'bg-[#f59e0b]'
+          }`}></span>
+          <p
+            class={`${
+              saveErrorMessage
+                ? 'text-aura-error'
+                : saveMessage || !hasUnsavedChanges
+                  ? 'text-aura-success'
+                  : 'text-[#8a6226]'
+            }`}
+            data-testid={saveErrorMessage ? 'save-error-message' : undefined}
+          >
+            {saveStatusLabel}
+          </p>
         </div>
 
         <button

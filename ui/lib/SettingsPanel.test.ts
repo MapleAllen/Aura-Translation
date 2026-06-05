@@ -97,7 +97,7 @@ function renderPanel(props: { hotkeyConflictMessage?: string; onsaved?: (config:
   });
 }
 
-async function openSection(section: 'general' | 'provider' | 'behavior' | 'profiles' | 'history') {
+async function openSection(section: 'overview' | 'general' | 'provider' | 'behavior' | 'profiles' | 'history') {
   await fireEvent.click(await screen.findByTestId(`settings-nav-${section}`));
 }
 
@@ -159,15 +159,20 @@ describe('SettingsPanel operator console layout', () => {
     });
 
     expect(await screen.findByTestId('settings-nav')).toBeInTheDocument();
-    expect(screen.getByTestId('settings-nav-general')).toHaveAttribute('aria-pressed', 'true');
-    for (const section of ['general', 'provider', 'behavior', 'profiles', 'history']) {
+    expect(screen.getByTestId('settings-nav-overview')).toHaveAttribute('aria-pressed', 'true');
+    for (const section of ['overview', 'general', 'provider', 'behavior', 'profiles', 'history']) {
       expect(screen.getByTestId(`settings-nav-${section}`).querySelector('svg[aria-hidden="true"]')).not.toBeNull();
     }
+    expect(screen.getByTestId('settings-overview')).toHaveTextContent('DeepSeek');
+    expect(screen.getByTestId('overview-general-card')).toHaveTextContent('自动');
     expect(screen.getByTestId('runtime-status-card')).toHaveTextContent('Aura 已准备好');
     expect(invokeMock).toHaveBeenCalledWith('get_config');
     expect(invokeMock).toHaveBeenCalledWith('get_runtime_status');
     expect(invokeMock).toHaveBeenCalledWith('get_translation_history');
     expect(invokeMock).toHaveBeenCalledWith('get_translation_profiles');
+
+    await fireEvent.click(screen.getByTestId('overview-provider-card'));
+    expect(screen.getByTestId('settings-nav-provider')).toHaveAttribute('aria-pressed', 'true');
 
     await openSection('history');
     expect(await screen.findByTestId('history-list')).toHaveTextContent('Hello world');

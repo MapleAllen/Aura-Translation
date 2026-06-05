@@ -68,7 +68,7 @@ describe('TranslationPopup', () => {
     expect(screen.getByText('你好，世界')).toBeInTheDocument();
   });
 
-  it('shows pin state and exposes actions from the compact status bar', async () => {
+  it('shows pin state and exposes result actions from the action rail', async () => {
     const onTogglePinned = vi.fn();
     const oncopy = vi.fn();
 
@@ -93,6 +93,7 @@ describe('TranslationPopup', () => {
     await fireEvent.click(pinButton);
     expect(onTogglePinned).toHaveBeenCalledWith(true);
 
+    expect(screen.getByTestId('popup-result-actions')).toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: /复制译文/ }));
     expect(oncopy).toHaveBeenCalledTimes(1);
   });
