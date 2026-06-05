@@ -1,6 +1,6 @@
 [package]
 name = "aura-translation"
-version = "0.2.1"
+version = "0.2.2"
 description = "Lightweight floating desktop translation utility"
 authors = ["you"]
 edition = "2021"
