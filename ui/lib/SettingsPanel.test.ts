@@ -108,6 +108,8 @@ describe('SettingsPanel operator console layout', () => {
       switch (command) {
         case 'get_config':
           return Promise.resolve(baseConfig);
+        case 'get_desktop_platform':
+          return Promise.resolve('windows');
         case 'get_runtime_status':
           return Promise.resolve(readyStatus);
         case 'get_translation_history':
@@ -164,6 +166,9 @@ describe('SettingsPanel operator console layout', () => {
       expect(screen.getByTestId(`settings-nav-${section}`).querySelector('svg[aria-hidden="true"]')).not.toBeNull();
     }
     expect(screen.getByTestId('settings-overview')).toHaveTextContent('DeepSeek');
+    await waitFor(() => {
+      expect(screen.getByTestId('runtime-status-card')).toHaveTextContent('Aura 已准备好');
+    });
     expect(screen.getByTestId('overview-general-card')).toHaveTextContent('自动');
     expect(screen.getByTestId('runtime-status-card')).toHaveTextContent('Aura 已准备好');
     expect(invokeMock).toHaveBeenCalledWith('get_config');
@@ -304,6 +309,48 @@ describe('SettingsPanel operator console layout', () => {
     );
   });
 
+  it('keeps aura mode disabled on macOS builds', async () => {
+    invokeMock.mockImplementation((command: string) => {
+      switch (command) {
+        case 'get_config':
+          return Promise.resolve({
+            ...baseConfig,
+            aura_mode_enabled: true,
+          });
+        case 'get_desktop_platform':
+          return Promise.resolve('macos');
+        case 'get_runtime_status':
+          return Promise.resolve(readyStatus);
+        case 'get_translation_history':
+          return Promise.resolve(baseHistoryEntries);
+        case 'get_translation_profiles':
+          return Promise.resolve(baseProfileStore);
+        case 'save_config':
+          return Promise.resolve(undefined);
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+
+    renderPanel();
+    await openSection('behavior');
+
+    const auraSwitch = await screen.findByRole('switch', { name: /Aura/ });
+    expect(auraSwitch).toHaveAttribute('aria-checked', 'false');
+    expect(auraSwitch).toBeDisabled();
+    expect(screen.getByTestId('aura-mode-platform-note')).toHaveTextContent('macOS');
+
+    await fireEvent.click(auraSwitch);
+    await fireEvent.click(screen.getByRole('button', { name: /保存设置/ }));
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      'save_config',
+      expect.objectContaining({
+        config: expect.objectContaining({ aura_mode_enabled: false }),
+      }),
+    );
+  });
+
   it('loads and saves the sensitive clipboard guard preference', async () => {
     renderPanel();
     await openSection('behavior');
@@ -353,6 +400,8 @@ describe('SettingsPanel operator console layout', () => {
             ...baseConfig,
             api_key: '',
           });
+        case 'get_desktop_platform':
+          return Promise.resolve('windows');
         case 'get_runtime_status':
           return Promise.resolve(needsSetupStatus);
         case 'get_translation_history':
@@ -367,7 +416,9 @@ describe('SettingsPanel operator console layout', () => {
     renderPanel();
 
     expect(await screen.findByTestId('runtime-status-card')).toHaveTextContent('需要配置');
-    expect(screen.getByTestId('runtime-status-card')).toHaveTextContent('请保存 API Key');
+    await waitFor(() => {
+      expect(screen.getByTestId('runtime-status-card')).toHaveTextContent('请保存 API Key');
+    });
   });
 
   it('runs a provider test using the current unsaved settings', async () => {

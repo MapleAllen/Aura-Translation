@@ -142,6 +142,11 @@ fn get_provider_defaults(provider: Provider) -> ProviderDefaults {
 }
 
 #[tauri::command]
+fn get_desktop_platform() -> &'static str {
+    std::env::consts::OS
+}
+
+#[tauri::command]
 fn load_provider_api_key(provider: Provider) -> Result<String, String> {
     secrets::load_provider_api_key(&provider)
 }
@@ -1685,6 +1690,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             get_provider_defaults,
+            get_desktop_platform,
             load_provider_api_key,
             get_paste_back_status,
             get_translation_profiles,

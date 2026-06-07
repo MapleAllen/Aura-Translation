@@ -67,6 +67,8 @@
     canPasteBack ?? (Boolean(pasteBackSupported) && Boolean(pasteBackAvailable)),
   );
 
+  const showPasteBackAction = $derived(pasteBackSupported !== false);
+
   const statusLabel = $derived.by(() => {
     if (viewState === 'loading') return '连接中';
     if (retryAttempt !== null) return `重试 ${retryAttempt}/3`;
@@ -336,6 +338,7 @@
                 {/if}
 
                 <div class="flex flex-wrap items-center justify-end gap-2">
+                  {#if showPasteBackAction}
                   <button
                     class="aura-console-button disabled:cursor-not-allowed disabled:opacity-40"
                     onclick={() => onpasteback?.()}
@@ -345,6 +348,7 @@
                   >
                     回填
                   </button>
+                  {/if}
 
                   <button
                     class="aura-console-button"

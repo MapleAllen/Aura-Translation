@@ -98,6 +98,24 @@ describe('TranslationPopup', () => {
     expect(oncopy).toHaveBeenCalledTimes(1);
   });
 
+  it('hides paste-back action when the current platform does not support it', () => {
+    renderPopup({
+      viewState: 'result',
+      sourceText: 'Copy this result',
+      draftSourceText: 'Copy this result',
+      sourceLangLabel: '鑻辫',
+      targetLangLabel: '涓枃',
+      providerLabel: 'DeepSeek',
+      modelLabel: 'deepseek-chat',
+      translatedText: 'Translated result',
+      canPasteBack: true,
+      pasteBackSupported: false,
+    });
+
+    expect(screen.queryByRole('button', { name: /回填/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /复制译文/ })).toBeInTheDocument();
+  });
+
   it('reuses the shared surface for loading and streaming states', () => {
     const { rerender } = renderPopup({
       viewState: 'loading',

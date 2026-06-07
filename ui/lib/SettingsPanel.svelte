@@ -25,6 +25,8 @@
     models: string[];
   };
 
+  type DesktopPlatform = 'windows' | 'macos' | 'linux' | 'unknown';
+
   type SettingsSection = 'overview' | 'general' | 'provider' | 'behavior' | 'profiles' | 'history';
 
   const SETTINGS_SECTIONS: Array<{ id: SettingsSection; label: string; hint: string }> = [
@@ -71,6 +73,7 @@
   let runtimeStatus = $state<RuntimeStatus | null>(null);
   let probeResult = $state<ProviderProbeResult | null>(null);
   let savedConfigSnapshot = $state('');
+  let desktopPlatform = $state<DesktopPlatform>('unknown');
 
   const saveScale = new Spring(1, { stiffness: 0.4, damping: 0.5 });
 
@@ -79,6 +82,21 @@
   );
 
   const activeProfileName = $derived(getActiveProfileName(profileStore) || 'Default');
+
+  const auraModeSupported = $derived(supportsAuraModeOnPlatform(desktopPlatform));
+
+  const desktopPlatformLabel = $derived.by(() => {
+    switch (desktopPlatform) {
+      case 'windows':
+        return 'Windows';
+      case 'macos':
+        return 'macOS';
+      case 'linux':
+        return 'Linux';
+      default:
+        return '当前平台';
+    }
+  });
 
   const currentLanguageSummary = $derived(
     `${languageLabel(config.source_lang) || '自动'} → ${languageLabel(config.target_lang) || '目标语言'}`,
@@ -111,13 +129,18 @@
     probeResult = null;
 
     try {
-      const [loaded, nextRuntimeStatus, nextHistoryEntries, nextProfileStore] = await Promise.all([
+      const [loaded, nextDesktopPlatform, nextRuntimeStatus, nextHistoryEntries, nextProfileStore] = await Promise.all([
         invoke<AppConfig>('get_config'),
+        invoke<string>('get_desktop_platform').catch(() => 'windows'),
         invoke<RuntimeStatus>('get_runtime_status'),
         invoke<TranslationHistoryEntry[]>('get_translation_history'),
         invoke<TranslationProfilesStore>('get_translation_profiles'),
       ]);
+      desktopPlatform = normalizeDesktopPlatform(nextDesktopPlatform);
       config = cloneAppConfig(loaded);
+      if (!supportsAuraModeOnPlatform(desktopPlatform)) {
+        config.aura_mode_enabled = false;
+      }
       if (config.api_key_storage === 'legacy_plaintext') {
         config.api_key_storage = 'plaintext_fallback';
       }
@@ -160,6 +183,25 @@
 
   function sectionMeta(sectionId: SettingsSection) {
     return SETTINGS_SECTIONS.find((section) => section.id === sectionId) ?? SETTINGS_SECTIONS[0];
+  }
+
+  function normalizeDesktopPlatform(platform: string): DesktopPlatform {
+    if (platform === 'windows' || platform === 'macos' || platform === 'linux') {
+      return platform;
+    }
+    return 'unknown';
+  }
+
+  function supportsAuraModeOnPlatform(platform: DesktopPlatform): boolean {
+    return platform === 'windows';
+  }
+
+  function configForCurrentPlatform(value: AppConfig): AppConfig {
+    const next = cloneAppConfig(value);
+    if (!supportsAuraModeOnPlatform(desktopPlatform)) {
+      next.aura_mode_enabled = false;
+    }
+    return next;
   }
 
   function snapshotConfig(value: AppConfig): string {
@@ -374,7 +416,9 @@
     saveScale.target = 0.97;
 
     try {
-      await invoke('save_config', { config: cloneAppConfig(config) });
+      const nextConfig = configForCurrentPlatform(config);
+      config = cloneAppConfig(nextConfig);
+      await invoke('save_config', { config: nextConfig });
       await refreshRuntimeStatus();
       savedConfigSnapshot = snapshotConfig(config);
       saveMessage = '设置已保存';
@@ -822,11 +866,25 @@
                       aria-checked={config.aura_mode_enabled}
                       aria-label="Aura 模式"
                       type="button"
-                      onclick={() => (config.aura_mode_enabled = !config.aura_mode_enabled)}
+                      disabled={!auraModeSupported}
+                      title={auraModeSupported ? 'Aura 模式' : `${desktopPlatformLabel} 当前仅支持手动快捷键翻译。`}
+                      onclick={() => {
+                        if (auraModeSupported) {
+                          config.aura_mode_enabled = !config.aura_mode_enabled;
+                        }
+                      }}
                     >
                       <span class="aura-console-switch-thumb"></span>
                     </button>
                   </div>
+                  {#if !auraModeSupported}
+                    <p
+                      class="text-xs leading-relaxed text-aura-text-dim"
+                      data-testid="aura-mode-platform-note"
+                    >
+                      {desktopPlatformLabel} 当前不启用自动剪贴板翻译；请复制文本后使用快捷键手动触发。
+                    </p>
+                  {/if}
                   <p class="text-xs leading-relaxed text-aura-text-dim">
                     关闭 Aura 模式后，仍可继续使用“复制文本后按快捷键”的手动流程。
                   </p>
