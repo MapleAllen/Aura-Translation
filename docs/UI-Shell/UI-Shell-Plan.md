@@ -60,7 +60,14 @@ Ship a Windows-first two-window desktop shell where translation feels immediate 
 - Users can edit source text inline and press `Ctrl+Enter` or click `Translate edits` to reuse the current translation session flow.
 - The draft stays inside the translation window instead of pushing this workflow into Settings.
 
-### Phase 9: Remaining Enhancements - NOT STARTED
+### Phase 9: Platform-Aware Desktop Controls - DONE
+
+- Settings now asks the backend for `get_desktop_platform`.
+- macOS and Linux builds disable the Aura mode switch and save `aura_mode_enabled: false` even if an older config had it enabled.
+- The translation popup hides the paste-back action when the backend reports paste-back is unsupported.
+- Added UI regression coverage for macOS Aura mode disablement and unsupported paste-back hiding.
+
+### Phase 10: Remaining Enhancements - NOT STARTED
 
 - Add explicit retry state UI instead of console-only retry logging.
 - Add more keyboard-only controls inside both windows.
@@ -71,6 +78,8 @@ Ship a Windows-first two-window desktop shell where translation feels immediate 
 - Keep translation result state request-scoped and ignore stale stream events.
 - Do not clear the retained result when the bubble is merely hidden.
 - Keep Aura mode Windows-only unless another platform gains a tested equivalent trigger path.
+- Do not let non-Windows Settings persist `aura_mode_enabled: true`.
+- Do not render paste-back controls when the backend reports paste-back is unsupported.
 - Treat pinned placement persistence and settings placement persistence as config-backed behavior, not transient UI-only state.
 
 ## Validation Baseline

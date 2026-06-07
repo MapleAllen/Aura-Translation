@@ -42,6 +42,8 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - First open defaults to the bottom-right of the current work area.
 - Later opens restore the last saved position and size, clamped back into a visible monitor region if display layout changes.
 - Settings are loaded on open and saved through `save_config`.
+- Settings also calls `get_desktop_platform` so platform-specific controls can be disabled before the user saves unsupported preferences.
+- On macOS and Linux, the Aura mode switch is disabled, the config is normalized back to `aura_mode_enabled: false` before save, and the Settings copy explains the manual-hotkey workflow.
 
 ## Architecture
 
@@ -62,10 +64,12 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - `ui/lib/TranslationPopup.svelte`
   - renders the minimal floating translation bubble
   - exposes pin, retry, paste-back, copy, cancel, close, pinned-mode draft editing controls, and token usage badges when available
+  - hides the paste-back action when `pasteBackSupported` is `false`
 
 - `ui/lib/SettingsPanel.svelte`
   - renders the dedicated settings form
   - now includes named translation profiles, default language pair, Aura mode configuration, provider settings, API key storage, hotkey, pin behavior, and recent translation history actions
+  - calls `get_desktop_platform`, disables Aura mode on unsupported platforms, and saves a platform-normalized config
 
 - `ui/lib/ProfileManager.svelte`
   - renders profile create, rename, activate, and delete controls inside Settings
@@ -95,6 +99,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 ## Integration Points
 
 - `invoke('get_config')`
+- `invoke('get_desktop_platform')`
 - `invoke('save_config', { config })`
 - `invoke('save_window_placement', { kind, placement })`
 - `invoke('realign_translation_window')`
@@ -127,14 +132,17 @@ Tauri creates the hidden translation window during startup and lazily creates th
 ## Current Limitations
 
 - Aura mode is Windows-only; other platforms still rely on the manual hotkey flow.
+- Settings now prevents non-Windows users from enabling Aura mode, but automatic clipboard translation still has no macOS or Linux implementation.
 - Clipboard auto-trigger intentionally ignores repeated copies of identical text until a different text arrives or the user uses the hotkey fallback.
 - The cursor-near bubble uses cursor position rather than exact cross-application text selection bounds.
 - Translation history is currently managed from Settings only; the tray still does not expose recent entries directly.
 - Translation profiles intentionally scope only translation provider and language defaults; hotkey and window placement stay global.
 - Paste-back is currently Windows-only and restores only text clipboard content, not non-text clipboard payloads.
+- Paste-back controls are hidden when the backend reports the current platform does not support source-app paste-back.
 
 ## Future Directions
 
 - Replace polling-based Aura mode with a native clipboard listener if lower-latency behavior becomes necessary.
+- Add a platform capability model if macOS or Linux gain partial support for clipboard monitoring, paste-back, or different hotkey permission states.
 - Add recent history access directly from the tray experience.
 - Surface retry state inside the translation bubble instead of logging retries only.

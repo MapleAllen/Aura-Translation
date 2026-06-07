@@ -216,6 +216,29 @@ Remaining features:
 - Add tests for `save_config()` hotkey rollback behavior.
 - Add tests or harnesses around the UI-ready wait path.
 
+---
+
+## Phase 12: Platform Capability Surface - PARTIAL
+
+Status: **Partial**
+
+Goals:
+
+- Let the frontend adapt desktop controls based on backend-reported platform capabilities without guessing OS behavior in Svelte components.
+
+Completed work:
+
+- Added `get_desktop_platform()` in `src-tauri/src/lib.rs`.
+- Registered `get_desktop_platform` in the Tauri invoke handler.
+- Moved the `windows` crate dependency from the broad desktop target block to the `target_os = "windows"` dependency block in `src-tauri/Cargo.toml`.
+- Kept Windows source-app paste-back and clipboard sequence APIs behind `#[cfg(windows)]` fallbacks.
+
+Remaining features:
+
+- Add a richer backend capability command if macOS and Linux need more than raw platform labels.
+- Confirm macOS tray/menu bar, global hotkey, Keychain, notification, transparent window, and always-on-top behavior on a real macOS desktop.
+- Decide whether macOS source-app paste-back should remain unsupported or require a dedicated Accessibility/Automation permission workflow.
+
 ## Implementation Rules
 
 - Do not emit frontend-facing events into a lazily created window before `mark_ui_ready` has completed.
@@ -223,8 +246,10 @@ Remaining features:
 - Do not silently drop hotkey-registration failures.
 - Do not reintroduce eager window creation unless startup measurements justify it.
 - Do not add monitor-placement heuristics to the frontend.
+- Do not expose Windows-native APIs outside `#[cfg(windows)]` guarded code paths.
 
 ## Open Questions
 
 - **Readiness signaling:** Is the polling-based `UiReadyState` sufficient, or should it become an event-driven handshake?
 - **Secret storage fallback:** If keychain support increases binary size too much, is plaintext-with-warning an acceptable long-term compromise?
+- **macOS capability model:** Should the frontend receive a raw platform string, or should the backend expose a structured capability payload as macOS support expands?
