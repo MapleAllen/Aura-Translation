@@ -1074,6 +1074,19 @@ fn restore_settings_window(window: &WebviewWindow, config: &AppConfig) {
     }
 }
 
+fn should_show_settings_on_startup(config: &AppConfig) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        readiness::should_prompt_for_setup(config) || config.settings_window_placement.is_none()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = config;
+        false
+    }
+}
+
 async fn capture_cursor_anchor(
     window: &WebviewWindow,
     runtime: &RuntimeState,
@@ -1729,6 +1742,8 @@ pub fn run() {
                 emit_daemon_error(app.app_handle(), "secret-storage-init-failed", err, true);
             }
 
+            let startup_config = current_config(app.app_handle());
+
             if let Err(err) = build_tray(app.app_handle()) {
                 emit_daemon_error(app.app_handle(), "tray-build-failed", err, false);
             }
@@ -1740,8 +1755,44 @@ pub fn run() {
 
             spawn_clipboard_monitor(app.app_handle());
 
+            if should_show_settings_on_startup(&startup_config) {
+                let app_handle = app.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    show_settings_window(app_handle).await;
+                });
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::should_show_settings_on_startup;
+    use crate::config::AppConfig;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_shows_settings_on_first_launch() {
+        let config = AppConfig::default();
+        assert!(should_show_settings_on_startup(&config));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_hides_startup_settings_after_setup_and_saved_placement() {
+        let mut config = AppConfig::default();
+        config.api_key = "sk-test".to_string();
+        config.settings_window_placement = Some(crate::config::WindowPlacement {
+            x: 120.0,
+            y: 160.0,
+            width: Some(480.0),
+            height: Some(680.0),
+            monitor: Some("Built-in".to_string()),
+        });
+
+        assert!(!should_show_settings_on_startup(&config));
+    }
 }

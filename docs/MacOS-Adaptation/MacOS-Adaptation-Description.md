@@ -16,7 +16,7 @@ The repository also has a dedicated macOS workflow in `.github/workflows/macos-a
 
 To keep the first adaptation gate focused on runtime viability instead of distribution packaging, macOS now merges `src-tauri/tauri.macos.conf.json` during Tauri builds and limits the platform bundle target to `.app`. The shared `tauri.conf.json` still uses `"targets": "all"` for other platforms, so Windows packaging behavior remains unchanged.
 
-macOS also overrides the legacy default hotkey. New configs now use `Alt+Shift+T`, and existing macOS configs that still persisted the old Windows-first default `CmdOrCtrl+T` are normalized in memory during load so the runtime does not keep a Finder-tab conflict as its first manual translation path.
+macOS also overrides the legacy default hotkey. New configs now use `Cmd+Shift+J`, and existing macOS configs that still persisted either the old Windows-first default `CmdOrCtrl+T` or the earlier macOS fallback `Alt+Shift+T` are normalized in memory during load so the runtime converges on one easier-to-press manual translation shortcut.
 
 ### Capabilities
 
@@ -37,6 +37,7 @@ macOS also overrides the legacy default hotkey. New configs now use `Alt+Shift+T
 - macOS and Linux normalize `config.aura_mode_enabled` to `false`.
 - macOS and Linux disable the Aura mode switch and show copy explaining that manual hotkey translation is the supported path.
 - `ui/lib/TranslationPopup.svelte` hides paste-back when `pasteBackSupported` is `false`.
+- macOS startup now auto-opens the Settings window on first launch or whenever the runtime still needs setup, so manual testing does not depend on successfully discovering the tray first.
 
 **Verification tracking**
 - `docs/macOS-Adaptation-Checklist.md` defines the first manual runtime checklist for tray/menu bar behavior, global hotkeys, Keychain, notifications, transparent windows, and always-on-top behavior.
@@ -59,6 +60,7 @@ The module is a cross-cutting platform gate layered over the existing Daemon Cor
   - `paste_back_supported()`: returns `true` only on Windows and `false` elsewhere.
   - `paste_translation_back()`: rejects non-Windows calls without attempting platform automation.
   - Startup and fallback hotkey registration now use the platform default hotkey instead of hard-coding `CmdOrCtrl+T`.
+  - macOS setup now auto-opens Settings on first launch or incomplete setup through `should_show_settings_on_startup()`.
 
 - `src-tauri/Cargo.toml`
   - `tauri-plugin-global-shortcut` remains a desktop dependency.

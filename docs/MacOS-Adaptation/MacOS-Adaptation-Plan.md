@@ -27,7 +27,8 @@ Completed work:
 - Added `src-tauri/src/lib.rs::get_desktop_platform()` and registered it in the Tauri invoke handler.
 - Moved the `windows` crate into the `target_os = "windows"` dependency block in `src-tauri/Cargo.toml`.
 - Added `src-tauri/tauri.macos.conf.json` so adaptation builds bundle `.app` only on macOS while the shared config still allows `"targets": "all"` elsewhere.
-- Switched the macOS default hotkey to `Alt+Shift+T`, and normalize the legacy `CmdOrCtrl+T` default on macOS load so the runtime avoids Finder's built-in tab shortcut.
+- Switched the macOS default hotkey to `Cmd+Shift+J`, and normalize both the legacy `CmdOrCtrl+T` default and the earlier macOS fallback `Alt+Shift+T` on macOS load so the runtime converges on one easier shortcut.
+- Added a macOS startup fallback that auto-opens Settings on first launch or incomplete setup, so manual validation does not depend on tray discovery.
 - Updated `ui/lib/SettingsPanel.svelte` so macOS and Linux disable Aura mode and save `aura_mode_enabled: false`.
 - Updated `ui/lib/TranslationPopup.svelte` so unsupported paste-back does not render.
 - Added UI regression tests in `SettingsPanel.test.ts` and `TranslationPopup.test.ts`.

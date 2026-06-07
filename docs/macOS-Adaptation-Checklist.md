@@ -51,7 +51,8 @@ Verified on this host:
 
 - The built `.app` launches successfully and stays resident as `com.aura.translation`.
 - The previous macOS default hotkey `CmdOrCtrl+T` was reproduced as a real Finder conflict: pressing it in Finder opened the native Finder tab flow instead of surfacing Aura's translation path.
-- The macOS runtime now normalizes the legacy default to `Alt+Shift+T` in memory during config load, and startup/fallback hotkey registration uses that platform default.
+- The macOS runtime now normalizes both older defaults to `Cmd+Shift+J` in memory during config load, and startup/fallback hotkey registration uses that platform default.
+- macOS startup now auto-opens Settings on first launch or incomplete setup, so the adaptation build no longer relies on tray discovery just to reach the configuration UI.
 
 Blocked or still pending on this host:
 
