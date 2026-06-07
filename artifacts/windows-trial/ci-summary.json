@@ -1,37 +1,41 @@
 ﻿{
-    "generatedAt":  "2026-06-07T11:11:09Z",
+    "generatedAt":  "2026-06-07T11:19:38Z",
     "repo":  "MapleAllen/Aura-Translation",
     "branch":  "codex/macos-adaptation-runtime",
     "sha":  "6a826fb546a06dca790b397026c0faeb996ee296",
     "runId":  "27090828223",
     "runUrl":  "https://github.com/MapleAllen/Aura-Translation/actions/runs/27090828223",
     "eventName":  "push",
-    "phase":  "started",
-    "status":  "running",
-    "passed":  null,
+    "phase":  "completed",
+    "status":  "failed",
+    "passed":  false,
     "requiredFailures":  [
-
+                             "rust_tests",
+                             "ui_tests",
+                             "build_release_bundles",
+                             "install_acceptance",
+                             "resource_measurement"
                          ],
     "gateOutcomes":  {
                          "install_dependencies":  {
                                                       "required":  true,
-                                                      "outcome":  "pending"
+                                                      "outcome":  "success"
                                                   },
                          "check":  {
                                        "required":  true,
-                                       "outcome":  "pending"
+                                       "outcome":  "success"
                                    },
                          "rust_tests":  {
                                             "required":  true,
-                                            "outcome":  "pending"
+                                            "outcome":  "failure"
                                         },
                          "ui_tests":  {
                                           "required":  true,
-                                          "outcome":  "pending"
+                                          "outcome":  "skipped"
                                       },
                          "build_release_bundles":  {
                                                        "required":  true,
-                                                       "outcome":  "pending"
+                                                       "outcome":  "skipped"
                                                    },
                          "live_provider_smoke":  {
                                                      "required":  false,
@@ -39,14 +43,22 @@
                                                  },
                          "install_acceptance":  {
                                                     "required":  true,
-                                                    "outcome":  "pending"
+                                                    "outcome":  "skipped"
                                                 },
                          "resource_measurement":  {
                                                       "required":  true,
-                                                      "outcome":  "pending"
+                                                      "outcome":  "failure"
                                                   }
                      },
     "smokeProviders":  null,
     "acceptInstall":  null,
-    "resourceMetrics":  null
+    "resourceMetrics":  {
+                            "GeneratedAt":  "2026-06-07T11:19:36",
+                            "Passed":  false,
+                            "SampleSeconds":  60,
+                            "WarmupSeconds":  5,
+                            "Metrics":  null,
+                            "Artifacts":  null,
+                            "Error":  "Cannot find path \u0027D:\\a\\Aura-Translation\\Aura-Translation\\src-tauri\\target\\release\\aura-translation.exe\u0027 because it does not exist."
+                        }
 }
