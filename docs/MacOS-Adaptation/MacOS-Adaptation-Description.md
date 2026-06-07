@@ -14,17 +14,23 @@ The current macOS adaptation is a build-and-behavior gate rather than a separate
 
 The repository also has a dedicated macOS workflow in `.github/workflows/macos-adaptation.yml`. It runs the same core validation commands expected for first-phase macOS support on `macos-latest`: dependency install, Svelte diagnostics, UI tests, Rust tests, and Tauri bundle build.
 
+To keep the first adaptation gate focused on runtime viability instead of distribution packaging, macOS now merges `src-tauri/tauri.macos.conf.json` during Tauri builds and limits the platform bundle target to `.app`. The shared `tauri.conf.json` still uses `"targets": "all"` for other platforms, so Windows packaging behavior remains unchanged.
+
+macOS also overrides the legacy default hotkey. New configs now use `Alt+Shift+T`, and existing macOS configs that still persisted the old Windows-first default `CmdOrCtrl+T` are normalized in memory during load so the runtime does not keep a Finder-tab conflict as its first manual translation path.
+
 ### Capabilities
 
 **macOS CI gate**
 - Runs on GitHub Actions `macos-latest`.
 - Executes `npm ci`, `npm run check`, `npm test`, `cargo test --manifest-path ./src-tauri/Cargo.toml`, and `npm run tauri build`.
+- Produces a macOS `.app` bundle during adaptation instead of also requiring DMG packaging.
 - Triggers on `main`, `codex/**`, pull requests, and manual dispatch.
 
 **Platform capability reporting**
 - `src-tauri/src/lib.rs::get_desktop_platform()` returns `std::env::consts::OS`.
 - The command is registered in the Tauri invoke handler with the other desktop commands.
 - `src-tauri/Cargo.toml` keeps the `windows` crate in the `target_os = "windows"` dependency block.
+- `src-tauri/src/hotkey.rs::default_hotkey()` returns the platform-safe default accelerator.
 
 **macOS UI fallback**
 - `ui/lib/SettingsPanel.svelte` calls `get_desktop_platform` when loading settings.
@@ -52,11 +58,16 @@ The module is a cross-cutting platform gate layered over the existing Daemon Cor
   - `get_desktop_platform()`: returns the backend platform string used by Settings.
   - `paste_back_supported()`: returns `true` only on Windows and `false` elsewhere.
   - `paste_translation_back()`: rejects non-Windows calls without attempting platform automation.
+  - Startup and fallback hotkey registration now use the platform default hotkey instead of hard-coding `CmdOrCtrl+T`.
 
 - `src-tauri/Cargo.toml`
   - `tauri-plugin-global-shortcut` remains a desktop dependency.
   - `windows` is scoped to `target_os = "windows"`.
   - `keyring` uses `windows-native` on Windows and `apple-native` on macOS.
+
+- `src-tauri/tauri.macos.conf.json`
+  - Overrides `bundle.targets` to `["app"]` only on macOS.
+  - Avoids coupling the adaptation gate to Finder-driven DMG decoration and packaging behavior.
 
 ### Frontend (`ui/lib/`)
 
@@ -74,6 +85,12 @@ The module is a cross-cutting platform gate layered over the existing Daemon Cor
 - `TranslationPopup.test.ts`
   - Covers paste-back hiding when the platform does not support it.
 
+- `TauriMacConfig.test.ts`
+  - Guards the macOS-specific Tauri config so adaptation builds keep bundling `.app` only.
+
+- `src-tauri/src/config.rs` and `src-tauri/src/hotkey.rs` tests
+  - Guard the macOS default hotkey and the legacy-default migration path.
+
 ### Integration Points
 
 - `src-tauri/src/lib.rs`
@@ -89,6 +106,8 @@ The module is a cross-cutting platform gate layered over the existing Daemon Cor
 ## Current Limitations
 
 - The macOS CI workflow has been added but has not been observed in this local Windows environment.
+- The adaptation build currently stops at `.app` packaging on macOS; DMG generation is deferred until a later distribution-focused phase because Tauri's `create-dmg` step depends on Finder/`hdiutil` behavior that is not required for the runtime gate.
+- The current host reproduced a real macOS shortcut conflict with the old `CmdOrCtrl+T` default in Finder before the hotkey migration landed.
 - Manual runtime behavior still requires a real macOS desktop for tray/menu bar, global hotkey, Keychain, notifications, transparent windows, and always-on-top validation.
 - Aura mode automatic clipboard monitoring remains Windows-only.
 - Source-app paste-back remains Windows-only and has no macOS Accessibility/Automation permission flow.

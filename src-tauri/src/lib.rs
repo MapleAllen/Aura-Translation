@@ -1462,8 +1462,10 @@ fn register_startup_hotkey(app: &AppHandle) {
                     app,
                     "hotkey-register-failed",
                     format!(
-                        "Failed to register startup hotkey '{}': {}. Falling back to CmdOrCtrl+T.",
-                        config.hotkey, e
+                        "Failed to register startup hotkey '{}': {}. Falling back to {}.",
+                        config.hotkey,
+                        e,
+                        hotkey::default_hotkey()
                     ),
                     true,
                 );
@@ -1475,8 +1477,10 @@ fn register_startup_hotkey(app: &AppHandle) {
                 app,
                 "hotkey-parse-failed",
                 format!(
-                    "Failed to parse startup hotkey '{}': {}. Falling back to CmdOrCtrl+T.",
-                    config.hotkey, e
+                    "Failed to parse startup hotkey '{}': {}. Falling back to {}.",
+                    config.hotkey,
+                    e,
+                    hotkey::default_hotkey()
                 ),
                 true,
             );
@@ -1487,13 +1491,17 @@ fn register_startup_hotkey(app: &AppHandle) {
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn register_fallback_hotkey(app: &AppHandle) {
-    match hotkey::parse_hotkey("CmdOrCtrl+T") {
+    let fallback_hotkey = hotkey::default_hotkey();
+    match hotkey::parse_hotkey(fallback_hotkey) {
         Ok(fallback) => {
             if let Err(e) = app.global_shortcut().register(fallback) {
                 emit_daemon_error(
                     app,
                     "hotkey-fallback-register-failed",
-                    format!("Failed to register CmdOrCtrl+T fallback hotkey: {}", e),
+                    format!(
+                        "Failed to register {} fallback hotkey: {}",
+                        fallback_hotkey, e
+                    ),
                     false,
                 );
             }
@@ -1502,7 +1510,10 @@ fn register_fallback_hotkey(app: &AppHandle) {
             emit_daemon_error(
                 app,
                 "hotkey-fallback-parse-failed",
-                format!("Failed to parse CmdOrCtrl+T fallback hotkey: {}", e),
+                format!(
+                    "Failed to parse {} fallback hotkey: {}",
+                    fallback_hotkey, e
+                ),
                 false,
             );
         }

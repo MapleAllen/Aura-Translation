@@ -279,6 +279,7 @@ fn authorization_header(api_key: &str) -> Result<(HeaderName, HeaderValue), Stri
 mod tests {
     use super::*;
     use crate::config::ApiKeyStorage;
+    use crate::hotkey;
     use wiremock::{
         matchers::{method, path},
         Mock, MockServer, ResponseTemplate,
@@ -292,7 +293,7 @@ mod tests {
             model: "deepseek-chat".to_string(),
             source_lang: "auto".to_string(),
             target_lang: "Chinese".to_string(),
-            hotkey: "CmdOrCtrl+T".to_string(),
+            hotkey: hotkey::default_hotkey().to_string(),
             aura_mode_enabled: false,
             aura_guard_enabled: true,
             window_pinned: false,
