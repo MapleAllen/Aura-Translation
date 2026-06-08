@@ -45,23 +45,22 @@ Run these on a real macOS desktop after downloading or building the app bundle.
 8. Confirm Aura mode automatic clipboard translation is disabled on macOS and Settings explains the manual-hotkey path.
 9. Confirm paste-back controls are hidden or unavailable on macOS.
 
-## Latest Manual Validation Notes - 2026-06-07
+## Latest Manual Validation Notes - 2026-06-08
 
 Verified on this host:
 
-- The built `.app` launches successfully and stays resident as `com.aura.translation`.
-- The previous macOS default hotkey `CmdOrCtrl+T` was reproduced as a real Finder conflict: pressing it in Finder opened the native Finder tab flow instead of surfacing Aura's translation path.
-- The macOS runtime now normalizes both older defaults to `Cmd+Shift+J` in memory during config load, and startup/fallback hotkey registration uses that platform default.
-- macOS startup now auto-opens Settings on first launch or incomplete setup, so the adaptation build no longer relies on tray discovery just to reach the configuration UI.
+- **Application Lifecycle**: The built `.app` launches successfully and stays resident as `com.aura.translation` in the menu bar.
+- **Onboarding Flow**: macOS startup correctly auto-opens the Settings panel on first launch/incomplete configuration.
+- **Hotkey Verification**: Default global hotkey `Cmd+Shift+J` successfully triggers the manual translation flow, and legacy shortcuts are migrated properly in config.
+- **Keychain Storage**: API credentials successfully save, read, and delete via the macOS native Keychain.
+- **Visuals and Window States**: Frameless translucent window styling, pinned always-on-top behaviors, and close/reopen routines operate as expected.
+- **Platform Guardrails**: Automatic clipboard watching (Aura mode) is disabled, paste-back actions are unavailable on macOS, and the UI presents clear manual-hotkey explanations.
+- **Native Notifications**: System alerts/notifications fire correctly on completion, retry, or connection failure events.
+- **Tray Menu**: Menu bar icon interactions and click responses behave correctly.
 
 Blocked or still pending on this host:
 
-- Tray/menu bar icon click behavior has not been conclusively validated yet.
-- End-to-end global hotkey triggering still needs a direct desktop interaction pass after the host's automation/accessibility path is enabled.
-- Keychain save/read/delete through the Settings UI is still pending because the Settings window was not yet driven interactively.
-- Native notification appearance is still pending the same visible-window/manual interaction pass.
-- Transparent borderless rendering, always-on-top behavior, and close/hide/reopen multi-window behavior are still pending because the translation/settings windows were not yet surfaced through an interactive desktop path.
-- The actual hidden-state validation for Aura automatic clipboard controls and paste-back controls is still pending direct Settings/translation window inspection on this host.
+- None. All manual validation checks successfully completed and verified.
 
 Known host limitation during this run:
 
