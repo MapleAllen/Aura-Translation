@@ -1,45 +1,27 @@
 # Windows Implementation and Verification
 
 Owner: Windows implementer
-Dependencies: Shared contracts frozen
+Working branch: `main`
+Starting SHA: RESOLVE AND RECORD AFTER PLAN UPDATE PUSH
+Status: BLOCKED UNTIL PLAN UPDATE IS ON `origin/main`
 
 ## Allowed Files
 
 - `src-tauri/src/hotkey.rs`
-- `src-tauri/src/lib.rs` only for the macOS-only startup test import cleanup
-- `plan/active/macos-v023-integration-hardening/02-windows.md`
+- `src-tauri/src/lib.rs`
+- this file for implementation evidence
 
-## Do Not Modify
+## Required Changes
 
-- `docs/MacOS-Adaptation/MacOS-Adaptation-Plan.md`
-- `docs/macOS-Adaptation-Checklist.md`
-- `artifacts/windows-trial/ci-summary.json` as part of product history
-- `src-tauri/tauri.macos.conf.json`
-- Any macOS-specific runtime behavior outside the warning cleanup already noted above
+Before source edits, pull latest `main` and replace the pending starting SHA above with the resolved commit hash.
 
-## Platform-Specific Functions and Behavior
+1. Update `platform_default_hotkey_is_parseable`:
+   - macOS expects `Code::KeyJ`.
+   - non-macOS expects `Code::KeyT`.
+2. Guard the macOS-only startup test module/imports so Windows emits no unused-import warnings.
+3. Do not change runtime hotkey behavior.
 
-- `platform_default_hotkey_is_parseable` must assert the actual platform key:
-  - macOS: `Code::KeyJ`
-  - non-macOS: `Code::KeyT`
-- Windows default runtime hotkey behavior must remain `CmdOrCtrl+T`.
-- Warning cleanup must not weaken or remove the macOS-only startup tests; it only needs to stop Windows from compiling unused imports.
-
-## Implementation Tasks
-
-1. Branch from `codex/macos-v023-integration` into `codex/macos-v023-windows-hardening`.
-2. Fix `src-tauri/src/hotkey.rs` so the platform-default parseability test matches the real platform default instead of asserting `KeyJ` everywhere.
-3. Clean the macOS-only startup test module imports in `src-tauri/src/lib.rs` so Windows Rust tests stop emitting the known `unused import` warnings.
-4. Run the local preflight checks before any CI push:
-   - `cargo test --manifest-path .\src-tauri\Cargo.toml`
-   - `npm run check`
-   - `npm test`
-5. Push the branch and wait for the Windows Trial Gate to pass.
-6. Capture the passing run URL, SHA, and any CI-summary artifact commit hash in this file. If the workflow adds a summary-only commit, do not merge that commit into the integration branch.
-
-## Automated Verification
-
-Required local commands:
+## Required Verification
 
 ```powershell
 cargo test --manifest-path .\src-tauri\Cargo.toml
@@ -47,27 +29,27 @@ npm run check
 npm test
 ```
 
-Required CI gate:
+After Codex review and push, the Windows Trial Gate must pass on the resulting `main` SHA.
 
-- Windows Trial Gate passes on the hardening branch.
-- Evidence must include the run URL and the validated branch SHA that contains the product code fix.
+## Current Evidence
 
-## Windows Manual Verification
+Audited on Windows, 2026-06-08, SHA `7ba8c40`:
 
-- If the Rust changes are strictly test-only, manual runtime verification is optional.
-- If runtime hotkey logic changes for any reason, perform a spot check on Windows:
-  - open Settings,
-  - confirm the default hotkey still shows `CmdOrCtrl+T`,
-  - trigger a translation once to confirm no regression.
+- `npm run check`: PASS, 0 errors / 0 warnings
+- `npm test`: PASS, 46 tests
+- `cargo test`: FAIL, 47 passed / 1 failed
+- Failure: `hotkey::tests::platform_default_hotkey_is_parseable`
+- Warnings: two unused imports in `src-tauri/src/lib.rs::startup_tests`
+- Windows Trial Gate: FAIL
+  - https://github.com/MapleAllen/Aura-Translation/actions/runs/27127292677
 
 ## Completion Evidence
 
-- Commit hash with the test fix and warning cleanup.
-- Local command results recorded.
-- Windows Trial Gate run URL and outcome recorded.
-- Explicit note stating whether a CI-summary-only commit was generated and excluded from final integration.
+- [ ] Required source changes reviewed.
+- [ ] Local Windows checks pass.
+- [ ] Known warnings removed.
+- [ ] Codex commits and pushes approved changes to `main`.
+- [ ] Windows Trial Gate passes on the handoff SHA.
 
-## Deviations and Remaining Risks
-
-- If the fix requires touching files outside the allowed scope, stop and amend `01-shared-contracts.md` before proceeding.
-- If Windows CI fails for a reason unrelated to the hotkey test or warnings, record the new blocker here and escalate for replanning.
+Handoff SHA: PENDING
+Remaining risks: Windows runtime hotkey spot check is optional because runtime behavior must remain unchanged.

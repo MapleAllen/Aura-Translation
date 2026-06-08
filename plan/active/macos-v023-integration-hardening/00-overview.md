@@ -1,92 +1,75 @@
 # macos-v023-integration-hardening Overview
 
 Created: 2026-06-07
-Status: ACTIVE
-Integration owner: Codex coordinator
+Last audited: 2026-06-08
+Status: ACTIVE - WINDOWS HARDENING BLOCKED
+Coordination owner: Codex coordinator
+Working branch: `main`
 
 ## Goal
 
-Integrate `v0.2.3` onto `main` without the non-product CI-summary commits, clear the Windows CI blocker caused by the cross-platform hotkey test, capture real macOS runtime evidence, and bring `docs/` back in sync with the verified state.
+Finish the v0.2.3 cross-platform hardening work already merged into `main`: clear the Windows regression, preserve the verified macOS behavior, synchronize execution evidence and current-state documentation, complete review, and archive this plan.
+
+## Current State
+
+- `main` and `origin/main` point to `7ba8c40`.
+- v0.2.3 product code and macOS manual-validation documentation are already merged.
+- macOS Adaptation Gate passed for `7ba8c40`.
+- Windows Trial Gate failed for `7ba8c40`.
+- Local Windows verification on 2026-06-08:
+  - `npm run check`: PASS
+  - `npm test`: PASS, 46 tests
+  - `cargo test --manifest-path .\src-tauri\Cargo.toml`: FAIL, 47 passed / 1 failed
+- The remaining Rust blocker is `platform_default_hotkey_is_parseable`, which still asserts `Code::KeyJ` on Windows.
+- The two macOS-only startup test imports still produce Windows warnings.
+- macOS manual verification and structured evidence are synchronized across `docs/`, `03-macos.md`, and `04-verification.md`.
+
+## Process Decision
+
+All future Windows, macOS, Antigravity, and Codex work occurs sequentially on `main`.
+
+- Do not create implementation, integration, or review branches.
+- Before a handoff, the current owner commits and pushes reviewed work to `main`.
+- The next owner starts only after pulling the latest `main` and confirming a clean worktree.
+- Only one active implementation owner may edit the repository at a time.
+- The active task file records the task lock, starting SHA, allowed files, evidence, and handoff SHA.
 
 ## Scope
 
-- Create an integration baseline from `main` by fast-forwarding to `v0.2.3`.
-- Fix the Windows blocker in `src-tauri/src/hotkey.rs` test coverage.
-- Remove the Windows Rust warning caused by macOS-only startup test imports.
-- Re-run and pass the Windows Trial Gate on the hardening branch.
-- Complete the real-device macOS verification checklist for tray, hotkey, Keychain, notifications, transparent windows, and always-on-top behavior.
-- Update the macOS plan, checklist, and shared verification matrix to reflect verified 2026-06-07 status and any new evidence from this hardening pass.
-- Review and merge only the release tag plus intentional fixes into `main`.
+- Fix the Windows hotkey regression test.
+- Remove the known Windows Rust warnings without weakening macOS coverage.
+- Pass local Windows checks and the Windows Trial Gate on `main`.
+- Synchronize macOS CI/manual evidence into this plan and `docs/`.
+- Review current `main`, record deviations, and archive this plan after all gates pass.
 
 ## Non-Goals
 
-- Do not merge `3f199d2` or `7fd945e` into product history. Those commits only update Windows CI summary artifacts.
-- Do not add new macOS automation features such as clipboard listening, paste-back, or a capability-model refactor.
-- Do not change release packaging policy beyond the already-tagged `v0.2.3` scope.
-- Do not claim macOS runtime behavior from CI alone.
+- Do not add new macOS clipboard automation, paste-back, or capability-model features.
+- Do not rewrite published history to remove CI-summary commits already merged into `main`.
+- Do not treat CI as proof of interactive macOS behavior.
 
-## Current-State Evidence
+## Known Deviations
 
-- `main` / `origin/main` currently point to `ebe2162a6cf8ed2ecf098ce92a2c37e0967c90d0`.
-- `git merge-base --is-ancestor ebe2162 6a826fb` succeeded locally, so `git merge --ff-only v0.2.3` is valid from `main`.
-- Tag `v0.2.3` resolves to commit `6a826fb546a06dca790b397026c0faeb996ee296`.
-- `origin/codex/macos-adaptation-runtime` currently points to `7fd945e31635e14c85bbe32846fa2c00e9aaaade`.
-- Commits after the tag on the runtime branch are:
-  - `3f199d2` `chore: mark windows trial run start [skip ci]`
-  - `7fd945e` `chore: record windows trial summary [skip ci]`
-- The blocking Windows failure is in `v0.2.3:src-tauri/src/hotkey.rs` where `platform_default_hotkey_is_parseable` asserts `Code::KeyJ` on every platform, but Windows still defaults to `CmdOrCtrl+T` and therefore parses to `Code::KeyT`.
-- The user-reported `macOS Adaptation Gate` succeeded on 2026-06-07, but [docs/MacOS-Adaptation/MacOS-Adaptation-Plan.md](/E:/GitHub/Aura-Translation/docs/MacOS-Adaptation/MacOS-Adaptation-Plan.md) still marks Phase 2 as `NOT STARTED`.
-- The user also reported two non-blocking Windows Rust `unused import` warnings in the macOS-only startup test module because imports were not guarded together with `#[cfg(target_os = "macos")]`.
-
-## Invariants
-
-- `docs/` must be the final source of current-state truth once this effort completes.
-- One owner edits each shared file during execution; no concurrent editing of the same file across agents.
-- No implementation agent pushes directly to `main`.
-- Product integration must contain the release tag baseline plus deliberate fixes only.
-- Manual macOS claims require host evidence with timestamp, host info, and observed behavior.
-
-## Dependencies
-
-- Integration branch created from local `main` and fast-forwarded to `v0.2.3`.
-- A Windows host or CI run capable of executing the Windows Trial Gate.
-- A real macOS host capable of interactive runtime validation.
-- Shared agreement that `artifacts/windows-trial/ci-summary.json` is evidence-only and not a merge target for this hardening effort.
-
-## Risks and Unknowns
-
-- The macOS verification pass may uncover a product bug rather than a documentation gap. If that happens, stop verification-only work and amend this plan before code changes.
-- The Windows warning cleanup may touch `src-tauri/src/lib.rs`, a shared Rust file. Ownership is explicitly assigned in `01-shared-contracts.md` to avoid overlap.
-- CI on the new integration branch may diverge from the previously reported 2026-06-07 macOS success and require a follow-up plan amendment.
+- The original multi-branch/worktree workflow was abandoned because agents could not reliably access each other's worktrees.
+- `3f199d2` and `7fd945e` entered `main` despite the original exclusion rule. They are accepted as historical evidence commits; no history rewrite will be attempted.
+- Product code was merged before the Windows regression was fixed and before final review gates were completed.
+- The plan remained stale after merge and is being corrected by this audit.
 
 ## Acceptance Criteria
 
-- `codex/macos-v023-integration` is created from `main` and fast-forwarded to `v0.2.3`.
-- The hotkey regression test passes on Windows and correctly distinguishes macOS `KeyJ` from non-macOS `KeyT`.
-- The Windows Rust test suite no longer emits the known macOS-only startup import warnings.
-- The Windows Trial Gate passes on the hardening branch, with evidence recorded but without merging CI-summary-only commits.
-- Real macOS evidence is recorded for tray/menu bar access, manual hotkey translation, Keychain storage, notifications, transparent windows, and always-on-top behavior.
-- [docs/MacOS-Adaptation/MacOS-Adaptation-Plan.md](/E:/GitHub/Aura-Translation/docs/MacOS-Adaptation/MacOS-Adaptation-Plan.md), [docs/macOS-Adaptation-Checklist.md](/E:/GitHub/Aura-Translation/docs/macOS-Adaptation-Checklist.md), and this plan's verification matrix all match the verified state.
-- Reviews complete with no unresolved blocking findings before merge to `main`.
+- Windows hotkey regression test distinguishes macOS `KeyJ` from non-macOS `KeyT`.
+- Windows Rust tests pass without the two known startup-test import warnings.
+- `npm run check`, `npm test`, and `cargo test` pass on Windows.
+- Windows Trial Gate and macOS Adaptation Gate pass on the same current `main` SHA.
+- macOS manual evidence is recorded in `03-macos.md`, `04-verification.md`, and current-state docs.
+- Codex reviews complete with no unresolved blocking findings.
+- Plan deviations and remaining risks are recorded.
+- This folder moves from `plan/active/` to `plan/completed/`.
 
-## Branch and Merge Strategy
+## Main-Branch Handoff Sequence
 
-Baseline setup, owned by the integration coordinator:
-
-```powershell
-git switch main
-git switch -c codex/macos-v023-integration
-git merge --ff-only v0.2.3
-```
-
-Implementation branches after the baseline is created:
-
-- Windows implementer: `codex/macos-v023-windows-hardening`
-- macOS implementer: `codex/macos-v023-macos-verification`
-- Shared implementer: `codex/macos-v023-shared-status`
-
-Rules:
-
-- Branch each implementation branch from `codex/macos-v023-integration`, not from `main`.
-- Do not cherry-pick `3f199d2` or `7fd945e`.
-- If the Windows workflow auto-commits `artifacts/windows-trial/ci-summary.json` on a branch, treat that commit as branch-local evidence and exclude it from the final integration history.
+1. Coordinator assigns one task lock in the relevant plan file.
+2. Assigned implementer pulls latest `main`, verifies the starting SHA, and performs only the allowed task.
+3. Codex reviews the working-tree changes and evidence.
+4. After approval, Codex commits and pushes to `main`.
+5. The next platform/role pulls the new `main` and continues.

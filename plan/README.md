@@ -5,6 +5,8 @@
 Rules:
 
 - Current implementation truth belongs in `docs/`, not here.
-- Each shared file has one implementation owner.
+- All agents collaborate sequentially on `main`; do not use worktrees or implementation branches.
+- Each task has one active owner, starting SHA, and allowed-file set.
+- The next owner starts only after reviewed work is committed/pushed and they pull the latest `main`.
 - Platform behavior requires evidence from its target OS.
-- One integration owner merges and pushes after review.
+- Codex reviews implementation-agent changes before committing and pushing to `main`.

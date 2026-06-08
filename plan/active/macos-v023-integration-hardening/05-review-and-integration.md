@@ -1,79 +1,52 @@
-# Review and Integration
+# Review, Main-Branch Handoff, and Closure
 
-## Review Inputs
+## Workflow Decision
 
-- Baseline branch: `codex/macos-v023-integration`
-- Baseline command sequence:
+All future collaboration occurs sequentially on `main`. Worktree and implementation-branch coordination is retired.
 
-```powershell
-git switch main
-git switch -c codex/macos-v023-integration
-git merge --ff-only v0.2.3
-```
+## Current Review Status
 
-- Windows implementation branch: `codex/macos-v023-windows-hardening`
-- macOS verification branch: `codex/macos-v023-macos-verification`
-- Shared status branch: `codex/macos-v023-shared-status`
-- Excluded commits from final product history:
-  - `3f199d2`
-  - `7fd945e`
+### Windows Codex Review
 
-## Windows Codex Review
+Status: BLOCKED UNTIL WINDOWS FIX EXISTS
 
-Status: NOT STARTED
-Blocking findings:
+Required review focus:
 
-- None yet. Expected initial review focus:
-  - `src-tauri/src/hotkey.rs` test now matches platform defaults exactly.
-  - `src-tauri/src/lib.rs` warning cleanup does not weaken macOS startup coverage.
-  - Windows Trial Gate evidence points at the product-code SHA, not only an artifact-update SHA.
+- platform-specific default hotkey test expectations;
+- no runtime hotkey behavior regression;
+- macOS startup tests remain present while Windows warnings disappear;
+- local Windows tests and Windows Trial Gate pass.
 
-## macOS Codex Review
+### macOS Codex Review
 
-Status: NOT STARTED
-Blocking findings:
+Status: PARTIAL
 
-- None yet. Expected initial review focus:
-  - every required runtime check has real-host evidence,
-  - any failed check is clearly classified as blocker vs residual risk,
-  - CI success is not used as a substitute for tray/hotkey/Keychain/notification/window behavior.
+- Manual runtime verification is recorded as complete.
+- macOS Adaptation Gate passed on `7ba8c40`.
+- Final sign-off waits for the Windows fix and a macOS gate pass on the same final `main` SHA.
 
-## Plan Compliance
+## Accepted Deviations
 
-- Verify that only the assigned owner edited each shared file.
-- Verify that no one merged or cherry-picked the CI-summary-only commits.
-- Verify that any new issue discovered during Windows or macOS work was recorded before scope expanded.
+- `3f199d2` and `7fd945e` entered `main`; they remain in history.
+- v0.2.3 was merged before Windows hardening and final review.
+- Multi-branch/worktree workflow was replaced by sequential main-branch handoffs.
 
-## Documentation Updates
+## Main-Branch Handoff
 
-Required before merge:
+1. Windows implementer works from task lock starting at `7ba8c40`.
+2. Codex reviews working-tree changes and local evidence.
+3. Codex commits and pushes approved Windows fix to `main`.
+4. Both CI gates run on the resulting SHA.
+5. macOS verifier confirms no affected manual checks need repetition, or reruns them if needed.
+6. Codex updates docs, completes review, and archives this plan.
 
-- Update [docs/MacOS-Adaptation/MacOS-Adaptation-Plan.md](/E:/GitHub/Aura-Translation/docs/MacOS-Adaptation/MacOS-Adaptation-Plan.md) so Phase 2 no longer says `NOT STARTED`.
-- Update [docs/macOS-Adaptation-Checklist.md](/E:/GitHub/Aura-Translation/docs/macOS-Adaptation-Checklist.md) with verified/pending status from the current hardening pass.
-- Update `04-verification.md` with final branch-level evidence and links or hashes for both gates.
-
-## Merge Order
-
-1. Integration owner creates `codex/macos-v023-integration` from `main` and fast-forwards it to `v0.2.3`.
-2. Windows implementer lands the hotkey test fix and warning cleanup into the integration branch after review.
-3. macOS implementer records real-host verification against the integrated SHA.
-4. Shared implementer updates docs and verification matrix from the actual evidence.
-5. Integration owner reruns or confirms both CI gates on the integrated branch.
-6. Integration owner merges the reviewed hardening branch back to `main`.
-
-## Rollback Plan
-
-- If the baseline fast-forward succeeds but hardening work fails review, keep `main` untouched and discard or rewrite the integration branch.
-- If a bad hardening commit lands on the integration branch, revert that commit on the integration branch rather than changing scope mid-review.
-- If a macOS runtime blocker is discovered, stop before `main` merge and open a follow-up plan for the product fix.
-
-## Final Integration Gate
+## Final Closure Gate
 
 - [ ] Shared and platform-specific tests pass.
-- [ ] Windows and macOS CI pass.
-- [ ] Required target-host evidence is recorded.
-- [ ] Blocking review findings are resolved.
-- [ ] `docs/` reflects the implemented current state.
-- [ ] Remaining risks and deviations are recorded.
-- [ ] One integration owner is assigned to commit and push.
-- [ ] Final history excludes `3f199d2` and `7fd945e`.
+- [ ] Windows and macOS CI pass on the same final `main` SHA.
+- [x] Required macOS target-host evidence is recorded.
+- [ ] Windows and macOS Codex reviews have no unresolved blocking findings.
+- [x] `docs/` reflects the implemented current state.
+- [x] Process deviations are recorded.
+- [x] One sequential task owner is active at a time.
+- [ ] Plan moved to `plan/completed/`.

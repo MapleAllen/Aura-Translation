@@ -36,43 +36,44 @@ Completed work:
 - Added Rust regression tests for the macOS hotkey default and legacy-default migration path.
 - Added `docs/macOS-Adaptation-Checklist.md` for manual macOS runtime verification.
 
-## Phase 2: macOS CI Observation - NOT STARTED
+## Phase 2: macOS CI Observation - DONE
 
-Status: **Not Started**
+Status: **Done**
 
 Goals:
 
 - Confirm the newly added workflow passes on GitHub-hosted macOS infrastructure.
 
-Remaining features:
+Completed work:
 
-- Push or open a pull request from `codex/macos-adaptation` and inspect the `macOS Adaptation Gate` result.
-- Confirm `npm run tauri build` produces the expected macOS `.app` bundle on `macos-latest`.
-- Capture any macOS-specific build failures into this plan and update the implementation rules if new constraints appear.
+- Confirmed the `macOS Adaptation Gate` passes on GitHub-hosted `macos-latest`.
+- Confirmed `npm ci`, `npm run check`, `npm test`, Rust tests, and `npm run tauri build` pass in the macOS workflow.
+- Confirmed the adaptation build produces the expected macOS `.app` bundle.
+- Confirmed the macOS-specific `.app` target avoids coupling the adaptation gate to DMG generation.
 
-## Phase 3: Manual macOS Runtime Validation - IN PROGRESS
+## Phase 3: Manual macOS Runtime Validation - DONE
 
-Status: **In Progress**
+Status: **Done**
 
 Goals:
 
 - Verify the first macOS build behaves correctly as a desktop utility, not only as a compiled artifact.
 
-Observed findings:
+Completed work:
 
 - Launching the built `.app` succeeds on the current macOS host and the process stays resident as `com.aura.translation`.
 - The old `CmdOrCtrl+T` default was reproduced as a real Finder shortcut conflict on this host before the macOS hotkey migration landed.
-- Scripted window inspection through `System Events` is currently blocked on this host by Accessibility denial (`osascript` reported `-25211`), so several UI-facing checklist items still need direct interactive validation.
+- Confirmed tray/menu bar launch, interaction, and Settings access.
+- Confirmed `Cmd+Shift+J` global hotkey registration and manual translation from copied text.
+- Confirmed system API key save/read/delete through macOS Keychain.
+- Confirmed native notifications for completion, retry, and failure flows.
+- Confirmed transparent frameless windows, close/reopen behavior, and pinned always-on-top behavior.
+- Confirmed Aura mode remains disabled and paste-back remains unavailable.
+- Recorded direct manual evidence in `docs/macOS-Adaptation-Checklist.md`.
 
-Remaining features:
+Known limitation:
 
-- Run the checklist in `docs/macOS-Adaptation-Checklist.md` on a real macOS desktop.
-- Confirm tray/menu bar launch and Settings access.
-- Confirm global hotkey registration and manual translation from copied text.
-- Confirm system API key storage uses macOS Keychain.
-- Confirm native notifications appear for hidden completion, retry, and failure events.
-- Confirm transparent frameless windows and pinned always-on-top behavior.
-- Confirm Aura mode remains disabled and paste-back remains hidden or unavailable.
+- Scripted window inspection through `System Events` remains blocked by Accessibility denial (`osascript` reported `-25211`), but direct manual inspection completed the required runtime verification.
 
 ## Phase 4: Structured Capability Model - NOT STARTED
 
