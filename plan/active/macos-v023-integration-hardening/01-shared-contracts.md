@@ -8,7 +8,7 @@ Current task lock:
 
 - Owner: none
 - Task: source implementation lock released after reviewed merge; awaiting verification evidence on current `main`
-- Starting SHA: `f7eaae18dd131b0043c5486095f1771e48b0c55e`
+- Starting SHA: latest pushed `main`
 - Status: NO ACTIVE IMPLEMENTATION OWNER
 - Allowed files: none until the coordinator assigns the next verification or closure task lock
 - Do not modify:

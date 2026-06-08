@@ -48,7 +48,7 @@ Reviewed and merged by Codex on 2026-06-08:
 - Source fix committed and pushed on `6039ec4b0c3d6002bc81c626b0e7132cdc6584d0`
 - `platform_default_hotkey_is_parseable` now expects `Code::KeyJ` on macOS and `Code::KeyT` on non-macOS
 - `startup_tests` is now gated with `#[cfg(all(test, target_os = "macos"))]`
-- Local macOS safety checks on current `main` `f7eaae1`: `npm run check` PASS, `npm test` PASS (46 tests), `cargo test --manifest-path src-tauri/Cargo.toml` PASS (53 tests)
+- Local macOS safety checks on the latest pushed `main`: `npm run check` PASS, `npm test` PASS (46 tests), `cargo test --manifest-path src-tauri/Cargo.toml` PASS (53 tests)
 
 ## Completion Evidence
 
