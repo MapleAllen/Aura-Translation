@@ -8,7 +8,7 @@ Status: COMPLETE - FINAL SHARED SHA GATE PENDING
 
 Date: 2026-06-08
 Host: local macOS desktop (`aarch64-apple-darwin`)
-Verified product baseline: v0.2.3 behavior merged into `main`
+Verified product baseline: v0.2.3 behavior merged into `main`; no macOS-sensitive runtime code changed after manual validation
 Evidence source: `docs/macOS-Adaptation-Checklist.md`
 
 - PASS: app launches and stays resident in the menu bar.
@@ -28,12 +28,16 @@ Known host limitation:
 
 ## CI Evidence
 
-- macOS Adaptation Gate passed on current `main` SHA `7ba8c40`:
+- macOS Adaptation Gate most recently passed on `7ba8c40`:
   - https://github.com/MapleAllen/Aura-Translation/actions/runs/27127293378
+- Shared non-UI checks also passed on current `main` SHA `6039ec4`:
+  - `npm run check`
+  - `npm test`
+  - `cargo test --manifest-path src-tauri/Cargo.toml`
 
 ## Remaining Work
 
-- After the Windows fix reaches `main`, rerun or confirm the macOS Adaptation Gate on the new SHA.
+- Confirm the macOS Adaptation Gate on the new shared SHA `6039ec4`.
 - If macOS-sensitive source changes are introduced, repeat affected manual checks before sign-off.
 - Synchronize final gate SHA into `04-verification.md`.
 

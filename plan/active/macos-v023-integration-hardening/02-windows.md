@@ -3,7 +3,7 @@
 Owner: Windows implementer
 Working branch: `main`
 Starting SHA: 4be3d226f4c0175cfa9822d4cdace0ca0bf56378
-Status: ACTIVE
+Status: SOURCE FIX MERGED - WINDOWS VERIFICATION PENDING
 
 ## Allowed Files
 
@@ -43,13 +43,20 @@ Audited on Windows, 2026-06-08, SHA `7ba8c40`:
 - Windows Trial Gate: FAIL
   - https://github.com/MapleAllen/Aura-Translation/actions/runs/27127292677
 
+Reviewed and merged by Codex on 2026-06-08:
+
+- Source fix committed and pushed on `6039ec4b0c3d6002bc81c626b0e7132cdc6584d0`
+- `platform_default_hotkey_is_parseable` now expects `Code::KeyJ` on macOS and `Code::KeyT` on non-macOS
+- `startup_tests` is now gated with `#[cfg(all(test, target_os = "macos"))]`
+- Local macOS safety checks on `6039ec4`: `npm run check` PASS, `npm test` PASS (46 tests), `cargo test --manifest-path src-tauri/Cargo.toml` PASS (53 tests)
+
 ## Completion Evidence
 
 - [x] Required source changes reviewed.
 - [ ] Local Windows checks pass.
 - [x] Known warnings removed.
-- [ ] Codex commits and pushes approved changes to `main`.
+- [x] Codex commits and pushes approved changes to `main`.
 - [ ] Windows Trial Gate passes on the handoff SHA.
 
-Handoff SHA: PENDING
-Remaining risks: Windows runtime hotkey spot check is optional because runtime behavior must remain unchanged.
+Handoff SHA: `6039ec4b0c3d6002bc81c626b0e7132cdc6584d0`
+Remaining risks: Windows runtime and CI verification on the new shared SHA are still pending; runtime hotkey spot check remains optional because runtime behavior was not changed.

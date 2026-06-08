@@ -6,21 +6,18 @@ All work is sequential on `main`. A task lock is active only when this plan name
 
 Current task lock:
 
-- Owner: Windows implementer
-- Task: fix Windows hotkey regression test and startup-test warnings
-- Starting SHA: RESOLVE AND RECORD AFTER THIS PLAN UPDATE IS PUSHED
-- Status: BLOCKED UNTIL COORDINATOR COMMITS AND PUSHES THIS PLAN UPDATE
-- Allowed files:
-  - `src-tauri/src/hotkey.rs`
-  - `src-tauri/src/lib.rs`
-  - `plan/active/macos-v023-integration-hardening/02-windows.md`
+- Owner: none
+- Task: source implementation lock released after reviewed merge; awaiting verification evidence on current `main`
+- Starting SHA: `6039ec4b0c3d6002bc81c626b0e7132cdc6584d0`
+- Status: NO ACTIVE IMPLEMENTATION OWNER
+- Allowed files: none until the coordinator assigns the next verification or closure task lock
 - Do not modify:
+  - product source files without a new assigned lock
   - macOS runtime behavior
-  - unrelated source files
-  - other task evidence files
+  - unrelated evidence files
   - `artifacts/windows-trial/ci-summary.json` manually
 
-No other implementation agent may edit the repository until this lock is reviewed, committed, pushed, and released.
+No implementation agent may edit the repository again until the coordinator records the next owner, scope, and allowed files.
 
 ## Public Interfaces and Critical Functions
 
@@ -41,7 +38,7 @@ No other implementation agent may edit the repository until this lock is reviewe
 2. Record the pulled `origin/main` SHA in the assigned task file before source edits. If `main` changes afterward, stop and request a refreshed lock.
 3. Do not edit outside the allowed-file set.
 4. Leave changes for Codex review; do not commit or push as the implementation agent.
-5. After approval, Codex commits and pushes to `main`, records the handoff SHA, and updates the next task lock.
+5. After approval, Codex commits and pushes to `main`, records the handoff SHA, and updates or clears the next task lock.
 6. Never start Windows and macOS implementation simultaneously on different clones.
 
 ## Documentation Contract
