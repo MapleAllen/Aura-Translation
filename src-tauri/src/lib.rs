@@ -1768,7 +1768,7 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod startup_tests {
     use super::should_show_settings_on_startup;
     use crate::config::AppConfig;

@@ -217,7 +217,10 @@ mod tests {
     #[test]
     fn platform_default_hotkey_is_parseable() {
         let s = parse_hotkey(default_hotkey()).expect("platform default should parse");
+        #[cfg(target_os = "macos")]
         assert!(matches!(s.key, Code::KeyJ));
+        #[cfg(not(target_os = "macos"))]
+        assert!(matches!(s.key, Code::KeyT));
     }
 
     #[cfg(target_os = "macos")]

@@ -2,8 +2,8 @@
 
 Owner: Windows implementer
 Working branch: `main`
-Starting SHA: RESOLVE AND RECORD AFTER PLAN UPDATE PUSH
-Status: BLOCKED UNTIL PLAN UPDATE IS ON `origin/main`
+Starting SHA: 4be3d226f4c0175cfa9822d4cdace0ca0bf56378
+Status: ACTIVE
 
 ## Allowed Files
 
@@ -45,9 +45,9 @@ Audited on Windows, 2026-06-08, SHA `7ba8c40`:
 
 ## Completion Evidence
 
-- [ ] Required source changes reviewed.
+- [x] Required source changes reviewed.
 - [ ] Local Windows checks pass.
-- [ ] Known warnings removed.
+- [x] Known warnings removed.
 - [ ] Codex commits and pushes approved changes to `main`.
 - [ ] Windows Trial Gate passes on the handoff SHA.
 
