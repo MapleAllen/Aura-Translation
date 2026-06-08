@@ -12,7 +12,7 @@ Finish the v0.2.3 cross-platform hardening work already merged into `main`: clea
 
 ## Current State
 
-- `main` and the pushed remote `main` point to `6039ec4`.
+- `main` and the pushed remote `main` point to `f7eaae1`.
 - v0.2.3 product code and macOS manual-validation documentation are already merged.
 - Windows source fix for the hotkey regression and startup-test warnings merged on `6039ec4`.
 - macOS Adaptation Gate most recently passed for `7ba8c40`.
@@ -23,7 +23,7 @@ Finish the v0.2.3 cross-platform hardening work already merged into `main`: clea
   - `cargo test --manifest-path .\src-tauri\Cargo.toml`: FAIL, 47 passed / 1 failed
 - The original Rust blocker in `platform_default_hotkey_is_parseable` is fixed on `6039ec4`.
 - The known Windows startup-test warnings are fixed on `6039ec4`.
-- Local macOS shared checks on `6039ec4` passed: `npm run check`, `npm test`, and `cargo test --manifest-path src-tauri/Cargo.toml`.
+- Local macOS shared checks on `f7eaae1` passed: `npm run check`, `npm test`, and `cargo test --manifest-path src-tauri/Cargo.toml`.
 - macOS manual verification and structured evidence remain synchronized across `docs/`, `03-macos.md`, and `04-verification.md`.
 
 ## Process Decision

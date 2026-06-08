@@ -30,14 +30,14 @@ Known host limitation:
 
 - macOS Adaptation Gate most recently passed on `7ba8c40`:
   - https://github.com/MapleAllen/Aura-Translation/actions/runs/27127293378
-- Shared non-UI checks also passed on current `main` SHA `6039ec4`:
+- Shared non-UI checks also passed on current `main` SHA `f7eaae1`:
   - `npm run check`
   - `npm test`
   - `cargo test --manifest-path src-tauri/Cargo.toml`
 
 ## Remaining Work
 
-- Confirm the macOS Adaptation Gate on the new shared SHA `6039ec4`.
+- Confirm the macOS Adaptation Gate on the new shared SHA `f7eaae1`.
 - If macOS-sensitive source changes are introduced, repeat affected manual checks before sign-off.
 - Synchronize final gate SHA into `04-verification.md`.
 
