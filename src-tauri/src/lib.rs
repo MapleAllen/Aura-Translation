@@ -1074,6 +1074,19 @@ fn restore_settings_window(window: &WebviewWindow, config: &AppConfig) {
     }
 }
 
+fn should_show_settings_on_startup(config: &AppConfig) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        readiness::should_prompt_for_setup(config) || config.settings_window_placement.is_none()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = config;
+        false
+    }
+}
+
 async fn capture_cursor_anchor(
     window: &WebviewWindow,
     runtime: &RuntimeState,
@@ -1462,8 +1475,10 @@ fn register_startup_hotkey(app: &AppHandle) {
                     app,
                     "hotkey-register-failed",
                     format!(
-                        "Failed to register startup hotkey '{}': {}. Falling back to CmdOrCtrl+T.",
-                        config.hotkey, e
+                        "Failed to register startup hotkey '{}': {}. Falling back to {}.",
+                        config.hotkey,
+                        e,
+                        hotkey::default_hotkey()
                     ),
                     true,
                 );
@@ -1475,8 +1490,10 @@ fn register_startup_hotkey(app: &AppHandle) {
                 app,
                 "hotkey-parse-failed",
                 format!(
-                    "Failed to parse startup hotkey '{}': {}. Falling back to CmdOrCtrl+T.",
-                    config.hotkey, e
+                    "Failed to parse startup hotkey '{}': {}. Falling back to {}.",
+                    config.hotkey,
+                    e,
+                    hotkey::default_hotkey()
                 ),
                 true,
             );
@@ -1487,13 +1504,17 @@ fn register_startup_hotkey(app: &AppHandle) {
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn register_fallback_hotkey(app: &AppHandle) {
-    match hotkey::parse_hotkey("CmdOrCtrl+T") {
+    let fallback_hotkey = hotkey::default_hotkey();
+    match hotkey::parse_hotkey(fallback_hotkey) {
         Ok(fallback) => {
             if let Err(e) = app.global_shortcut().register(fallback) {
                 emit_daemon_error(
                     app,
                     "hotkey-fallback-register-failed",
-                    format!("Failed to register CmdOrCtrl+T fallback hotkey: {}", e),
+                    format!(
+                        "Failed to register {} fallback hotkey: {}",
+                        fallback_hotkey, e
+                    ),
                     false,
                 );
             }
@@ -1502,7 +1523,10 @@ fn register_fallback_hotkey(app: &AppHandle) {
             emit_daemon_error(
                 app,
                 "hotkey-fallback-parse-failed",
-                format!("Failed to parse CmdOrCtrl+T fallback hotkey: {}", e),
+                format!(
+                    "Failed to parse {} fallback hotkey: {}",
+                    fallback_hotkey, e
+                ),
                 false,
             );
         }
@@ -1718,6 +1742,8 @@ pub fn run() {
                 emit_daemon_error(app.app_handle(), "secret-storage-init-failed", err, true);
             }
 
+            let startup_config = current_config(app.app_handle());
+
             if let Err(err) = build_tray(app.app_handle()) {
                 emit_daemon_error(app.app_handle(), "tray-build-failed", err, false);
             }
@@ -1729,8 +1755,44 @@ pub fn run() {
 
             spawn_clipboard_monitor(app.app_handle());
 
+            if should_show_settings_on_startup(&startup_config) {
+                let app_handle = app.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    show_settings_window(app_handle).await;
+                });
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::should_show_settings_on_startup;
+    use crate::config::AppConfig;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_shows_settings_on_first_launch() {
+        let config = AppConfig::default();
+        assert!(should_show_settings_on_startup(&config));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_hides_startup_settings_after_setup_and_saved_placement() {
+        let mut config = AppConfig::default();
+        config.api_key = "sk-test".to_string();
+        config.settings_window_placement = Some(crate::config::WindowPlacement {
+            x: 120.0,
+            y: 160.0,
+            width: Some(480.0),
+            height: Some(680.0),
+            monitor: Some("Built-in".to_string()),
+        });
+
+        assert!(!should_show_settings_on_startup(&config));
+    }
 }

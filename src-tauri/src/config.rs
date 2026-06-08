@@ -1,3 +1,4 @@
+use crate::hotkey;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -157,7 +158,7 @@ impl<'de> Deserialize<'de> for AppConfig {
             "Chinese".to_string()
         }
         fn default_hotkey() -> String {
-            "CmdOrCtrl+T".to_string()
+            hotkey::default_hotkey().to_string()
         }
         fn default_active_profile_id() -> String {
             "default".to_string()
@@ -189,6 +190,7 @@ impl<'de> Deserialize<'de> for AppConfig {
                 ApiKeyStorage::LegacyPlaintext
             }
         });
+        let hotkey = hotkey::normalize_persisted_hotkey(&helper.hotkey);
 
         Ok(AppConfig {
             api_key: helper.api_key,
@@ -197,7 +199,7 @@ impl<'de> Deserialize<'de> for AppConfig {
             model,
             source_lang: helper.source_lang,
             target_lang: helper.target_lang,
-            hotkey: helper.hotkey,
+            hotkey,
             aura_mode_enabled: helper.aura_mode_enabled,
             aura_guard_enabled: helper.aura_guard_enabled,
             window_pinned: helper.window_pinned,
@@ -222,7 +224,7 @@ impl Default for AppConfig {
             model: "deepseek-chat".to_string(),
             source_lang: "auto".to_string(),
             target_lang: "Chinese".to_string(),
-            hotkey: "CmdOrCtrl+T".to_string(),
+            hotkey: hotkey::default_hotkey().to_string(),
             aura_mode_enabled: false,
             aura_guard_enabled: true,
             window_pinned: false,
@@ -342,7 +344,7 @@ mod tests {
     fn default_config_is_valid() {
         let c = AppConfig::default();
         assert_eq!(c.model, "deepseek-chat");
-        assert_eq!(c.hotkey, "CmdOrCtrl+T");
+        assert_eq!(c.hotkey, hotkey::default_hotkey());
         assert_eq!(c.api_base_url, "https://api.deepseek.com");
         assert_eq!(c.api_key_storage, ApiKeyStorage::System);
         assert_eq!(c.active_profile_id, "default");
@@ -374,6 +376,20 @@ mod tests {
         assert!(config.settings_window_placement.is_none());
         assert!(config.pinned_translation_placement.is_none());
         assert!(!config.available_models.is_empty());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_legacy_default_hotkey_is_migrated_on_load() {
+        let legacy_json = r#"{
+            "api_key": "",
+            "model": "deepseek-chat",
+            "source_lang": "auto",
+            "target_lang": "Chinese",
+            "hotkey": "CmdOrCtrl+T"
+        }"#;
+        let config: AppConfig = serde_json::from_str(legacy_json).expect("should parse");
+        assert_eq!(config.hotkey, hotkey::default_hotkey());
     }
 
     #[test]

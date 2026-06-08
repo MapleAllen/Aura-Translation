@@ -1,5 +1,31 @@
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 
+pub const LEGACY_DEFAULT_HOTKEY: &str = "CmdOrCtrl+T";
+#[cfg(target_os = "macos")]
+pub const PREVIOUS_MACOS_DEFAULT_HOTKEY: &str = "Alt+Shift+T";
+
+#[cfg(target_os = "macos")]
+const PLATFORM_DEFAULT_HOTKEY: &str = "Cmd+Shift+J";
+
+#[cfg(not(target_os = "macos"))]
+const PLATFORM_DEFAULT_HOTKEY: &str = LEGACY_DEFAULT_HOTKEY;
+
+pub fn default_hotkey() -> &'static str {
+    PLATFORM_DEFAULT_HOTKEY
+}
+
+pub fn normalize_persisted_hotkey(hotkey: &str) -> String {
+    #[cfg(target_os = "macos")]
+    if matches!(
+        hotkey.trim(),
+        LEGACY_DEFAULT_HOTKEY | PREVIOUS_MACOS_DEFAULT_HOTKEY
+    ) {
+        return PLATFORM_DEFAULT_HOTKEY.to_string();
+    }
+
+    hotkey.to_string()
+}
+
 /// Parse an Electron-style accelerator string into a Tauri `Shortcut`.
 ///
 /// # Format
@@ -186,5 +212,26 @@ mod tests {
             parse_hotkey("Meta+M").expect("Meta+M should parse")
         });
         assert_eq!(s.mods, Modifiers::SUPER);
+    }
+
+    #[test]
+    fn platform_default_hotkey_is_parseable() {
+        let s = parse_hotkey(default_hotkey()).expect("platform default should parse");
+        assert!(matches!(s.key, Code::KeyJ));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_normalizes_legacy_default_hotkey() {
+        assert_eq!(normalize_persisted_hotkey(LEGACY_DEFAULT_HOTKEY), "Cmd+Shift+J");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_normalizes_previous_macos_default_hotkey() {
+        assert_eq!(
+            normalize_persisted_hotkey(PREVIOUS_MACOS_DEFAULT_HOTKEY),
+            "Cmd+Shift+J"
+        );
     }
 }
