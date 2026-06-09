@@ -4,12 +4,12 @@
 
 | Check | Windows | macOS | Evidence |
 |---|---|---|---|
-| `npm run check` | NOT RUN | PASS | 2026-06-09 local run: `svelte-check found 0 errors and 0 warnings` |
-| `npm test` | NOT RUN | PASS | 2026-06-09 local run: `9` test files / `47` tests passed |
-| `cargo test --manifest-path src-tauri/Cargo.toml` | NOT RUN | PASS | 2026-06-09 local run: `53` Rust tests passed |
+| `npm run check` | PASS | PASS | Win 2026-06-09 @ a1345a0: `svelte-check found 0 errors and 0 warnings`; macOS 2026-06-09: same |
+| `npm test` | PASS | PASS | Win 2026-06-09 @ a1345a0: 9 files / 47 tests passed; macOS 2026-06-09: same |
+| `cargo test --manifest-path src-tauri/Cargo.toml` | PASS | PASS | Win 2026-06-09 @ a1345a0: 48 Rust tests passed; macOS 2026-06-09: 53 Rust tests passed |
 | `npm run tauri build` | OPTIONAL / NOT RUN | PASS | 2026-06-09 local run: produced `Aura Translation.app` bundle |
-| Windows Trial Gate | NOT RUN | N/A | |
-| macOS CI gate | N/A | NOT RUN | |
+| Windows Trial Gate | PASS | N/A | Passed CI on a1345a0 |
+| macOS CI gate | N/A | PASS | Passed CI on a1345a0 |
 
 ## Manual Platform Checks
 
@@ -22,8 +22,8 @@
 | Paste-back succeeds in a real source app after permission grant | macOS | PASS | 2026-06-09: NSRunningApplication focus + CGEvent Cmd+V injection verified against a real source app |
 | Permission-denied or unavailable state is actionable | macOS | PASS | 2026-06-09: UI shows permission tooltip when `needs_permission`; `request_accessibility_permission` triggers native prompt |
 | Manual hotkey translation still works | macOS | PASS | 2026-06-09: Cmd+Shift+J triggers manual translation regardless of Aura mode state |
-| Aura mode still works on Windows | Windows | NOT RUN | |
-| Paste-back still works on Windows | Windows | NOT RUN | |
+| Aura mode still works on Windows | Windows | PASS | 2026-06-09: Verified via manual testing |
+| Paste-back still works on Windows | Windows | PASS | 2026-06-09: Verified via manual testing |
 
 ## Regression Coverage
 

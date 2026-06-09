@@ -3,7 +3,7 @@
 Owner: Windows verifier
 Dependencies: Shared contracts frozen; macOS implementation merged to `main`
 Working branch: `main`
-Starting SHA: RESOLVE AND RECORD BEFORE SOURCE EDITS
+Starting SHA: a1345a06fca89578ce9711b4a309db5b845f48e8
 
 ## Allowed Files
 
@@ -53,12 +53,21 @@ npm test
 
 ## Completion Evidence
 
-- [ ] Starting SHA recorded before source edits.
-- [ ] Windows automated checks pass.
-- [ ] Windows manual verification evidence recorded.
-- [ ] Windows Trial Gate passes on the shared final SHA.
-- [ ] Any Windows regression fix stayed within the allowed-file set and was reviewed before push.
+- [x] Starting SHA recorded before source edits: `a1345a06fca89578ce9711b4a309db5b845f48e8`.
+- [x] Windows automated checks pass (2026-06-09 local run: see details below).
+- [x] Windows manual verification evidence recorded (2026-06-09: Aura mode and Paste-back pass).
+- [x] Windows Trial Gate passes on the shared final SHA.
+- [x] No Windows regression fix was needed; no source edits were required.
+
+### Windows Automated Check Evidence (2026-06-09, SHA a1345a0)
+
+| Check | Result | Detail |
+|---|---|---|
+| `npm run check` | PASS | `svelte-check found 0 errors and 0 warnings` |
+| `npm test` | PASS | 9 test files, 47 tests passed |
+| `cargo test --manifest-path src-tauri/Cargo.toml` | PASS | 48 Rust tests passed, 0 failed |
 
 ## Deviations and Remaining Risks
 
-- None yet.
+- No source edits needed; no regressions detected.
+- Manual verification passed on Windows host.

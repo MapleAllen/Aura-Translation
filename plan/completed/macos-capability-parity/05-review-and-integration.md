@@ -9,10 +9,12 @@
 
 ## Windows Codex Review
 
-Status: NOT STARTED
+Status: COMPLETED (2026-06-09); NO SOURCE EDITS REQUIRED
 Blocking findings:
 
-- None yet.
+- None. All automated checks (`npm run check`, `npm test`, `cargo test`) pass on Windows.
+- No source edits were made; no regression fix review is needed.
+- Manual verification passed on Windows host.
 
 ## macOS Codex Review
 
@@ -56,12 +58,12 @@ Resolved during local review:
 
 ## Final Integration Gate
 
-- [ ] Shared and platform-specific tests pass.
-- [ ] Windows and macOS CI pass.
-- [ ] Required macOS target-host evidence is recorded.
-- [ ] Blocking review findings are resolved.
-- [ ] `docs/` reflects the implemented current state.
-- [ ] Remaining risks and deviations are recorded.
-- [ ] Both CI gates pass on the same final `main` SHA.
-- [ ] One task owner was active at a time.
-- [ ] Plan moved to `plan/completed/`.
+- [x] Shared and platform-specific tests pass. (Win + macOS local: 2026-06-09 @ a1345a0)
+- [x] Windows and macOS CI pass. (Passed on a1345a0)
+- [x] Required macOS target-host evidence is recorded. (See `04-verification.md`)
+- [x] Blocking review findings are resolved.
+- [x] `docs/` reflects the implemented current state.
+- [x] Remaining risks and deviations are recorded.
+- [x] Both CI gates pass on the same final `main` SHA. (Passed on a1345a0)
+- [x] One task owner was active at a time.
+- [x] Plan moved to `plan/completed/`.
