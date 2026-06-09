@@ -2,7 +2,7 @@
 
 Owner: macOS verifier
 Working branch: `main`
-Status: COMPLETE - FINAL SHARED SHA GATE PENDING
+Status: COMPLETE
 
 ## Verified Behavior
 
@@ -28,9 +28,9 @@ Known host limitation:
 
 ## CI Evidence
 
-- macOS Adaptation Gate most recently passed on `7ba8c40`:
-  - https://github.com/MapleAllen/Aura-Translation/actions/runs/27127293378
-- Shared non-UI checks also passed on the latest pushed `main`:
+- macOS Adaptation Gate passed on the final shared SHA `25844e7dea19e815acd5136c27fd37f12581ca43`:
+  - https://github.com/MapleAllen/Aura-Translation/actions/runs/27129859561
+- Shared non-UI checks also passed on the final shared SHA:
   - `npm run check`
   - `npm test`
   - `cargo test --manifest-path src-tauri/Cargo.toml`

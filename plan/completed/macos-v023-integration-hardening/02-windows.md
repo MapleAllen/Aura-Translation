@@ -3,7 +3,7 @@
 Owner: Windows implementer
 Working branch: `main`
 Starting SHA: 4be3d226f4c0175cfa9822d4cdace0ca0bf56378
-Status: SOURCE FIX MERGED - WINDOWS VERIFICATION PENDING
+Status: COMPLETE
 
 ## Allowed Files
 
@@ -33,7 +33,7 @@ After Codex review and push, the Windows Trial Gate must pass on the resulting `
 
 ## Current Evidence
 
-Audited on Windows, 2026-06-08, SHA `7ba8c40`:
+Historical pre-fix audit on Windows, 2026-06-08, SHA `7ba8c40`:
 
 - `npm run check`: PASS, 0 errors / 0 warnings
 - `npm test`: PASS, 46 tests
@@ -49,6 +49,15 @@ Reviewed and merged by Codex on 2026-06-08:
 - `platform_default_hotkey_is_parseable` now expects `Code::KeyJ` on macOS and `Code::KeyT` on non-macOS
 - `startup_tests` is now gated with `#[cfg(all(test, target_os = "macos"))]`
 - Local macOS safety checks on the latest pushed `main`: `npm run check` PASS, `npm test` PASS (46 tests), `cargo test --manifest-path src-tauri/Cargo.toml` PASS (53 tests)
+
+Final Windows verification on the shared SHA `25844e7dea19e815acd5136c27fd37f12581ca43`:
+
+- Windows Trial Gate: PASS
+  - https://github.com/MapleAllen/Aura-Translation/actions/runs/27129859599
+- Verified by gate on Windows:
+  - `npm run check`
+  - `npm test`
+  - `cargo test --manifest-path .\src-tauri\Cargo.toml`
 
 ## Completion Evidence
 

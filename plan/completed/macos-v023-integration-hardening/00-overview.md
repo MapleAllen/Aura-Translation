@@ -1,8 +1,8 @@
 # macos-v023-integration-hardening Overview
 
 Created: 2026-06-07
-Last audited: 2026-06-08
-Status: ACTIVE - SOURCE PATCH MERGED, FINAL GATES PENDING
+Last audited: 2026-06-09
+Status: CLOSED - ARCHIVED AFTER FINAL CROSS-PLATFORM GATES
 Coordination owner: Codex coordinator
 Working branch: `main`
 
@@ -12,18 +12,18 @@ Finish the v0.2.3 cross-platform hardening work already merged into `main`: clea
 
 ## Current State
 
-- The latest pushed `main` includes the plan sync commits and the Windows source-fix handoff.
+- The plan archive and closure audit were committed on `61f3424`.
 - v0.2.3 product code and macOS manual-validation documentation are already merged.
 - Windows source fix for the hotkey regression and startup-test warnings merged on `6039ec4`.
-- macOS Adaptation Gate most recently passed for `7ba8c40`.
-- Windows Trial Gate most recently failed for `7ba8c40`.
-- Local Windows verification on 2026-06-08:
-  - `npm run check`: PASS
-  - `npm test`: PASS, 46 tests
-  - `cargo test --manifest-path .\src-tauri\Cargo.toml`: FAIL, 47 passed / 1 failed
+- Final shared verification target SHA: `25844e7dea19e815acd5136c27fd37f12581ca43`.
+- Windows Trial Gate passed for `25844e7`:
+  - https://github.com/MapleAllen/Aura-Translation/actions/runs/27129859599
+- macOS Adaptation Gate passed for `25844e7`:
+  - https://github.com/MapleAllen/Aura-Translation/actions/runs/27129859561
+- Local Windows verification is represented by the passing Windows Trial Gate on the final shared SHA.
 - The original Rust blocker in `platform_default_hotkey_is_parseable` is fixed on `6039ec4`.
 - The known Windows startup-test warnings are fixed on `6039ec4`.
-- Local macOS shared checks passed on the latest pushed `main`: `npm run check`, `npm test`, and `cargo test --manifest-path src-tauri/Cargo.toml`.
+- Local macOS shared checks passed on the final shared SHA: `npm run check`, `npm test`, and `cargo test --manifest-path src-tauri/Cargo.toml`.
 - macOS manual verification and structured evidence remain synchronized across `docs/`, `03-macos.md`, and `04-verification.md`.
 
 ## Process Decision
@@ -55,7 +55,7 @@ All future Windows, macOS, Antigravity, and Codex work occurs sequentially on `m
 - The original multi-branch/worktree workflow was abandoned because agents could not reliably access each other's worktrees.
 - `3f199d2` and `7fd945e` entered `main` despite the original exclusion rule. They are accepted as historical evidence commits; no history rewrite will be attempted.
 - Product code was merged before the Windows regression was fixed and before final review gates were completed.
-- The plan remained stale after merge and is being corrected by this audit.
+- The plan remained stale after merge until the final closure audit synchronized the archive state on `61f3424`.
 
 ## Acceptance Criteria
 
