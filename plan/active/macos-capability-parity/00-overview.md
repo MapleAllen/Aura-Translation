@@ -1,7 +1,7 @@
 # macos-capability-parity Overview
 
 Created: 2026-06-09
-Status: DRAFT
+Status: ACTIVE - MACOS IMPLEMENTATION ASSIGNED
 Coordination owner: Codex coordinator
 Working branch: `main`
 
@@ -67,7 +67,7 @@ Bring the remaining macOS-blocked desktop capabilities to a supported, reviewabl
 
 ## Main-Branch Handoff Sequence
 
-1. Freeze shared contracts and leave the implementation lock unassigned until the plan is pushed.
+1. Freeze shared contracts and push the plan to `main`.
 2. Assign the macOS implementation task lock; the implementer pulls `main`, records the starting SHA, and implements only the approved scope.
 3. Codex reviews the macOS implementation, commits, and pushes approved work to `main`.
 4. Assign the Windows verification task lock on the new shared SHA and resolve any Windows-only regressions if they appear.

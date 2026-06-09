@@ -1,9 +1,9 @@
 # macOS Implementation and Verification
 
-Owner: macOS implementer
+Owner: Codex macOS implementer
 Dependencies: Shared contracts frozen
 Working branch: `main`
-Starting SHA: RESOLVE AND RECORD BEFORE SOURCE EDITS
+Starting SHA: `fec18774b84f57fbdd9292464f10c7403fc33144`
 
 ## Allowed Files
 

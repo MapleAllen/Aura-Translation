@@ -7,10 +7,10 @@ Dependencies: Current `docs/` and the completed `macos-v023-integration-hardenin
 
 ## Active Task Lock
 
-Owner: TBD
-Starting main SHA: RESOLVE AND RECORD AFTER PLAN UPDATE PUSH
-Task: None assigned yet; planning only
-Status: NOT ASSIGNED
+Owner: Codex macOS implementer
+Starting main SHA: `fec18774b84f57fbdd9292464f10c7403fc33144`
+Task: Implement the backend-driven capability model plus macOS Aura-mode and paste-back support within the approved scope.
+Status: ASSIGNED
 
 ## Allowed Files
 
