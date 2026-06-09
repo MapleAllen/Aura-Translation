@@ -7,10 +7,10 @@ All work is sequential on `main`. A task lock is active only when this plan name
 Current task lock:
 
 - Owner: none
-- Task: source implementation lock released after reviewed merge; awaiting verification evidence on current `main`
-- Starting SHA: latest pushed `main`
-- Status: NO ACTIVE IMPLEMENTATION OWNER
-- Allowed files: none until the coordinator assigns the next verification or closure task lock
+- Task: Plan completed and archived; all locks released.
+- Starting SHA: `25844e7dea19e815acd5136c27fd37f12581ca43`
+- Status: PLAN COMPLETED / CLOSED
+- Allowed files: none
 - Do not modify:
   - product source files without a new assigned lock
   - macOS runtime behavior

@@ -8,7 +8,7 @@ All future collaboration occurs sequentially on `main`. Worktree and implementat
 
 ### Windows Codex Review
 
-Status: SOURCE REVIEW COMPLETE - WINDOWS VERIFICATION PENDING
+Status: COMPLETE
 
 Required review focus:
 
@@ -21,16 +21,16 @@ Current result:
 
 - Reviewed source changes merged on `6039ec4`.
 - No blocking code-review findings remain for `src-tauri/src/hotkey.rs` or `src-tauri/src/lib.rs`.
-- Final Windows sign-off still requires Windows-host evidence on the latest pushed `main`.
+- Final Windows sign-off completed: Windows Trial Gate passed on the latest pushed `main` SHA `25844e7`.
 
 ### macOS Codex Review
 
-Status: PARTIAL
+Status: COMPLETE
 
 - Manual runtime verification is recorded as complete.
-- macOS Adaptation Gate last passed on `7ba8c40`.
+- macOS Adaptation Gate passed on the final shared SHA `25844e7`.
 - No macOS-sensitive runtime behavior changed after `6039ec4`; shared local checks passed on the latest pushed `main`.
-- Final sign-off waits for a macOS gate pass on the latest pushed `main` and matching Windows evidence on the same SHA.
+- Final sign-off complete with Windows evidence matching on the same SHA.
 
 ## Accepted Deviations
 
@@ -49,11 +49,11 @@ Status: PARTIAL
 
 ## Final Closure Gate
 
-- [ ] Shared and platform-specific tests pass.
-- [ ] Windows and macOS CI pass on the same final `main` SHA.
+- [x] Shared and platform-specific tests pass.
+- [x] Windows and macOS CI pass on the same final `main` SHA.
 - [x] Required macOS target-host evidence is recorded.
-- [ ] Windows and macOS Codex reviews have no unresolved blocking findings.
+- [x] Windows and macOS Codex reviews have no unresolved blocking findings.
 - [x] `docs/` reflects the implemented current state.
 - [x] Process deviations are recorded.
 - [x] One sequential task owner is active at a time.
-- [ ] Plan moved to `plan/completed/`.
+- [x] Plan moved to `plan/completed/`.

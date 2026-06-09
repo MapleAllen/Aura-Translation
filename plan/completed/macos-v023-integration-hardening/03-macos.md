@@ -37,12 +37,10 @@ Known host limitation:
 
 ## Remaining Work
 
-- Confirm the macOS Adaptation Gate on the latest pushed `main`.
-- If macOS-sensitive source changes are introduced, repeat affected manual checks before sign-off.
-- Synchronize final gate SHA into `04-verification.md`.
+- None; all verification and synchronization tasks are complete.
 
 ## Completion Evidence
 
 - [x] Required macOS runtime behaviors manually verified.
 - [x] Current `main` macOS gate passed.
-- [ ] Final shared `main` SHA passes both Windows and macOS gates.
+- [x] Final shared `main` SHA passes both Windows and macOS gates.

@@ -53,10 +53,10 @@ Reviewed and merged by Codex on 2026-06-08:
 ## Completion Evidence
 
 - [x] Required source changes reviewed.
-- [ ] Local Windows checks pass.
+- [x] Local Windows checks pass.
 - [x] Known warnings removed.
 - [x] Codex commits and pushes approved changes to `main`.
-- [ ] Windows Trial Gate passes on the handoff SHA.
+- [x] Windows Trial Gate passes on the handoff SHA.
 
-Handoff SHA: `6039ec4b0c3d6002bc81c626b0e7132cdc6584d0`
-Remaining risks: Windows runtime and CI verification on the new shared SHA are still pending; runtime hotkey spot check remains optional because runtime behavior was not changed.
+Handoff SHA: `6039ec4b0c3d6002bc81c626b0e7132cdc6584d0` (final verified SHA: `25844e7dea19e815acd5136c27fd37f12581ca43`)
+Remaining risks: None; all CI gates and tests have passed on the final shared SHA.
