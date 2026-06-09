@@ -4,16 +4,16 @@ A lightweight cross-platform desktop translator that runs as a tray daemon. Trig
 
 ## Features
 
-- **Aura mode**: Optional Windows clipboard watcher translates fresh copied text automatically.
-- **Hotkey recall**: Configurable global hotkey (default `CmdOrCtrl+T`) still works as a manual trigger and result recall toggle.
+- **Aura mode**: Optional clipboard watcher translates fresh copied text automatically on Windows and macOS.
+- **Hotkey recall**: Configurable global hotkey still works as a manual trigger and result recall toggle.
 - **Streaming output**: Token-by-token translation via OpenAI-compatible providers.
 - **Bidirectional language pairs**: 11 languages with one-click swap.
 - **Floating translation bubble**: Minimal translator appears near the cursor and auto-sizes to the translated text.
 - **Pinned comparison mode**: Pin the bubble to keep it visible, draggable, and position-persistent.
-- **Pinned draft composer**: In pinned mode, revise the source text inline and press `Ctrl+Enter` to re-translate without leaving Aura.
+- **Pinned draft composer**: In pinned mode, revise the source text inline and press `Cmd/Ctrl+Enter` to re-translate without leaving Aura.
 - **Separate settings tool window**: Provider, language pair, hotkey, Aura mode, and pin behavior live in a dedicated movable window.
 - **Named translation profiles**: Save multiple provider and language setups, then switch them from Settings or the tray menu.
-- **Paste back to the source app**: On Windows, send the latest translated text back to the original app and restore the previous text clipboard afterward.
+- **Paste back to the source app**: On Windows and macOS, send the latest translated text back to the original app and restore the previous text clipboard afterward.
 - **Token usage visibility**: Show prompt, completion, and total token counts in the translation bubble and recent history when the provider streams usage metadata.
 - **Recent translation history**: Settings keeps the latest 50 successful or failed requests with copy, retry, delete, and clear actions.
 - **System tray daemon**: Runs silently in the background with no taskbar footprint.
@@ -47,6 +47,7 @@ Aura-Translation/
 |       `-- +page.svelte
 |-- src-tauri/           # Rust backend (Tauri convention, folder name is fixed)
 |   |-- src/
+|   |   |-- capabilities.rs # Backend capability reporting for Aura mode and paste-back
 |   |   |-- config.rs    # Plaintext JSON config persistence and provider defaults
 |   |   |-- hotkey.rs    # Configurable hotkey parser
 |   |   |-- profiles.rs  # Named translation profiles and tray switching state
@@ -79,17 +80,17 @@ npm run tauri dev
 1. Launch the app. If Aura is not ready yet it opens `Settings` automatically; you can also right-click the tray icon and open `Settings` manually.
 2. Choose a provider: DeepSeek, OpenRouter, or local Ollama.
 3. Enter an API key for DeepSeek or OpenRouter. Ollama does not require one.
-4. Pick your default language pair, hotkey, whether Aura mode should auto-translate copied text, and optionally save named translation profiles.
+4. Pick your default language pair, hotkey, whether Aura mode should auto-translate copied text when supported, and optionally save named translation profiles.
 5. Save the settings. Aura stores preferences in `{OS config dir}/aura-translation/config.json`, and keeps API keys in the system credential store by default with an explicit plaintext fallback if you choose it.
 
 ### Usage
 
 1. Select any text and copy it with `Ctrl+C`.
-2. If Aura mode is enabled on Windows, the translation bubble appears near the cursor automatically.
-3. If Aura mode is disabled, press your configured hotkey (default `CmdOrCtrl+T`) to translate the current clipboard text.
-4. Use the paste-back action in the translation bubble when you want Aura to return the translated text to the original Windows app.
+2. If Aura mode is enabled on a supported desktop host, the translation bubble appears near the cursor automatically after fresh clipboard changes.
+3. If Aura mode is disabled, press your configured hotkey to translate the current clipboard text.
+4. Use the paste-back action in the translation bubble when you want Aura to return the translated text to the original source app. On macOS this requires Accessibility permission.
 5. Press the hotkey again to recall or hide the last translation bubble, or left-click the tray icon to reopen the latest result when Aura is in the background.
-6. Pin the bubble to keep it visible while you read other pages, or to revise the source draft inline and re-translate with `Ctrl+Enter`.
+6. Pin the bubble to keep it visible while you read other pages, or to revise the source draft inline and re-translate with `Cmd/Ctrl+Enter`.
 
 ## Build for Production
 
