@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { TranslationUsage } from './translationHistory';
+  import type { FeatureCapability } from './capabilities';
 
   type Props = {
     viewState: 'idle' | 'loading' | 'streaming' | 'result' | 'error';
@@ -16,7 +17,7 @@
     hasDraftChanges: boolean;
     usage: TranslationUsage | null;
     canPasteBack?: boolean;
-    pasteBackSupported?: boolean;
+    pasteBackCapability?: FeatureCapability;
     pasteBackAvailable?: boolean;
     windowPinned: boolean;
     ondraftsourcechange?: (value: string) => void;
@@ -45,7 +46,7 @@
     hasDraftChanges,
     usage,
     canPasteBack,
-    pasteBackSupported,
+    pasteBackCapability = 'unsupported',
     pasteBackAvailable,
     windowPinned,
     ondraftsourcechange,
@@ -64,10 +65,13 @@
   const isBusy = $derived(viewState === 'loading' || viewState === 'streaming');
 
   const canPasteBackDerived = $derived(
-    canPasteBack ?? (Boolean(pasteBackSupported) && Boolean(pasteBackAvailable)),
+    canPasteBack ?? (
+      pasteBackCapability === 'needs_permission' ||
+      (pasteBackCapability === 'ready' && Boolean(pasteBackAvailable))
+    ),
   );
 
-  const showPasteBackAction = $derived(pasteBackSupported !== false);
+  const showPasteBackAction = $derived(pasteBackCapability !== 'unsupported');
 
   const statusLabel = $derived.by(() => {
     if (viewState === 'loading') return '连接中';
@@ -112,8 +116,11 @@
     if (!translatedText || isBusy) {
       return '请先完成翻译再回填。';
     }
-    if (!pasteBackSupported) {
-      return '回填功能目前仅支持 Windows。';
+    if (pasteBackCapability === 'unsupported') {
+      return '回填功能当前不支持此平台。';
+    }
+    if (pasteBackCapability === 'needs_permission') {
+      return '回填需要系统辅助功能权限，点击回填以请求授权。';
     }
     if (!pasteBackAvailable) {
       return '请先从前台应用复制文本，Aura 才能回填。';
@@ -214,7 +221,7 @@
                 <div>
                   <p class="aura-section-title">原文草稿</p>
                   <p class="mt-1 text-xs leading-relaxed text-aura-text-muted">
-                    在这里修改原文，按 Ctrl+Enter 直接重译。
+                    在这里修改原文，按 Cmd/Ctrl+Enter 直接重译。
                   </p>
                 </div>
 
@@ -291,7 +298,7 @@
           >
             <p class="max-w-[280px] text-sm leading-7 text-aura-text-dim">
               {showComposer
-                ? '在草稿区输入或粘贴原文，然后按 Ctrl+Enter 重新翻译全文。'
+                ? '在草稿区输入或粘贴原文，然后按 Cmd/Ctrl+Enter 重新翻译全文。'
                 : '复制要翻译的文本，按快捷键即可唤起 Aura。'}
             </p>
           </div>

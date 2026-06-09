@@ -1,4 +1,5 @@
 mod aura_guard;
+mod capabilities;
 mod config;
 mod history;
 mod hotkey;
@@ -6,6 +7,8 @@ mod profiles;
 mod readiness;
 mod secrets;
 mod translate;
+
+use capabilities::get_system_capabilities;
 
 use config::{AppConfig, Provider, WindowPlacement};
 use serde::{Deserialize, Serialize};
@@ -110,7 +113,6 @@ struct AuraGuardBlockedPayload {
 
 #[derive(Clone, Serialize)]
 struct PasteBackStatus {
-    supported: bool,
     available: bool,
 }
 
@@ -141,10 +143,7 @@ fn get_provider_defaults(provider: Provider) -> ProviderDefaults {
     }
 }
 
-#[tauri::command]
-fn get_desktop_platform() -> &'static str {
-    std::env::consts::OS
-}
+
 
 #[tauri::command]
 fn load_provider_api_key(provider: Provider) -> Result<String, String> {
@@ -166,7 +165,6 @@ async fn get_paste_back_status(state: State<'_, RuntimeState>) -> Result<PasteBa
     }
 
     Ok(PasteBackStatus {
-        supported: paste_back_supported(),
         available,
     })
 }
@@ -468,12 +466,154 @@ async fn paste_translation_back(
         }
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_plugin_clipboard_manager::ClipboardExt;
+        let runtime_state = runtime.inner().clone();
+
+        let translated_text = text.trim().to_string();
+        let char_count = translated_text.chars().count();
+        if translated_text.is_empty() {
+            log_clipboard_action("paste-back rejected reason=empty-text");
+            return Err("当前还没有可回填的译文。".to_string());
+        }
+
+        #[link(name = "ApplicationServices", kind = "framework")]
+        extern "C" {
+            fn AXIsProcessTrusted() -> bool;
+        }
+
+        let is_trusted = unsafe { AXIsProcessTrusted() };
+        if !is_trusted {
+            let _ = request_accessibility_permission();
+            return Err("needs_accessibility_permission".to_string());
+        }
+
+        let target_pid = {
+            let mut state = runtime_state.lock().await;
+            let Some(pid) = state.translation.paste_back_window else {
+                log_clipboard_action(format!(
+                    "paste-back rejected chars={char_count} reason=no-source-window"
+                ));
+                return Err("Aura 尚未捕获可回填的原应用窗口。".to_string());
+            };
+
+            if !is_valid_paste_back_window(pid) {
+                state.translation.paste_back_window = None;
+                log_clipboard_action(format!(
+                    "paste-back rejected chars={char_count} reason=stale-source-window pid={pid}"
+                ));
+                return Err("原应用窗口已不可用，无法回填。".to_string());
+            }
+
+            pid
+        };
+        log_clipboard_action(format!(
+            "paste-back requested chars={char_count} pid={target_pid}"
+        ));
+
+        let previous_clipboard = app.clipboard().read_text().ok();
+        let had_previous_clipboard = previous_clipboard
+            .as_ref()
+            .is_some_and(|value| !value.is_empty());
+
+        {
+            let mut state = runtime_state.lock().await;
+            queue_suppressed_clipboard_text(&mut state.clipboard, translated_text.clone());
+        }
+
+        app.clipboard()
+            .write_text(translated_text.clone())
+            .map_err(|e| {
+                log_clipboard_action(format!(
+                    "paste-back failed chars={char_count} stage=prepare-clipboard error={e}"
+                ));
+                format!("无法为回填准备剪贴板：{}", e)
+            })?;
+
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        let paste_result = focus_window_for_paste_back(target_pid).and_then(|_| send_cmd_v());
+        tokio::time::sleep(Duration::from_millis(120)).await;
+
+        if let Some(previous_clipboard) = previous_clipboard.filter(|value| value != &translated_text)
+        {
+            {
+                let mut state = runtime_state.lock().await;
+                queue_suppressed_clipboard_text(&mut state.clipboard, previous_clipboard.clone());
+            }
+
+            if let Err(err) = app.clipboard().write_text(previous_clipboard) {
+                log_clipboard_action(format!(
+                    "paste-back restore failed chars={char_count} pid={target_pid} error={err}"
+                ));
+                emit_daemon_error(
+                    &app,
+                    "pasteback-clipboard-restore-failed",
+                    format!(
+                        "Aura pasted the translation, but failed to restore the previous clipboard text: {}",
+                        err
+                    ),
+                    true,
+                );
+            } else {
+                log_clipboard_action(format!(
+                    "paste-back restore completed chars={char_count} pid={target_pid}"
+                ));
+            }
+        } else {
+            log_clipboard_action(format!(
+                "paste-back restore skipped chars={char_count} pid={target_pid} had_previous_clipboard={had_previous_clipboard}"
+            ));
+        }
+
+        match paste_result {
+            Ok(()) => {
+                log_clipboard_action(format!(
+                    "paste-back completed chars={char_count} pid={target_pid}"
+                ));
+                Ok(())
+            }
+            Err(err) => {
+                log_clipboard_action(format!(
+                    "paste-back failed chars={char_count} pid={target_pid} stage=send-cmd-v error={err}"
+                ));
+                Err(err)
+            }
+        }
+    }
+
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = (app, runtime, text);
         log_clipboard_action("paste-back rejected reason=unsupported-platform");
-        Err("回填功能目前仅支持 Windows。".to_string())
+        Err("回填功能目前仅支持 Windows 和 macOS。".to_string())
     }
+}
+
+#[tauri::command]
+fn request_accessibility_permission() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use core_foundation::base::TCFType;
+        use core_foundation::dictionary::CFDictionary;
+        use core_foundation::string::CFString;
+        use core_foundation::boolean::CFBoolean;
+
+        #[link(name = "ApplicationServices", kind = "framework")]
+        extern "C" {
+            fn AXIsProcessTrustedWithOptions(options: core_foundation::dictionary::CFDictionaryRef) -> bool;
+            static kAXTrustedCheckOptionPrompt: core_foundation::string::CFStringRef;
+        }
+
+        let key = unsafe { CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt) };
+        let value = CFBoolean::true_value();
+        let dict = CFDictionary::from_CFType_pairs(&[(key, value.as_CFType())]);
+        
+        unsafe {
+            AXIsProcessTrustedWithOptions(dict.as_concrete_TypeRef());
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -733,15 +873,6 @@ fn consume_suppressed_clipboard_text(state: &mut ClipboardWatcherState, text: &s
     }
 }
 
-#[cfg(windows)]
-const fn paste_back_supported() -> bool {
-    true
-}
-
-#[cfg(not(windows))]
-const fn paste_back_supported() -> bool {
-    false
-}
 
 #[cfg(windows)]
 fn current_foreground_window_handle() -> Option<isize> {
@@ -761,7 +892,20 @@ fn current_foreground_window_handle() -> Option<isize> {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn current_foreground_window_handle() -> Option<isize> {
+    use objc2_app_kit::NSWorkspace;
+    let workspace = NSWorkspace::sharedWorkspace();
+    let frontmost = workspace.frontmostApplication()?;
+    let pid = frontmost.processIdentifier();
+    if pid == std::process::id() as i32 {
+        None
+    } else {
+        Some(pid as isize)
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn current_foreground_window_handle() -> Option<isize> {
     None
 }
@@ -771,7 +915,18 @@ fn is_valid_paste_back_window(handle: isize) -> bool {
     unsafe { IsWindow(Some(HWND(handle as *mut _))).as_bool() }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn is_valid_paste_back_window(handle: isize) -> bool {
+    use objc2_app_kit::NSRunningApplication;
+    let app = NSRunningApplication::runningApplicationWithProcessIdentifier(handle as i32);
+    if let Some(app) = app {
+        !app.isTerminated()
+    } else {
+        false
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn is_valid_paste_back_window(_handle: isize) -> bool {
     false
 }
@@ -795,6 +950,31 @@ fn focus_window_for_paste_back(handle: isize) -> Result<(), String> {
 
     std::thread::sleep(Duration::from_millis(40));
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+#[allow(deprecated)]
+fn focus_window_for_paste_back(handle: isize) -> Result<(), String> {
+    use objc2_app_kit::{NSRunningApplication, NSApplicationActivationOptions};
+    let app = NSRunningApplication::runningApplicationWithProcessIdentifier(handle as i32);
+    if let Some(app) = app {
+        if app.isTerminated() {
+            return Err("原应用已退出，无法回填。".to_string());
+        }
+        let success = app.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
+        if !success {
+            return Err("无法激活原应用进行回填。".to_string());
+        }
+        std::thread::sleep(Duration::from_millis(40));
+        Ok(())
+    } else {
+        Err("未找到原应用进程，无法聚焦。".to_string())
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn focus_window_for_paste_back(_handle: isize) -> Result<(), String> {
+    Err("当前平台不支持聚焦原窗口。".to_string())
 }
 
 #[cfg(windows)]
@@ -829,6 +1009,38 @@ fn keyboard_input(
             },
         },
     }
+}
+#[cfg(target_os = "macos")]
+fn send_cmd_v() -> Result<(), String> {
+    use core_graphics::event::{CGEvent, CGEventTapLocation, CGKeyCode, CGEventFlags};
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+
+    const VK_V: CGKeyCode = 0x09;
+    const VK_COMMAND: CGKeyCode = 0x37;
+
+    let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
+        .map_err(|_| "无法创建 EventSource".to_string())?;
+
+    let cmd_down = CGEvent::new_keyboard_event(source.clone(), VK_COMMAND, true)
+        .map_err(|_| "无法创建键盘事件 (Cmd down)".to_string())?;
+    
+    let v_down = CGEvent::new_keyboard_event(source.clone(), VK_V, true)
+        .map_err(|_| "无法创建键盘事件 (V down)".to_string())?;
+    v_down.set_flags(CGEventFlags::CGEventFlagCommand);
+
+    let v_up = CGEvent::new_keyboard_event(source.clone(), VK_V, false)
+        .map_err(|_| "无法创建键盘事件 (V up)".to_string())?;
+    v_up.set_flags(CGEventFlags::CGEventFlagCommand);
+
+    let cmd_up = CGEvent::new_keyboard_event(source, VK_COMMAND, false)
+        .map_err(|_| "无法创建键盘事件 (Cmd up)".to_string())?;
+
+    cmd_down.post(CGEventTapLocation::HID);
+    v_down.post(CGEventTapLocation::HID);
+    v_up.post(CGEventTapLocation::HID);
+    cmd_up.post(CGEventTapLocation::HID);
+
+    Ok(())
 }
 
 fn is_window_visible(app: &AppHandle, label: &str) -> bool {
@@ -1543,15 +1755,72 @@ fn clipboard_sequence_number() -> Option<u32> {
     }
 }
 
-#[cfg(not(windows))]
-fn clipboard_sequence_number() -> Option<u32> {
-    None
-}
 
 fn spawn_clipboard_monitor(app: &AppHandle) {
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     {
-        let _ = app;
+        use tauri_plugin_clipboard_manager::ClipboardExt;
+        use objc2_app_kit::NSPasteboard;
+
+        let app_handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(275));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let runtime_state = app_handle.state::<RuntimeState>().inner().clone();
+
+            loop {
+                interval.tick().await;
+
+                let sequence = {
+                    let pb = NSPasteboard::generalPasteboard();
+                    pb.changeCount() as u32
+                };
+
+                {
+                    let mut runtime = runtime_state.lock().await;
+                    if runtime.clipboard.last_sequence == Some(sequence) {
+                        continue;
+                    }
+                    runtime.clipboard.last_sequence = Some(sequence);
+                }
+
+                let config = current_config(&app_handle);
+                if !config.aura_mode_enabled {
+                    continue;
+                }
+
+                let text = app_handle.clipboard().read_text().unwrap_or_default();
+                let trimmed = text.trim().to_string();
+                if trimmed.is_empty() {
+                    continue;
+                }
+
+                if config.aura_guard_enabled {
+                    if let Some(block) = aura_guard::detect_sensitive_clipboard(&trimmed) {
+                        emit_aura_guard_blocked(&app_handle, block.reason);
+                        continue;
+                    }
+                }
+
+                let mut runtime = runtime_state.lock().await;
+                if consume_suppressed_clipboard_text(&mut runtime.clipboard, trimmed.as_str()) {
+                    continue;
+                }
+
+                if runtime.clipboard.last_dispatched_text.as_deref() == Some(trimmed.as_str()) {
+                    continue;
+                }
+
+                runtime.clipboard.last_dispatched_text = Some(trimmed.clone());
+                runtime.translation.last_requested_text = Some(trimmed.clone());
+                drop(runtime);
+
+                let app_clone = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    trigger_translation(app_clone, trimmed).await;
+                });
+            }
+        });
     }
 
     #[cfg(windows)]
@@ -1615,6 +1884,11 @@ fn spawn_clipboard_monitor(app: &AppHandle) {
                 });
             }
         });
+    }
+
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let _ = app;
     }
 }
 
@@ -1714,7 +1988,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             get_provider_defaults,
-            get_desktop_platform,
+            get_system_capabilities,
+            request_accessibility_permission,
             load_provider_api_key,
             get_paste_back_status,
             get_translation_profiles,

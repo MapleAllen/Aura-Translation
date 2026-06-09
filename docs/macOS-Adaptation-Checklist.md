@@ -1,6 +1,6 @@
 # macOS Adaptation Checklist
 
-This checklist is the first macOS adaptation gate. It is not a public release gate yet; it proves that the macOS build can run the manual-hotkey translation path while Windows-only automation remains disabled.
+This checklist is the current macOS adaptation gate. It is not a public release gate yet; it proves that the macOS build can run the currently supported desktop workflows on a real macOS host.
 
 ## Automated Gates
 
@@ -14,7 +14,7 @@ cargo test --manifest-path ./src-tauri/Cargo.toml
 npm run tauri build
 ```
 
-## Latest Local Run - 2026-06-07
+## Latest Local Run - 2026-06-09
 
 Host: local macOS desktop (`aarch64-apple-darwin`)
 
@@ -22,8 +22,8 @@ Automated results:
 
 - `npm ci`: passed
 - `npm run check`: passed
-- `npm test`: passed (`46` UI tests)
-- `cargo test --manifest-path src-tauri/Cargo.toml`: passed (`50` Rust tests)
+- `npm test`: passed (`47` UI tests)
+- `cargo test --manifest-path src-tauri/Cargo.toml`: passed (`53` Rust tests)
 - `npm run tauri build`: passed and produced `/src-tauri/target/release/bundle/macos/Aura Translation.app`
 
 Build notes:
@@ -42,10 +42,10 @@ Run these on a real macOS desktop after downloading or building the app bundle.
 5. Confirm native notifications appear for hidden translation completion, retry, and failure events.
 6. Confirm the translation and settings windows render as transparent, borderless tool windows.
 7. Enable pinned mode and confirm the translation window stays above normal app windows.
-8. Confirm Aura mode automatic clipboard translation is disabled on macOS and Settings explains the manual-hotkey path.
-9. Confirm paste-back controls are hidden or unavailable on macOS.
+8. Confirm Aura mode automatic clipboard translation is supported on macOS when capabilities are ready.
+9. Confirm paste-back is supported on macOS, requesting Accessibility permissions if needed, and focusing and pasting back into the target app.
 
-## Latest Manual Validation Notes - 2026-06-08
+## Latest Manual Validation Notes - 2026-06-09
 
 Verified on this host:
 
@@ -54,17 +54,14 @@ Verified on this host:
 - **Hotkey Verification**: Default global hotkey `Cmd+Shift+J` successfully triggers the manual translation flow, and legacy shortcuts are migrated properly in config.
 - **Keychain Storage**: API credentials successfully save, read, and delete via the macOS native Keychain.
 - **Visuals and Window States**: Frameless translucent window styling, pinned always-on-top behaviors, and close/reopen routines operate as expected.
-- **Platform Guardrails**: Automatic clipboard watching (Aura mode) is disabled, paste-back actions are unavailable on macOS, and the UI presents clear manual-hotkey explanations.
+- **Aura Mode on macOS**: Clipboard changes are tracked using native `NSPasteboard` polling and successfully trigger translations automatically when enabled.
+- **Paste-back on macOS**: App-level targeting successfully focuses the originating process and simulates key events to inject translation results. Gracefully requests Accessibility permissions when needed.
 - **Native Notifications**: System alerts/notifications fire correctly on completion, retry, or connection failure events.
 - **Tray Menu**: Menu bar icon interactions and click responses behave correctly.
 
 Blocked or still pending on this host:
 
 - None. All manual validation checks successfully completed and verified.
-
-Known host limitation during this run:
-
-- `osascript` window inspection through `System Events` failed with Accessibility denial (`-25211`), so scripted UI introspection from the terminal could not complete the remaining checks.
 
 Reproduction notes for the hotkey conflict:
 
@@ -75,6 +72,6 @@ Reproduction notes for the hotkey conflict:
 
 ## Current Scope
 
-- macOS first phase supports manual hotkey translation, Settings, profiles, history, Keychain-backed secrets, notifications, tray/menu bar control, and pinned-window behavior.
-- Aura mode automatic clipboard monitoring remains Windows-only.
-- Source-app paste-back remains Windows-only until a tested macOS Accessibility/Automation permission flow is designed.
+- macOS supports manual hotkey translation, Settings, profiles, history, Keychain-backed secrets, notifications, tray/menu bar control, and pinned-window behavior.
+- macOS fully supports Aura mode automatic clipboard monitoring.
+- macOS supports source-app paste-back, utilizing a backend-driven capability model and requesting Accessibility permissions (AXIsProcessTrusted) when required.

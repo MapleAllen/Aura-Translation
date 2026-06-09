@@ -72,11 +72,11 @@ npm run tauri build
 
 ## Completion Evidence
 
-- [ ] Starting SHA recorded before source edits.
-- [ ] macOS automated checks pass.
-- [ ] macOS host manual verification evidence recorded.
+- [x] Starting SHA recorded before source edits: `fec18774b84f57fbdd9292464f10c7403fc33144`
+- [x] macOS automated checks pass: 47 UI tests, 53 Rust tests, svelte-check clean (2026-06-09).
+- [x] macOS host manual verification evidence recorded in `04-verification.md` and `docs/macOS-Adaptation-Checklist.md` (2026-06-09).
 - [ ] macOS CI gate passes on the shared final SHA.
-- [ ] Docs updated to match the final shipped behavior and known limitations.
+- [x] Docs updated to match the final shipped behavior and known limitations.
 
 ## Deviations and Remaining Risks
 

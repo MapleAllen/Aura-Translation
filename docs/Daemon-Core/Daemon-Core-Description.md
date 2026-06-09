@@ -62,16 +62,17 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 - Lets the frontend decide whether blur should dismiss the shell based on settings visibility and pin state
 
 **Paste-back to source apps**
-- Captures the foreground non-Aura window handle before showing the translation bubble
-- Exposes `get_paste_back_status` so the translation bubble can decide whether to show the action
-- On Windows, temporarily swaps the clipboard to the translated text, focuses the original window, sends `Ctrl+V`, and then restores the previous text clipboard when available
-- On non-Windows platforms, reports paste-back as unsupported and rejects `paste_translation_back` without attempting platform automation
+- Captures the foreground non-Aura window/process before showing the translation bubble (captured at trigger time)
+- Exposes `get_paste_back_status` so the translation bubble can decide whether the target is still available right now
+- On Windows, focuses the original window and sends `Ctrl+V` (using Win32 inputs)
+- On macOS, focuses the target process (via `NSRunningApplication`) and sends `Cmd+V` (using CoreGraphics `CGEvent`)
+- Restores the previous text clipboard after paste-back is complete
 - Reuses clipboard suppression so Aura mode does not auto-trigger from its own temporary clipboard writes
 
 **Platform capability reporting**
-- Exposes `get_desktop_platform()` so the frontend can tailor platform-specific controls without duplicating OS detection logic
-- Uses `std::env::consts::OS` as the backend source of truth for desktop platform labels
-- Keeps Windows-only native API calls behind `#[cfg(windows)]` fallbacks
+- Exposes `get_system_capabilities()` returning static platform features and permissions (`FeatureCapability::Ready`, `FeatureCapability::NeedsPermission`, `FeatureCapability::Unsupported`)
+- The frontend relies on this capability payload instead of OS string checks or frontend platform branching
+- Platform-specific implementations are gated behind `#[cfg(windows)]` and `#[cfg(target_os = "macos")]`
 
 **Config persistence**
 - `AppConfig` fields: `api_key`, `api_key_storage`, `active_profile_id`, `model`, `source_lang`, `target_lang`, `hotkey`, `window_pinned`, `provider`, `api_base_url`, `available_models`
@@ -99,7 +100,8 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 **Exposed Tauri commands**
 - `get_config() -> AppConfig`
 - `get_provider_defaults(provider) -> ProviderDefaults`
-- `get_desktop_platform() -> &'static str`
+- `get_system_capabilities() -> SystemCapabilities`
+- `request_accessibility_permission() -> Result<(), String>`
 - `load_provider_api_key(provider) -> Result<String, String>`
 - `translation-usage` event payloads when supported by the active provider stream
 - `get_paste_back_status() -> Result<PasteBackStatus, String>`
@@ -122,7 +124,7 @@ Single Tauri application bootstrap in `lib.rs` with companion modules for config
 
 - `lib.rs`
   - `run()`: builds the Tauri application, registers managed state, plugins, tray, commands, and startup hotkey
-  - `get_desktop_platform()`: returns `std::env::consts::OS` for platform-aware frontend behavior
+  - `capabilities::get_system_capabilities()`: returns structured capability and permission status
   - `ensure_main_window()`: lazily creates the main webview from `tauri.conf.json`
   - `wait_for_ui_ready()`: polls `UiReadyState` until the frontend reports readiness or timeout expires
   - `prepare_main_window()`: applies pinning preferences and positions the window
@@ -193,14 +195,13 @@ Single Tauri application bootstrap in `lib.rs` with companion modules for config
 - **No lifecycle log file**: daemon events surface to the UI but are not persisted to rotating logs.
 - **UI-ready wait uses polling**: readiness is checked every 25 ms rather than through a one-shot event or condition variable.
 - **Paste-back is text-only today**: Aura restores previous text clipboard content when available, but does not preserve non-text clipboard payloads.
-- **Paste-back remains Windows-only**: macOS and Linux builds expose the status as unsupported instead of requesting Accessibility or automation permissions.
-- **Aura mode remains Windows-only**: non-Windows builds rely on manual hotkey translation while automatic clipboard monitoring stays disabled.
+- **Linux is unsupported for Aura Mode and Paste-back**: Linux builds expose these features as unsupported.
 
 ## Future Directions
 
 - Add cursor-aware multi-monitor positioning and taskbar-edge detection.
 - Emit config load failures through the same structured daemon event pathway used elsewhere.
-- Add a tested macOS Accessibility/Automation path before enabling source-app paste-back outside Windows.
+- Add support for Linux clipboard monitoring and paste-back.
 - Add richer tray status/actions beyond the current recall, setup, and profile switching shortcuts.
 - Add history access directly into the tray alongside profile switching.
 - Add rotating daemon logs in the app data directory.

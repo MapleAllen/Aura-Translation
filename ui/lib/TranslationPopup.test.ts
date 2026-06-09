@@ -109,11 +109,25 @@ describe('TranslationPopup', () => {
       modelLabel: 'deepseek-chat',
       translatedText: 'Translated result',
       canPasteBack: true,
-      pasteBackSupported: false,
+      pasteBackCapability: 'unsupported',
     });
 
     expect(screen.queryByRole('button', { name: /回填/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /复制译文/ })).toBeInTheDocument();
+  });
+
+  it('shows the cross-platform composer shortcut hint', () => {
+    renderPopup({
+      viewState: 'result',
+      sourceText: 'Original text',
+      draftSourceText: 'Original text',
+      translatedText: '翻译结果',
+      showComposer: true,
+      hasDraftChanges: false,
+      windowPinned: true,
+    });
+
+    expect(screen.getByText(/Cmd\/Ctrl\+Enter/)).toBeInTheDocument();
   });
 
   it('reuses the shared surface for loading and streaming states', () => {

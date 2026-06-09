@@ -16,10 +16,15 @@ Blocking findings:
 
 ## macOS Codex Review
 
-Status: NOT STARTED
+Status: LOCAL REVIEW PASSED; TARGET-HOST EVIDENCE RECORDED IN `04-verification.md` (2026-06-09)
 Blocking findings:
 
-- None yet.
+- None at the current working-tree state.
+
+Resolved during local review:
+
+- Refreshed translation-window capability state around macOS paste-back permission changes so the UI no longer waits for a remount to pick up `needs_permission` vs `ready`.
+- Corrected the pinned-composer shortcut wording and current-state UI-shell docs to match the actual cross-platform `Meta/Ctrl + Enter` behavior.
 
 ## Plan Compliance
 

@@ -21,6 +21,7 @@
   } from './notifications';
   import { RESIZE_HANDLES, shouldDismissOnBlur, type ResizeDirection } from './windowBehavior';
   import { persistCurrentWindowPlacement } from './windowPlacement';
+  import type { SystemCapabilities } from './capabilities';
 
   let appState: 'idle' | 'loading' | 'streaming' | 'result' | 'error' = $state('idle');
   let translatedText = $state('');
@@ -68,12 +69,15 @@
   };
 
   type PasteBackStatus = {
-    supported: boolean;
     available: boolean;
   };
 
   let lastRequestConfig = $state<AppConfig | null>(null);
-  let pasteBackStatus = $state<PasteBackStatus>({ supported: false, available: false });
+  let capabilities = $state<SystemCapabilities>({
+    aura_mode: 'unsupported',
+    paste_back: 'unsupported',
+  });
+  let pasteBackStatus = $state<PasteBackStatus>({ available: false });
   let retryAttempt = $state<number | null>(null);
   let translationUsage = $state<TranslationUsage | null>(null);
   let draftSourceText = $state('');
@@ -120,12 +124,21 @@
     }
   }
 
+  async function refreshCapabilities() {
+    try {
+      capabilities = await invoke<SystemCapabilities>('get_system_capabilities');
+    } catch (e) {
+      console.error('Failed to load capabilities:', e);
+      capabilities = { aura_mode: 'unsupported', paste_back: 'unsupported' };
+    }
+  }
+
   async function refreshPasteBackStatus() {
     try {
       pasteBackStatus = await invoke<PasteBackStatus>('get_paste_back_status');
     } catch (e) {
       console.error('Failed to load paste-back status:', e);
-      pasteBackStatus = { supported: false, available: false };
+      pasteBackStatus = { available: false };
     }
   }
 
@@ -319,11 +332,12 @@
   async function pasteBackResult() {
     if (!translatedText) return;
 
+    await refreshCapabilities();
+
     try {
       await invoke('paste_translation_back', { text: translatedText });
     } catch (e) {
       console.error('Failed to paste back:', e);
-      await refreshPasteBackStatus();
       pushNotification(
         createDaemonErrorNotification({
           code: 'paste-back-failed',
@@ -331,6 +345,9 @@
           recoverable: true,
         }),
       );
+    } finally {
+      await refreshCapabilities();
+      await refreshPasteBackStatus();
     }
   }
 
@@ -424,6 +441,7 @@
 
   onMount(() => {
     void loadConfig();
+    void refreshCapabilities();
     void refreshPasteBackStatus();
 
     const appWindow = getCurrentWindow();
@@ -442,6 +460,7 @@
           translatedTextTriggerText = text;
           draftSourceText = text;
           showBubble();
+          await refreshCapabilities();
           await refreshPasteBackStatus();
           const loadedConfig = await loadConfig();
           if (!loadedConfig) return;
@@ -453,6 +472,7 @@
       unlisteners.push(
         await listen('show-existing-translation', () => {
           showBubble();
+          void refreshCapabilities();
           void refreshPasteBackStatus();
           scheduleAutoSize();
         }),
@@ -614,8 +634,8 @@
         showComposer={config.window_pinned}
         hasDraftChanges={draftSourceText.trim() !== translatedTextTriggerText.trim()}
         usage={translationUsage}
-        canPasteBack={pasteBackStatus.supported && pasteBackStatus.available}
-        pasteBackSupported={pasteBackStatus.supported}
+        canPasteBack={capabilities.paste_back === 'needs_permission' || (capabilities.paste_back === 'ready' && pasteBackStatus.available)}
+        pasteBackCapability={capabilities.paste_back}
         pasteBackAvailable={pasteBackStatus.available}
         windowPinned={config.window_pinned}
         ondraftsourcechange={(value) => {

@@ -108,8 +108,11 @@ describe('SettingsPanel operator console layout', () => {
       switch (command) {
         case 'get_config':
           return Promise.resolve(baseConfig);
-        case 'get_desktop_platform':
-          return Promise.resolve('windows');
+        case 'get_system_capabilities':
+          return Promise.resolve({
+            aura_mode: 'ready',
+            paste_back: 'ready',
+          });
         case 'get_runtime_status':
           return Promise.resolve(readyStatus);
         case 'get_translation_history':
@@ -200,6 +203,11 @@ describe('SettingsPanel operator console layout', () => {
   it('hides API key storage messaging for ollama', async () => {
     invokeMock.mockImplementation((command: string, payload?: { provider?: string }) => {
       switch (command) {
+        case 'get_system_capabilities':
+          return Promise.resolve({
+            aura_mode: 'ready',
+            paste_back: 'ready',
+          });
         case 'get_config':
           return Promise.resolve({
             ...baseConfig,
@@ -309,7 +317,7 @@ describe('SettingsPanel operator console layout', () => {
     );
   });
 
-  it('keeps aura mode disabled on macOS builds', async () => {
+  it('disables aura mode toggle when capability is unsupported', async () => {
     invokeMock.mockImplementation((command: string) => {
       switch (command) {
         case 'get_config':
@@ -317,8 +325,11 @@ describe('SettingsPanel operator console layout', () => {
             ...baseConfig,
             aura_mode_enabled: true,
           });
-        case 'get_desktop_platform':
-          return Promise.resolve('macos');
+        case 'get_system_capabilities':
+          return Promise.resolve({
+            aura_mode: 'unsupported',
+            paste_back: 'unsupported',
+          });
         case 'get_runtime_status':
           return Promise.resolve(readyStatus);
         case 'get_translation_history':
@@ -338,7 +349,7 @@ describe('SettingsPanel operator console layout', () => {
     const auraSwitch = await screen.findByRole('switch', { name: /Aura/ });
     expect(auraSwitch).toHaveAttribute('aria-checked', 'false');
     expect(auraSwitch).toBeDisabled();
-    expect(screen.getByTestId('aura-mode-platform-note')).toHaveTextContent('macOS');
+    expect(screen.getByTestId('aura-mode-platform-note')).toHaveTextContent('不支持');
 
     await fireEvent.click(auraSwitch);
     await fireEvent.click(screen.getByRole('button', { name: /保存设置/ }));
@@ -400,8 +411,11 @@ describe('SettingsPanel operator console layout', () => {
             ...baseConfig,
             api_key: '',
           });
-        case 'get_desktop_platform':
-          return Promise.resolve('windows');
+        case 'get_system_capabilities':
+          return Promise.resolve({
+            aura_mode: 'ready',
+            paste_back: 'ready',
+          });
         case 'get_runtime_status':
           return Promise.resolve(needsSetupStatus);
         case 'get_translation_history':
@@ -457,6 +471,11 @@ describe('SettingsPanel operator console layout', () => {
   it('creates and renames translation profiles', async () => {
     invokeMock.mockImplementation((command: string, payload?: { config?: typeof baseConfig; name?: string }) => {
       switch (command) {
+        case 'get_system_capabilities':
+          return Promise.resolve({
+            aura_mode: 'ready',
+            paste_back: 'ready',
+          });
         case 'get_config':
           return Promise.resolve(baseConfig);
         case 'get_runtime_status':
