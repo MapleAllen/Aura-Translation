@@ -1,7 +1,7 @@
 # post-v030-p1-p2-foundation-and-workflows Overview
 
 Created: 2026-06-11
-Status: DRAFT - READY FOR FIRST LOCK
+Status: P1A COMPLETE - TARGET-HOST VERIFICATION PENDING BEFORE NEXT LOCK
 Coordination owner: Codex coordinator
 Working branch: `main`
 
@@ -41,6 +41,7 @@ Execute the first two post-`v0.3.0` priorities sequentially on `main` with one a
 - `00d91ec` established the cross-platform execution contract and locked `P1A` to sequential main-branch implementation.
 - `P1A` now routes config/profile/history startup load failures through `daemon-error` plus background notifications while preserving fallback startup behavior.
 - `P1A` also adds a 30-second readiness probe cache keyed by provider/base URL/model/hydrated API key and keeps the tray tooltip summary aligned with the current readiness state.
+- `569d229` is the pushed `P1A` runtime handoff commit, and `89a7bf2` is the current shared `main` baseline that records the handoff status without further source changes.
 - `src-tauri/src/config.rs` still uses provider-scoped secret account names (`provider:deepseek`, `provider:openrouter`, `provider:ollama`).
 - `ui/lib/HistoryList.svelte` has no search/filter controls, and retry currently follows the active config rather than an explicit entry override path.
 - Existing regression coverage already touches the target surface:

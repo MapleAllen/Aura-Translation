@@ -24,14 +24,14 @@
 
 ## Windows Codex Review
 
-Status: NOT STARTED
+Status: PENDING TARGET-HOST VERIFICATION ON `89a7bf2`
 Blocking findings:
 
 - none recorded yet
 
 ## macOS Codex Review
 
-Status: NOT STARTED
+Status: P1A SHARED-SOURCE REVIEW COMPLETE; MANUAL TARGET-HOST EVIDENCE STILL PENDING ON `89a7bf2`
 Blocking findings:
 
 - none recorded yet

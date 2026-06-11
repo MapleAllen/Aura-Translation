@@ -7,10 +7,10 @@ Dependencies: `4fe5f24` documentation baseline
 
 ## Active Task Lock
 
-Owner: Codex
-Task: `P1A` shared-source implementation for structured startup/load error routing, readiness probe cache, and tray tooltip status sync
-Starting main SHA: `00d91ec20e5b20f04d26fd6fd2661bb4661d8d79`
-Status: COMMITTED AND PUSHED - AWAITING WINDOWS VERIFICATION AND NEXT LOCK
+Owner: none - implementation lock released after `P1A` push
+Task: none - awaiting target-host verification before the next lock is assigned
+Starting main SHA: n/a
+Status: NO ACTIVE IMPLEMENTATION LOCK - `P1A` HANDOFF RECORDED, TARGET-HOST VERIFICATION PENDING
 
 ## Allowed Files
 
@@ -133,6 +133,7 @@ When an implementation lock is assigned for this plan, edits may be limited to:
   - `npm run check`
   - `npm test`
 - `P1A` handoff SHA pushed to `origin/main`: `569d229`
+- Current shared verification baseline on `main`: `89a7bf2` (plan-sync only; no additional runtime-source changes after `569d229`)
 - Current `P1A` implementation scope: `src-tauri/src/config.rs`, `src-tauri/src/profiles.rs`, `src-tauri/src/history.rs`, `src-tauri/src/lib.rs`, plus synchronized `docs/` and plan evidence files.
 
 ## Deviations
