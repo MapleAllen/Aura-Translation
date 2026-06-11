@@ -56,7 +56,7 @@ Starting SHA: RESOLVE AND RECORD BEFORE SOURCE EDITS
 
 ## Completion Evidence
 
-- `P1A` shared-source slice implemented locally from starting SHA `00d91ec20e5b20f04d26fd6fd2661bb4661d8d79`.
+- `P1A` shared-source slice implemented locally from starting SHA `00d91ec20e5b20f04d26fd6fd2661bb4661d8d79` and pushed as `569d229`.
 - Local shared checks passed on macOS during `P1A`:
   - `cargo test --manifest-path src-tauri/Cargo.toml`
   - `npm run check`

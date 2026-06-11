@@ -10,7 +10,7 @@ Dependencies: `4fe5f24` documentation baseline
 Owner: Codex
 Task: `P1A` shared-source implementation for structured startup/load error routing, readiness probe cache, and tray tooltip status sync
 Starting main SHA: `00d91ec20e5b20f04d26fd6fd2661bb4661d8d79`
-Status: IMPLEMENTED LOCALLY - SHARED CHECKS PASS, WINDOWS VERIFICATION AND PUSH PENDING
+Status: COMMITTED AND PUSHED - AWAITING WINDOWS VERIFICATION AND NEXT LOCK
 
 ## Allowed Files
 
@@ -132,6 +132,7 @@ When an implementation lock is assigned for this plan, edits may be limited to:
   - `cargo test --manifest-path src-tauri/Cargo.toml`
   - `npm run check`
   - `npm test`
+- `P1A` handoff SHA pushed to `origin/main`: `569d229`
 - Current `P1A` implementation scope: `src-tauri/src/config.rs`, `src-tauri/src/profiles.rs`, `src-tauri/src/history.rs`, `src-tauri/src/lib.rs`, plus synchronized `docs/` and plan evidence files.
 
 ## Deviations
