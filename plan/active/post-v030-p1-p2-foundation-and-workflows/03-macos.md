@@ -56,9 +56,12 @@ Starting SHA: RESOLVE AND RECORD BEFORE SOURCE EDITS
 
 ## Completion Evidence
 
-- Record the implementation handoff SHA.
-- Record local command results and any macOS-only screenshots/log notes needed to explain behavior.
-- Backfill `04-verification.md` and `05-review-and-integration.md`.
+- `P1A` shared-source slice implemented locally from starting SHA `00d91ec20e5b20f04d26fd6fd2661bb4661d8d79`.
+- Local shared checks passed on macOS during `P1A`:
+  - `cargo test --manifest-path src-tauri/Cargo.toml`
+  - `npm run check`
+  - `npm test`
+- `04-verification.md` has been backfilled for the macOS automated checks completed so far.
 
 ## Deviations and Remaining Risks
 

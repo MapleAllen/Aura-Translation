@@ -4,9 +4,9 @@
 
 | Check | Windows | macOS | Evidence |
 |---|---|---|---|
-| `npm run check` | NOT RUN | NOT RUN | |
-| `npm test` | NOT RUN | NOT RUN | |
-| `cargo test --manifest-path src-tauri/Cargo.toml` | NOT RUN | NOT RUN | |
+| `npm run check` | NOT RUN | PASS | Local macOS run passed during `P1A` on top of `00d91ec` worktree |
+| `npm test` | NOT RUN | PASS | Local macOS run passed during `P1A` with 47 tests |
+| `cargo test --manifest-path src-tauri/Cargo.toml` | NOT RUN | PASS | Local macOS run passed during `P1A` with 53 Rust tests |
 | Production build | NOT RUN | NOT RUN | Windows CI bundle/build; macOS `npm run tauri build` plus CI |
 | Final shared CI SHA | NOT RUN | NOT RUN | Both host gates must pass on the same final `main` commit |
 

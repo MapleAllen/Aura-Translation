@@ -38,8 +38,9 @@ Execute the first two post-`v0.3.0` priorities sequentially on `main` with one a
 ## Current-State Evidence
 
 - `docs/*-Description.md` and `docs/*-Plan.md` for Config And Secrets, Runtime Readiness, Translation Profiles, and Translation History were added on `4fe5f24`.
-- `src-tauri/src/config.rs`, `src-tauri/src/profiles.rs`, and `src-tauri/src/history.rs` still fall back from read/parse errors via `eprintln!` plus defaults/empty state.
-- `src-tauri/src/readiness.rs` has no probe-result cache and no tray-state hook.
+- `00d91ec` established the cross-platform execution contract and locked `P1A` to sequential main-branch implementation.
+- `P1A` now routes config/profile/history startup load failures through `daemon-error` plus background notifications while preserving fallback startup behavior.
+- `P1A` also adds a 30-second readiness probe cache keyed by provider/base URL/model/hydrated API key and keeps the tray tooltip summary aligned with the current readiness state.
 - `src-tauri/src/config.rs` still uses provider-scoped secret account names (`provider:deepseek`, `provider:openrouter`, `provider:ollama`).
 - `ui/lib/HistoryList.svelte` has no search/filter controls, and retry currently follows the active config rather than an explicit entry override path.
 - Existing regression coverage already touches the target surface:
@@ -77,7 +78,7 @@ Execute the first two post-`v0.3.0` priorities sequentially on `main` with one a
 
 - Config, profile, and history load failures surface through the structured `daemon-error` path without changing fallback behavior.
 - Provider probe requests are cached/debounced and invalidated when relevant config fields change.
-- Tray readiness icon/tooltip reflects ready vs needs-setup state on both Windows and macOS.
+- Tray readiness tooltip reflects ready vs needs-setup state on both Windows and macOS, and icon-badge follow-up work is tracked explicitly.
 - Profiles can resolve provider secrets through a profile-scoped system-store naming contract while preserving legacy-entry fallback during migration.
 - History UI supports client-side search and filters, and users can retry an entry with its original provider/model/base URL without switching the active profile.
 - Shared checks and both platform-specific gates pass on the same final `main` SHA.

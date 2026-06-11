@@ -10,7 +10,7 @@ Runtime Readiness evaluates whether Aura has enough configuration to translate a
 
 ## Current Implementation
 
-`readiness.rs` exposes a set of pure functions that inspect `AppConfig` fields without any async I/O (except `probe_provider`, which is async). The module has no managed state of its own; it is called on-demand from Tauri commands and from the startup flow.
+`readiness.rs` exposes a set of pure functions that inspect `AppConfig` fields without any async I/O (except `probe_provider`, which is async). The module itself still has no managed state of its own, but `lib.rs` now wraps provider probing with a `ReadinessState` cache so repeated probe requests can reuse a recent result for 30 seconds when the provider, base URL, model, and hydrated API key have not changed.
 
 `is_translation_ready(config)` returns `true` when `api_base_url` is non-empty, `model` is non-empty, and the provider's API key requirement is satisfied (`api_key` is non-empty or the provider is Ollama). `should_prompt_for_setup(config)` is its inverse and is checked at startup to decide whether to open Settings automatically.
 
@@ -61,7 +61,9 @@ Stateless utility module. All functions are pure (except `probe_provider`'s HTTP
 
 - `src-tauri/src/lib.rs`
   - `get_runtime_status()`: calls `readiness::build_runtime_status` with the current `ConfigState` and returns the result
-  - `probe_provider_connection()`: calls `readiness::probe_provider` with the shared `reqwest::Client` and current config
+  - `probe_provider()`: hydrates the current API key, checks `ReadinessState`, and only calls `readiness::probe_provider` when the cached result is absent or stale
+  - `ReadinessState`: stores the last probe fingerprint, timestamp, and `ProviderProbeResult`; invalidated after successful config persistence
+  - Tray setup and config-save flow: call `readiness::build_runtime_status(config)` to keep the tray tooltip summary aligned with the current readiness state
   - Startup: calls `readiness::should_prompt_for_setup(config)` to decide whether to open the settings window on first launch
 
 - `ui/lib/SetupStatusCard.svelte`
@@ -76,13 +78,12 @@ Stateless utility module. All functions are pure (except `probe_provider`'s HTTP
 ## Current Limitations
 
 - **Provider probe uses `max_tokens: 4`**: the probe request is minimal but still consumes API quota; there is no free "ping" endpoint for OpenAI-compatible providers.
-- **Probe result is not cached**: each button press triggers a live HTTP call; repeated rapid presses can exhaust rate limits.
+- **No tray icon badge variants yet**: readiness now syncs to the tray tooltip, but the icon itself still does not switch between ready and warning states.
 - **Checklist labels are hard-coded in Chinese**: internationalisation requires changing the Rust source.
 - **No periodic background readiness check**: readiness is only evaluated on demand (at startup and after settings save), not continuously.
 
 ## Future Directions
 
-- Add a debounce or short-lived cache to `probe_provider` to prevent rapid successive calls.
-- Surface the probe result in the tray tooltip or icon badge when readiness changes.
+- Add separate ready/warning tray icon variants so readiness is visible even before the tooltip opens.
 - Internationalise checklist labels by moving them to the frontend rather than generating them in Rust.
 - Add a `health_check` Tauri command that can be polled by the frontend to detect provider connectivity degradation during a session.

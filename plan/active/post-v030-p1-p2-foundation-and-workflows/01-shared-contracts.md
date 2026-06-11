@@ -7,9 +7,10 @@ Dependencies: `4fe5f24` documentation baseline
 
 ## Active Task Lock
 
-Owner: none
-Starting main SHA: `4fe5f246e70fd2cc980d359cb40911cb684131a1`
-Status: NOT ASSIGNED - PLAN FROZEN, FIRST IMPLEMENTATION LOCK PENDING
+Owner: Codex
+Task: `P1A` shared-source implementation for structured startup/load error routing, readiness probe cache, and tray tooltip status sync
+Starting main SHA: `00d91ec20e5b20f04d26fd6fd2661bb4661d8d79`
+Status: IMPLEMENTED LOCALLY - SHARED CHECKS PASS, WINDOWS VERIFICATION AND PUSH PENDING
 
 ## Allowed Files
 
@@ -127,6 +128,11 @@ When an implementation lock is assigned for this plan, edits may be limited to:
 
 - This file names the final lock owner, starting SHA, allowed-file set, and handoff SHA for each completed stage.
 - Any contract amendment is recorded here and, if architectural, in `plan/decisions/`.
+- `P1A` completed local shared verification on macOS:
+  - `cargo test --manifest-path src-tauri/Cargo.toml`
+  - `npm run check`
+  - `npm test`
+- Current `P1A` implementation scope: `src-tauri/src/config.rs`, `src-tauri/src/profiles.rs`, `src-tauri/src/history.rs`, `src-tauri/src/lib.rs`, plus synchronized `docs/` and plan evidence files.
 
 ## Deviations
 

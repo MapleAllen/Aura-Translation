@@ -60,8 +60,11 @@ const MAX_SUPPRESSED_CLIPBOARD_TEXTS: usize = 4;
 type ConfigState = Arc<RwLock<AppConfig>>;
 type HistoryState = Arc<Mutex<history::TranslationHistoryStore>>;
 type ProfilesState = Arc<RwLock<profiles::TranslationProfilesStore>>;
+type ReadinessState = Arc<RwLock<ReadinessProbeCache>>;
 type UiReadyState = Arc<RwLock<HashSet<String>>>;
 type RuntimeState = Arc<Mutex<AppRuntimeState>>;
+
+const READINESS_PROBE_CACHE_TTL: Duration = Duration::from_secs(30);
 
 fn log_clipboard_action(message: impl AsRef<str>) {
     eprintln!("[aura][clipboard] {}", message.as_ref());
@@ -109,6 +112,19 @@ struct DaemonErrorPayload {
 #[derive(Clone, Serialize)]
 struct AuraGuardBlockedPayload {
     reason: String,
+}
+
+#[derive(Default)]
+struct ReadinessProbeCache {
+    fingerprint: Option<String>,
+    checked_at: Option<Instant>,
+    result: Option<readiness::ProviderProbeResult>,
+}
+
+struct StartupLoadIssues {
+    config: Vec<String>,
+    profiles: Vec<String>,
+    history: Vec<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -315,11 +331,20 @@ fn get_runtime_status(state: State<'_, ConfigState>) -> readiness::RuntimeStatus
 #[tauri::command]
 async fn probe_provider(
     client: State<'_, reqwest::Client>,
+    readiness_state: State<'_, ReadinessState>,
     mut config: AppConfig,
 ) -> Result<readiness::ProviderProbeResult, String> {
     let client = client.inner().clone();
     secrets::hydrate_api_key(&mut config)?;
-    Ok(readiness::probe_provider(&client, &config).await)
+    let fingerprint = readiness_probe_fingerprint(&config);
+
+    if let Some(cached) = get_cached_probe_result(readiness_state.inner(), &fingerprint) {
+        return Ok(cached);
+    }
+
+    let result = readiness::probe_provider(&client, &config).await;
+    store_probe_result(readiness_state.inner(), fingerprint, result.clone());
+    Ok(result)
 }
 
 #[tauri::command]
@@ -757,7 +782,9 @@ fn persist_config_and_sync(
         .unwrap()
         .sync_active_profile_from_config(config)?;
     *state.write().unwrap() = config.clone();
+    invalidate_readiness_probe_cache(app.state::<ReadinessState>().inner());
     sync_existing_windows(app, config);
+    sync_tray_runtime_status(app, config)?;
     emit_config_updated(app, config);
     Ok(())
 }
@@ -798,6 +825,38 @@ fn initialize_profiles_and_secrets(app: &AppHandle) -> Result<(), String> {
 
 fn emit_config_updated(app: &AppHandle, config: &AppConfig) {
     let _ = app.emit("config-updated", config.clone());
+}
+
+fn emit_startup_load_issues(app: &AppHandle, issues: &StartupLoadIssues) {
+    for message in &issues.config {
+        emit_daemon_error(app, "config-load-failed", message.clone(), true);
+        notify_shell_background(
+            app,
+            "Aura 配置提醒",
+            message.clone(),
+            &[TRANSLATION_WINDOW_LABEL, SETTINGS_WINDOW_LABEL],
+        );
+    }
+
+    for message in &issues.profiles {
+        emit_daemon_error(app, "profiles-load-failed", message.clone(), true);
+        notify_shell_background(
+            app,
+            "Aura 配置提醒",
+            message.clone(),
+            &[TRANSLATION_WINDOW_LABEL, SETTINGS_WINDOW_LABEL],
+        );
+    }
+
+    for message in &issues.history {
+        emit_daemon_error(app, "history-load-failed", message.clone(), true);
+        notify_shell_background(
+            app,
+            "Aura 配置提醒",
+            message.clone(),
+            &[TRANSLATION_WINDOW_LABEL, SETTINGS_WINDOW_LABEL],
+        );
+    }
 }
 
 fn emit_daemon_error(
@@ -1078,6 +1137,58 @@ fn notify_shell_background(
     _body: impl Into<String>,
     _window_labels: &[&str],
 ) {
+}
+
+fn readiness_probe_fingerprint(config: &AppConfig) -> String {
+    format!(
+        "{:?}\n{}\n{}\n{}",
+        config.provider,
+        config.api_base_url.trim(),
+        config.model.trim(),
+        config.api_key.trim()
+    )
+}
+
+fn get_cached_probe_result(
+    state: &ReadinessState,
+    fingerprint: &str,
+) -> Option<readiness::ProviderProbeResult> {
+    let cache = state.read().unwrap();
+    if cache.fingerprint.as_deref() != Some(fingerprint) {
+        return None;
+    }
+
+    let checked_at = cache.checked_at?;
+    if checked_at.elapsed() > READINESS_PROBE_CACHE_TTL {
+        return None;
+    }
+
+    cache.result.clone()
+}
+
+fn store_probe_result(
+    state: &ReadinessState,
+    fingerprint: String,
+    result: readiness::ProviderProbeResult,
+) {
+    let mut cache = state.write().unwrap();
+    cache.fingerprint = Some(fingerprint);
+    cache.checked_at = Some(Instant::now());
+    cache.result = Some(result);
+}
+
+fn invalidate_readiness_probe_cache(state: &ReadinessState) {
+    *state.write().unwrap() = ReadinessProbeCache::default();
+}
+
+fn sync_tray_runtime_status(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return Ok(());
+    };
+
+    let summary = readiness::build_runtime_status(config).summary;
+    tray.set_tooltip(Some(summary))
+        .map_err(|e| format!("Failed to refresh the tray tooltip: {}", e))
 }
 
 fn sync_existing_windows(app: &AppHandle, config: &AppConfig) {
@@ -1629,11 +1740,12 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
         .default_window_icon()
         .cloned()
         .ok_or_else(|| "Default window icon is missing.".to_string())?;
+    let tooltip = readiness::build_runtime_status(&current_config(app)).summary;
 
     let _tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .menu(&menu)
-        .tooltip("Aura 翻译")
+        .tooltip(tooltip)
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "settings" => {
@@ -1949,11 +2061,18 @@ async fn handle_hotkey_pressed(app: AppHandle) {
 pub fn run() {
     let http_client = reqwest::Client::new();
     let cancel_registry: CancellationRegistry = Arc::new(Mutex::new(HashMap::new()));
-    let config_state: ConfigState = Arc::new(RwLock::new(AppConfig::load()));
-    let history_state: HistoryState =
-        Arc::new(Mutex::new(history::TranslationHistoryStore::load()));
-    let profiles_state: ProfilesState =
-        Arc::new(RwLock::new(profiles::TranslationProfilesStore::load()));
+    let (config, config_load_issues) = AppConfig::load_with_issues();
+    let (history, history_load_issues) = history::TranslationHistoryStore::load_with_issues();
+    let (profiles, profiles_load_issues) = profiles::TranslationProfilesStore::load_with_issues();
+    let startup_load_issues = StartupLoadIssues {
+        config: config_load_issues,
+        profiles: profiles_load_issues,
+        history: history_load_issues,
+    };
+    let config_state: ConfigState = Arc::new(RwLock::new(config));
+    let history_state: HistoryState = Arc::new(Mutex::new(history));
+    let profiles_state: ProfilesState = Arc::new(RwLock::new(profiles));
+    let readiness_state: ReadinessState = Arc::new(RwLock::new(ReadinessProbeCache::default()));
     let ui_ready_state: UiReadyState = Arc::new(RwLock::new(HashSet::new()));
     let runtime_state: RuntimeState = Arc::new(Mutex::new(AppRuntimeState::default()));
 
@@ -1963,6 +2082,7 @@ pub fn run() {
         .manage(config_state.clone())
         .manage(history_state)
         .manage(profiles_state)
+        .manage(readiness_state)
         .manage(ui_ready_state)
         .manage(runtime_state)
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -2012,12 +2132,13 @@ pub fn run() {
             translate::translate_text,
             translate::cancel_translate
         ])
-        .setup(|app| {
+        .setup(move |app| {
             if let Err(err) = initialize_profiles_and_secrets(app.app_handle()) {
                 emit_daemon_error(app.app_handle(), "secret-storage-init-failed", err, true);
             }
 
             let startup_config = current_config(app.app_handle());
+            emit_startup_load_issues(app.app_handle(), &startup_load_issues);
 
             if let Err(err) = build_tray(app.app_handle()) {
                 emit_daemon_error(app.app_handle(), "tray-build-failed", err, false);

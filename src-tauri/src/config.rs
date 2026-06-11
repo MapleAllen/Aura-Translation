@@ -248,35 +248,36 @@ impl AppConfig {
     }
 
     /// Load config from disk, or return defaults if not found.
-    /// Logs parse/read errors before falling back to defaults.
-    pub fn load() -> Self {
+    /// Returns startup issues for later structured surfacing.
+    pub fn load_with_issues() -> (Self, Vec<String>) {
         let path = Self::config_path();
+        let mut issues = Vec::new();
         if path.exists() {
             match fs::read_to_string(&path) {
                 Ok(content) => match serde_json::from_str(&content) {
-                    Ok(config) => config,
+                    Ok(config) => (config, issues),
                     Err(e) => {
-                        eprintln!(
-                            "Failed to parse config at {}: {}. Using defaults.",
+                        issues.push(format!(
+                            "配置文件 {} 解析失败：{}。Aura 已回退到默认配置。",
                             path.display(),
                             e
-                        );
-                        Self::default()
+                        ));
+                        (Self::default(), issues)
                     }
                 },
                 Err(e) => {
-                    eprintln!(
-                        "Failed to read config at {}: {}. Using defaults.",
+                    issues.push(format!(
+                        "配置文件 {} 读取失败：{}。Aura 已回退到默认配置。",
                         path.display(),
                         e
-                    );
-                    Self::default()
+                    ));
+                    (Self::default(), issues)
                 }
             }
         } else {
             let config = Self::default();
             config.save().ok();
-            config
+            (config, issues)
         }
     }
 

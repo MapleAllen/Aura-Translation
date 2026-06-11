@@ -13,20 +13,20 @@ Translation History will become a searchable, configurable, and exportable recor
 - **Errors surface consistently**: history I/O failures must route through `daemon-error`, not `eprintln!`.
 - **Retry faithfulness is a goal**: replaying a history entry should eventually be able to use the original provider and model, not only the current active config.
 
-## Phase 1: Structured Error Routing — NOT STARTED
+## Phase 1: Structured Error Routing — DONE
 
-Status: **Not Started**
+Status: **Done**
 
 Goals:
 
 - Replace `eprintln!` in `TranslationHistoryStore::load()` with structured `daemon-error` events.
 - Ensure all history I/O failures are visible to the user.
 
-Remaining features:
+Completed work:
 
-- Emit a `daemon-error` event when `TranslationHistoryStore::load()` encounters a parse or read failure.
-- Include the file path and error description in the event payload.
-- Continue to start with an empty store after the error (no change to fallback behaviour).
+- `TranslationHistoryStore::load_with_issues()` now returns startup issues instead of logging with `eprintln!`.
+- `lib.rs` emits those issues through `daemon-error` during `setup()` while preserving the existing empty-store fallback.
+- When no Aura window is visible, startup history issues also surface via background OS notifications.
 
 ## Phase 2: Search and Filter — NOT STARTED
 

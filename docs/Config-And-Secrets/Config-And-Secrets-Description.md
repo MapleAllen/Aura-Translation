@@ -10,7 +10,7 @@ Config And Secrets is responsible for persisting all user preferences and managi
 
 ## Current Implementation
 
-At startup, `AppConfig::load()` reads `{config_dir}/aura-translation/config.json`. If the file is absent, defaults are written and returned. If the file is present but malformed, `eprintln!` logs the parse error and the default `AppConfig` is used. The loaded config is placed into a `ConfigState` (`Arc<RwLock<AppConfig>>`), so every Tauri command can access it with a read lock and the `save_config` command takes a write lock.
+At startup, `AppConfig::load_with_issues()` reads `{config_dir}/aura-translation/config.json`. If the file is absent, defaults are written and returned. If the file is present but malformed or unreadable, the loader returns a human-readable startup issue alongside the default `AppConfig`. `lib.rs` emits that issue through the shared `daemon-error` event path and also triggers a background notification when no Aura window is visible. The loaded config is then placed into a `ConfigState` (`Arc<RwLock<AppConfig>>`), so every Tauri command can access it with a read lock and the `save_config` command takes a write lock.
 
 `AppConfig` uses a hand-written `Deserialize` implementation (via the `Helper` internal struct) instead of the default derive. This lets the deserializer apply provider-aware defaults: `api_base_url` and `available_models` are both seeded from the selected `Provider`'s built-in defaults when their JSON fields are absent. The `model` field falls back to the first available model rather than staying blank.
 
@@ -68,7 +68,7 @@ Service-layer pattern. The Rust `config.rs` module owns the data model and on-di
   - `ApiKeyStorage`: serialised as `"system" | "plaintext_fallback" | "legacy_plaintext"`
   - `WindowPlacement`: optional `width`, `height`, `monitor` fields; stored as `f64` coordinates
   - `AppConfig`: derives `Serialize`; implements `Deserialize` manually via `Helper` struct for provider-aware defaults
-    - `AppConfig::load()`: reads disk or returns defaults; calls `hotkey::normalize_persisted_hotkey`
+    - `AppConfig::load_with_issues()`: reads disk or returns defaults plus startup issues; calls `hotkey::normalize_persisted_hotkey`
     - `AppConfig::save()`: serialises through `PersistedConfig`, omitting `api_key` for `System` storage; writes via `config.json.tmp` rename
 
 - `secrets.rs`
@@ -93,6 +93,7 @@ Service-layer pattern. The Rust `config.rs` module owns the data model and on-di
 
 - `src-tauri/src/lib.rs`
   - `ConfigState` (`Arc<RwLock<AppConfig>>`): managed Tauri state holding the in-memory config
+  - Startup load issues from `AppConfig::load_with_issues()` are emitted through `emit_daemon_error()` during `setup()`
   - `get_config()`: returns the current in-memory `AppConfig` (no disk I/O)
   - `save_config(config: AppConfig)`: calls `secrets::persist_api_key`, `secrets::migrate_legacy_plaintext_key`, then `AppConfig::save()`; re-registers the hotkey if the `hotkey` field changed; applies `window_pinned` to the live Tauri window
   - `load_provider_api_key(provider)`: calls `secrets::load_provider_api_key`; exposed as a Tauri command
@@ -110,7 +111,7 @@ Service-layer pattern. The Rust `config.rs` module owns the data model and on-di
 
 ## Current Limitations
 
-- **Config parse/read failures use `eprintln!`**: errors during startup config load are not routed through the `daemon-error` event system visible to the frontend.
+- **Startup config failures surface after Tauri setup begins**: load issues are now emitted through `daemon-error`, but if no Aura window is visible the user may first see an OS notification before opening Settings.
 - **No config schema version field**: there is no `schema_version` or `config_version` field; future breaking schema changes must be handled through careful defaults-based migration.
 - **`WindowPlacement` is stored but not validated**: coordinates are written from whatever the window reports at close time; no bounds checking against current monitor geometry on restore.
 - **Legacy plaintext migration is one-shot on save**: if the user never opens Settings after updating from a version that used `LegacyPlaintext`, the migration is deferred until the next `save_config` call.
@@ -118,7 +119,6 @@ Service-layer pattern. The Rust `config.rs` module owns the data model and on-di
 
 ## Future Directions
 
-- Emit config load errors through the structured `daemon-error` event pathway.
 - Add a `schema_version` field to `config.json` to enable explicit migration paths.
 - Validate and clamp `WindowPlacement` coordinates against the connected monitor geometry on restore.
 - Support per-profile API key storage mode (currently all profiles share the same storage policy as the active config).

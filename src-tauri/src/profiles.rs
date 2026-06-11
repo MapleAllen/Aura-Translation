@@ -76,34 +76,35 @@ impl Default for TranslationProfilesStore {
 }
 
 impl TranslationProfilesStore {
-    pub fn load() -> Self {
+    pub fn load_with_issues() -> (Self, Vec<String>) {
         let path = profiles_path();
+        let mut issues = Vec::new();
         if path.exists() {
             match fs::read_to_string(&path) {
                 Ok(content) => match serde_json::from_str::<Self>(&content) {
-                    Ok(store) => store,
+                    Ok(store) => (store, issues),
                     Err(err) => {
-                        eprintln!(
-                            "Failed to parse translation profiles at {}: {}. Starting empty.",
+                        issues.push(format!(
+                            "翻译配置方案文件 {} 解析失败：{}。Aura 已以空方案状态启动。",
                             path.display(),
                             err
-                        );
-                        Self::default()
+                        ));
+                        (Self::default(), issues)
                     }
                 },
                 Err(err) => {
-                    eprintln!(
-                        "Failed to read translation profiles at {}: {}. Starting empty.",
+                    issues.push(format!(
+                        "翻译配置方案文件 {} 读取失败：{}。Aura 已以空方案状态启动。",
                         path.display(),
                         err
-                    );
-                    Self::default()
+                    ));
+                    (Self::default(), issues)
                 }
             }
         } else {
             let store = Self::default();
             let _ = store.save();
-            store
+            (store, issues)
         }
     }
 

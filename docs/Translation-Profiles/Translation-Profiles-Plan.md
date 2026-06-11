@@ -13,20 +13,20 @@ Translation Profiles will become a first-class multi-credential, fully portable 
 - **Errors are surfaced, not swallowed**: parse and write failures must route through `daemon-error`, not `eprintln!`.
 - **Provider-independent key isolation is a goal**: two profiles for the same provider should eventually be able to carry separate credentials.
 
-## Phase 1: Structured Error Routing — NOT STARTED
+## Phase 1: Structured Error Routing — DONE
 
-Status: **Not Started**
+Status: **Done**
 
 Goals:
 
 - Replace `eprintln!` in `TranslationProfilesStore::load()` with structured `daemon-error` events.
 - Ensure all profile I/O failures are visible to the user in the notification center.
 
-Remaining features:
+Completed work:
 
-- Emit a `daemon-error` event when `TranslationProfilesStore::load()` encounters a parse or read failure.
-- Include the file path and error description in the event payload.
-- Continue to start with an empty store after the error (no change to fallback behaviour).
+- `TranslationProfilesStore::load_with_issues()` now returns startup issues instead of logging with `eprintln!`.
+- `lib.rs` emits those issues through `daemon-error` during `setup()` while preserving the existing empty-store fallback.
+- When no Aura window is visible, startup profile issues also surface via background OS notifications.
 
 ## Phase 2: Per-Profile Independent API Keys — NOT STARTED
 

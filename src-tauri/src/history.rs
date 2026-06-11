@@ -43,34 +43,35 @@ pub struct TranslationHistoryStore {
 }
 
 impl TranslationHistoryStore {
-    pub fn load() -> Self {
+    pub fn load_with_issues() -> (Self, Vec<String>) {
         let path = history_path();
+        let mut issues = Vec::new();
         if path.exists() {
             match fs::read_to_string(&path) {
                 Ok(content) => match serde_json::from_str::<Vec<TranslationHistoryEntry>>(&content) {
-                    Ok(entries) => Self { entries },
+                    Ok(entries) => (Self { entries }, issues),
                     Err(err) => {
-                        eprintln!(
-                            "Failed to parse translation history at {}: {}. Starting empty.",
+                        issues.push(format!(
+                            "翻译历史文件 {} 解析失败：{}。Aura 已以空历史状态启动。",
                             path.display(),
                             err
-                        );
-                        Self::default()
+                        ));
+                        (Self::default(), issues)
                     }
                 },
                 Err(err) => {
-                    eprintln!(
-                        "Failed to read translation history at {}: {}. Starting empty.",
+                    issues.push(format!(
+                        "翻译历史文件 {} 读取失败：{}。Aura 已以空历史状态启动。",
                         path.display(),
                         err
-                    );
-                    Self::default()
+                    ));
+                    (Self::default(), issues)
                 }
             }
         } else {
             let store = Self::default();
             let _ = store.save();
-            store
+            (store, issues)
         }
     }
 

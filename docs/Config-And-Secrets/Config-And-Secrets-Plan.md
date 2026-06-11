@@ -13,21 +13,21 @@ Config And Secrets will become a reliable, versioned, and cross-platform prefere
 - **Error surfaces are consistent**: config I/O failures must route through the same `daemon-error` pathway used by other backend failures, not silently fall back.
 - **Storage parity is a goal**: behaviour differences between Windows, macOS, and Linux must be minimised; any gap is a known limitation, not a design choice.
 
-## Phase 1: Structured Error Routing — NOT STARTED
+## Phase 1: Structured Error Routing — DONE
 
-Status: **Not Started**
+Status: **Done**
 
 Goals:
 
 - Replace `eprintln!` in `AppConfig::load()` and `TranslationProfilesStore::load()` with structured `daemon-error` events.
 - Surface config parse and read failures to the frontend notification system so users see actionable messages instead of silent fallbacks.
 
-Remaining features:
+Completed work:
 
-- Emit a `daemon-error` event when `AppConfig::load()` encounters a parse or read failure, including the path and error detail.
-- Emit a `daemon-error` event when `TranslationProfilesStore::load()` encounters a parse or read failure.
-- Ensure the daemon still starts with defaults after emitting the error (no change to the fallback behaviour, only the reporting).
-- Add a frontend handler for `daemon-error` that displays a dismissible notification with the file path and a suggestion to check Settings.
+- `AppConfig::load_with_issues()` now returns startup issues instead of logging with `eprintln!`.
+- `lib.rs` emits those issues through `daemon-error` during `setup()` while preserving the existing fallback-to-default behaviour.
+- When no Aura window is visible, startup load issues also surface via background OS notifications.
+- Existing frontend `daemon-error` listeners continue to render the issue inside the notification center when a window is open.
 
 ## Phase 2: Schema Versioning and Migration — NOT STARTED
 

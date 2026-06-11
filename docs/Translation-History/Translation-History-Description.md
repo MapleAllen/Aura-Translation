@@ -10,7 +10,7 @@ Translation History gives users a persistent audit log of their recent translati
 
 ## Current Implementation
 
-`TranslationHistoryStore` is an in-memory ordered list of `TranslationHistoryEntry` records, backed by `{config_dir}/aura-translation/history.json`. At startup, `TranslationHistoryStore::load()` reads the file. If absent, an empty store is written and returned. Parse or read failures are logged with `eprintln!` and an empty store is used.
+`TranslationHistoryStore` is an in-memory ordered list of `TranslationHistoryEntry` records, backed by `{config_dir}/aura-translation/history.json`. At startup, `TranslationHistoryStore::load_with_issues()` reads the file. If absent, an empty store is written and returned. Parse or read failures are returned as startup issues while an empty store is used. `lib.rs` then emits those issues through the shared `daemon-error` event path and a background notification when no Aura window is visible.
 
 Every call to `record_success()` or `record_error()` creates a new `TranslationHistoryEntry` and calls `insert_entry()`, which prepends the entry to the front of the list (newest-first ordering) and immediately persists the updated list to disk. If the list exceeds 50 entries after insertion, it is truncated to `MAX_HISTORY_ENTRIES = 50`.
 
@@ -63,7 +63,7 @@ Service-layer pattern. The Rust `history.rs` module owns the `TranslationHistory
     - `usage: Option<TranslationUsage>` — `#[serde(default)]` so older entries deserialise cleanly
     - `status: TranslationHistoryStatus`, `created_at_ms: u64`
   - `TranslationHistoryStore`: `{ entries: Vec<TranslationHistoryEntry> }` (private field, public methods only)
-    - `load()`: reads `history.json` or returns empty default
+    - `load_with_issues()`: reads `history.json` or returns empty default plus startup issues
     - `list()`: clones and returns all entries
     - `find(entry_id)`: linear scan by ID
     - `record_success(...)`: builds and inserts a Success entry
@@ -97,6 +97,7 @@ Service-layer pattern. The Rust `history.rs` module owns the `TranslationHistory
 
 - `src-tauri/src/lib.rs`
   - `HistoryState` (`Mutex<TranslationHistoryStore>`): managed Tauri state
+  - Startup load issues from `TranslationHistoryStore::load_with_issues()` are emitted through `emit_daemon_error()` during `setup()`
   - `get_translation_history()`: returns `store.list()`
   - `delete_translation_history_entry(entry_id)`: calls `store.delete(entry_id)`
   - `clear_translation_history()`: calls `store.clear()`
@@ -113,7 +114,7 @@ Service-layer pattern. The Rust `history.rs` module owns the `TranslationHistory
 
 ## Current Limitations
 
-- **`eprintln!` on parse failure**: history file parse errors are not routed through `daemon-error`.
+- **Startup history failures surface after Tauri setup begins**: load issues are emitted through `daemon-error`, but if no Aura window is visible the user may first see an OS notification before opening Settings.
 - **In-memory only during session**: history entries recorded during a session are only visible to the frontend after a `translation-history-updated` event; there is no live reactive store that updates automatically.
 - **Retry re-uses stored provider and model, not the current profile**: when the user retries from history, the retry uses the stored `source_text` but the current active provider/model, not the provider/model recorded in the entry.
 - **No search or filter**: the history list has no text search, language filter, or status filter.
@@ -122,7 +123,6 @@ Service-layer pattern. The Rust `history.rs` module owns the `TranslationHistory
 
 ## Future Directions
 
-- Emit history parse failures through `daemon-error` for consistent error surfacing.
 - Add text search and status/language filter controls to `HistoryList.svelte`.
 - Make the history cap configurable in `AppConfig` (with a reasonable default of 50).
 - Add a history export action that writes the entry list to a user-chosen JSON or CSV file.

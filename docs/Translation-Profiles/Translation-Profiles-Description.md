@@ -10,7 +10,7 @@ Translation Profiles lets users save multiple provider-and-language setups under
 
 ## Current Implementation
 
-`TranslationProfilesStore` is the central data structure: a list of `TranslationProfile` records plus an `active_profile_id` string. At startup, `TranslationProfilesStore::load()` reads `{config_dir}/aura-translation/profiles.json`. If the file is absent, a default store is written and returned. If parsing fails, `eprintln!` logs the error and an empty store is used.
+`TranslationProfilesStore` is the central data structure: a list of `TranslationProfile` records plus an `active_profile_id` string. At startup, `TranslationProfilesStore::load_with_issues()` reads `{config_dir}/aura-translation/profiles.json`. If the file is absent, a default store is written and returned. Parse or read failures are returned as startup issues while an empty store is used. `lib.rs` then emits those issues through the shared `daemon-error` event path and a background notification when no Aura window is visible.
 
 `ensure_seeded_from_config()` runs once at startup after both the config and profiles are loaded. If the profiles list is empty, it creates a default profile from the current `AppConfig` and saves it. If the `active_profile_id` references a profile that no longer exists, it falls back to the first available profile and applies it to `AppConfig`. This guarantees that after startup, `AppConfig` always reflects the active profile's settings.
 
@@ -58,7 +58,7 @@ Service-layer pattern. The Rust `profiles.rs` module owns the `TranslationProfil
     - `from_config(id, name, config)`: snapshots the translatable fields from `AppConfig`; omits `api_key` when `api_key_storage` is `System`
     - `apply_to_config(config)`: writes all profile fields back into `AppConfig`, including `active_profile_id`
   - `TranslationProfilesStore`: `active_profile_id` + `Vec<TranslationProfile>`
-    - `load()`: reads `profiles.json` or returns an empty default
+    - `load_with_issues()`: reads `profiles.json` or returns an empty default plus startup issues
     - `ensure_seeded_from_config(config)`: seeds on empty or fixes a stale `active_profile_id`
     - `sync_active_profile_from_config(config)`: updates the active profile snapshot
     - `create_and_activate(name, config)`: validates non-empty name, generates a new ID, inserts at index 0, saves
@@ -86,6 +86,7 @@ Service-layer pattern. The Rust `profiles.rs` module owns the `TranslationProfil
 
 - `src-tauri/src/lib.rs`
   - `ProfilesState` (`Mutex<TranslationProfilesStore>`): managed Tauri state
+  - Startup load issues from `TranslationProfilesStore::load_with_issues()` are emitted through `emit_daemon_error()` during `setup()`
   - `get_translation_profiles()`: returns a snapshot of the store
   - `create_translation_profile(config, name)`: calls `store.create_and_activate`, then `save_config` to sync the newly active profile into `AppConfig`
   - `rename_translation_profile(profile_id, name)`: calls `store.rename`
@@ -104,7 +105,7 @@ Service-layer pattern. The Rust `profiles.rs` module owns the `TranslationProfil
 
 ## Current Limitations
 
-- **`eprintln!` on parse failure**: profiles parse errors at startup are not routed through `daemon-error`.
+- **Startup profile failures surface after Tauri setup begins**: load issues are emitted through `daemon-error`, but if no Aura window is visible the user may first see an OS notification before opening Settings.
 - **No profile ordering control**: profiles are always inserted at index 0 on create; there is no user-facing drag-to-reorder capability.
 - **Profile API keys are not independently managed in the keychain**: when a profile stores `api_key_storage: System`, the key is looked up under the provider's single system account (`"provider:deepseek"` etc.). Two profiles for the same provider cannot hold independent keys in the system store.
 - **Profile deletion minimum is 1**: at least one profile must exist at all times. There is no way to reset to "no profiles" state.
@@ -112,7 +113,6 @@ Service-layer pattern. The Rust `profiles.rs` module owns the `TranslationProfil
 
 ## Future Directions
 
-- Emit profile parse failures through `daemon-error` for consistent error surfacing.
 - Add per-profile system keychain entries keyed by both provider and profile ID to support multiple keys for the same provider.
 - Add profile import/export as JSON for cross-machine config sharing.
 - Support user-controlled profile ordering via drag-to-reorder in the Settings panel.
