@@ -24,14 +24,18 @@
 
 ## Windows Codex Review
 
-Status: PARTIAL TARGET-HOST VERIFICATION RECORDED ON `e2681b6` (`569d229` remains the shared runtime/source handoff; `e2681b6` is plan-sync only)
+Status: PARTIAL TARGET-HOST VERIFICATION RECORDED ON SHARED `main` (`569d229` remains the shared runtime/source handoff; `cba33c9` is the current plan baseline that records the Windows evidence gathered on `e2681b6`)
 Blocking findings:
 
-- Verification environment blocker: this Codex Windows desktop session launches `aura-translation.exe`, but does not expose an inspectable tray shell handle (`FindWindow('Shell_TrayWnd') = 0`). That blocks direct observation of tray tooltip/state, Settings-window probe-cache behavior, and recoverable startup notifications even though isolated corrupt-file launches stayed alive and responding.
+- none recorded at the current shared baseline
+
+Open follow-up:
+
+- This Codex Windows desktop session launches `aura-translation.exe`, but does not expose an inspectable tray shell handle (`FindWindow('Shell_TrayWnd') = 0`). That deferred direct observation of tray tooltip/state, Settings-window probe-cache behavior, and recoverable startup notifications even though isolated corrupt-file launches stayed alive and responding. The user accepted this as a non-blocking Windows follow-up to be re-run later from an interactive desktop session.
 
 ## macOS Codex Review
 
-Status: P1A SHARED-SOURCE REVIEW COMPLETE; MANUAL TARGET-HOST EVIDENCE STILL PENDING ON `89a7bf2`
+Status: P1A SHARED-SOURCE REVIEW COMPLETE; MANUAL TARGET-HOST EVIDENCE STILL PENDING ON CURRENT SHARED `main` (`cba33c9`)
 Blocking findings:
 
 - none recorded yet
@@ -71,7 +75,7 @@ Blocking findings:
 - [ ] Shared and platform-specific tests pass.
 - [ ] Windows and macOS CI pass.
 - [ ] Required target-host evidence is recorded.
-- [ ] Windows tray/UI rows blocked by the current verifier environment are re-run from an interactive desktop session with an inspectable tray shell before the next implementation lock opens.
+- [ ] Windows tray/UI rows blocked by the current verifier environment are re-run later from an interactive desktop session before final plan closure.
 - [ ] Blocking review findings are resolved.
 - [ ] `docs/` reflects the implemented current state.
 - [ ] Remaining risks and deviations are recorded.
