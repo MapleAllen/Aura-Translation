@@ -24,10 +24,10 @@
 
 ## Windows Codex Review
 
-Status: PENDING TARGET-HOST VERIFICATION ON `89a7bf2`
+Status: PARTIAL TARGET-HOST VERIFICATION RECORDED ON `e2681b6` (`569d229` remains the shared runtime/source handoff; `e2681b6` is plan-sync only)
 Blocking findings:
 
-- none recorded yet
+- Verification environment blocker: this Codex Windows desktop session launches `aura-translation.exe`, but does not expose an inspectable tray shell handle (`FindWindow('Shell_TrayWnd') = 0`). That blocks direct observation of tray tooltip/state, Settings-window probe-cache behavior, and recoverable startup notifications even though isolated corrupt-file launches stayed alive and responding.
 
 ## macOS Codex Review
 
@@ -46,6 +46,7 @@ Blocking findings:
 
 - Update the touched module description and plan files under `docs/` after implementation evidence exists.
 - Keep `plan/active/` focused on execution state, not on replacing module documentation.
+- Windows verifier backfilled `04-verification.md` on `e2681b6` with passing local command results (`npm run check`, `npm test`, `cargo test --manifest-path src-tauri/Cargo.toml`) and with corrupt-startup evidence gathered from isolated `%APPDATA%` launches.
 
 ## Main-Branch Handoff Order
 
@@ -70,6 +71,7 @@ Blocking findings:
 - [ ] Shared and platform-specific tests pass.
 - [ ] Windows and macOS CI pass.
 - [ ] Required target-host evidence is recorded.
+- [ ] Windows tray/UI rows blocked by the current verifier environment are re-run from an interactive desktop session with an inspectable tray shell before the next implementation lock opens.
 - [ ] Blocking review findings are resolved.
 - [ ] `docs/` reflects the implemented current state.
 - [ ] Remaining risks and deviations are recorded.
