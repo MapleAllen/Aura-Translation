@@ -70,6 +70,7 @@ Starting SHA: `d141ac27d493c26fa272b9ba5855a8574ff9d91f`
   - `npm run tauri build` (`src-tauri/target/release/bundle/macos/Aura Translation.app`)
 - Unit and component coverage confirms profile-scoped secret isolation, legacy provider fallback, backward-compatible history metadata, client-side filters, and explicit retry intent.
 - P2 review added regression coverage for plaintext-fallback replay using the original profile key without changing the active profile.
+- Reviewed P2 shared-source handoff commit: `19a1bad`.
 
 ## Deviations and Remaining Risks
 

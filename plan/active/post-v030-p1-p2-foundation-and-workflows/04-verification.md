@@ -8,7 +8,7 @@
 | `npm test` | PASS | PASS | Local Windows run passed on shared verification baseline `e2681b6` with 47 tests; local macOS P2 working-tree run passed with 49 tests |
 | `cargo test --manifest-path src-tauri/Cargo.toml` | PASS | PASS | Local Windows run passed on shared verification baseline `e2681b6` with 48 Rust tests; local macOS P2 working-tree run passed with 57 tests after clearing proxy variables for localhost WireMock |
 | Production build | NOT RUN | PASS | Windows CI bundle/build still pending; macOS `npm run tauri build` produced `Aura Translation.app` from the P2 working tree |
-| Final shared CI SHA | NOT RUN | NOT RUN | Both host gates must pass on the same final `main` commit |
+| Final shared CI SHA | NOT RUN | NOT RUN | Reviewed P2 shared-source handoff is `19a1bad`; both host gates must still pass on the same final `main` commit |
 
 ## Manual Platform Checks
 
