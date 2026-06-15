@@ -1,9 +1,9 @@
 # macOS Implementation and Verification
 
-Owner: TBD
+Owner: macOS implementation agent
 Dependencies: Shared contracts frozen
 Working branch: `main`
-Starting SHA: RESOLVE AND RECORD BEFORE SOURCE EDITS
+Starting SHA: `d141ac27d493c26fa272b9ba5855a8574ff9d91f`
 
 ## Allowed Files
 
@@ -62,7 +62,15 @@ Starting SHA: RESOLVE AND RECORD BEFORE SOURCE EDITS
   - `npm run check`
   - `npm test`
 - `04-verification.md` has been backfilled for the macOS automated checks completed so far.
+- Complete `P2` working-tree implementation started from `d141ac27d493c26fa272b9ba5855a8574ff9d91f`.
+- Local `P2` shared checks passed:
+  - `npm run check`
+  - `npm test` (49 tests)
+  - `cargo test --manifest-path src-tauri/Cargo.toml` with proxy variables cleared for localhost WireMock (57 tests)
+  - `npm run tauri build` (`src-tauri/target/release/bundle/macos/Aura Translation.app`)
+- Unit and component coverage confirms profile-scoped secret isolation, legacy provider fallback, backward-compatible history metadata, client-side filters, and explicit retry intent.
+- P2 review added regression coverage for plaintext-fallback replay using the original profile key without changing the active profile.
 
 ## Deviations and Remaining Risks
 
-- None yet.
+- Interactive Keychain migration and end-to-end history replay still require target-host manual verification after review.

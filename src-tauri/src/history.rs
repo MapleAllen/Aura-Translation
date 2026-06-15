@@ -32,6 +32,10 @@ pub struct TranslationHistoryEntry {
     pub provider: Provider,
     pub model: String,
     #[serde(default)]
+    pub api_base_url: String,
+    #[serde(default)]
+    pub profile_id: Option<String>,
+    #[serde(default)]
     pub usage: Option<TranslationUsage>,
     pub status: TranslationHistoryStatus,
     pub created_at_ms: u64,
@@ -87,6 +91,8 @@ impl TranslationHistoryStore {
         target_lang: &str,
         provider: &Provider,
         model: &str,
+        api_base_url: &str,
+        profile_id: Option<&str>,
         usage: Option<TranslationUsage>,
     ) -> Result<(), String> {
         self.insert_entry(TranslationHistoryEntry {
@@ -98,6 +104,8 @@ impl TranslationHistoryStore {
             target_lang: target_lang.to_string(),
             provider: provider.clone(),
             model: model.to_string(),
+            api_base_url: api_base_url.to_string(),
+            profile_id: profile_id.map(str::to_string),
             usage,
             status: TranslationHistoryStatus::Success,
             created_at_ms: current_timestamp_ms(),
@@ -112,6 +120,8 @@ impl TranslationHistoryStore {
         target_lang: &str,
         provider: &Provider,
         model: &str,
+        api_base_url: &str,
+        profile_id: Option<&str>,
         usage: Option<TranslationUsage>,
     ) -> Result<(), String> {
         self.insert_entry(TranslationHistoryEntry {
@@ -123,6 +133,8 @@ impl TranslationHistoryStore {
             target_lang: target_lang.to_string(),
             provider: provider.clone(),
             model: model.to_string(),
+            api_base_url: api_base_url.to_string(),
+            profile_id: profile_id.map(str::to_string),
             usage,
             status: TranslationHistoryStatus::Error,
             created_at_ms: current_timestamp_ms(),
@@ -198,6 +210,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn older_entries_without_retry_metadata_remain_readable() {
+        let entry: TranslationHistoryEntry = serde_json::from_str(
+            r#"{
+                "id":"history-legacy",
+                "source_text":"hello",
+                "translated_text":"你好",
+                "error_message":null,
+                "source_lang":"English",
+                "target_lang":"Chinese",
+                "provider":"deepseek",
+                "model":"deepseek-chat",
+                "usage":null,
+                "status":"success",
+                "created_at_ms":1
+            }"#,
+        )
+        .expect("legacy history entry should deserialize");
+
+        assert!(entry.api_base_url.is_empty());
+        assert_eq!(entry.profile_id, None);
+    }
+
+    #[test]
     fn records_entries_newest_first_and_prunes_to_limit() {
         let mut store = TranslationHistoryStore::default();
 
@@ -210,6 +245,8 @@ mod tests {
                     "Chinese",
                     &Provider::DeepSeek,
                     "deepseek-chat",
+                    "https://api.deepseek.com",
+                    Some("default"),
                     None,
                 )
                 .expect("history record should succeed");
@@ -232,6 +269,8 @@ mod tests {
                 "Chinese",
                 &Provider::OpenRouter,
                 "mistral",
+                "https://openrouter.ai/api",
+                Some("openrouter"),
                 None,
             )
             .expect("history record should succeed");
@@ -248,6 +287,8 @@ mod tests {
                 "Chinese",
                 &Provider::DeepSeek,
                 "deepseek-chat",
+                "https://api.deepseek.com",
+                Some("default"),
                 Some(TranslationUsage {
                     prompt_tokens: 12,
                     completion_tokens: 4,

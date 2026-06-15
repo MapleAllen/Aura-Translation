@@ -17,6 +17,8 @@ export type TranslationHistoryEntry = {
   target_lang: string;
   provider: Provider;
   model: string;
+  api_base_url: string;
+  profile_id: string | null;
   usage: TranslationUsage | null;
   status: TranslationHistoryStatus;
   created_at_ms: number;

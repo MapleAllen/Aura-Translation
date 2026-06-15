@@ -112,6 +112,13 @@ impl TranslationProfilesStore {
         self.clone()
     }
 
+    pub fn find(&self, profile_id: &str) -> Option<TranslationProfile> {
+        self.profiles
+            .iter()
+            .find(|profile| profile.id == profile_id)
+            .cloned()
+    }
+
     pub fn ensure_seeded_from_config(&mut self, config: &mut AppConfig) -> Result<(), String> {
         if self.profiles.is_empty() {
             let profile = TranslationProfile::from_config(

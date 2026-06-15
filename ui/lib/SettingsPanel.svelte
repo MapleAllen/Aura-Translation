@@ -213,7 +213,10 @@
         }),
         newProvider === 'ollama'
           ? Promise.resolve('')
-          : invoke<string>('load_provider_api_key', { provider: newProvider }),
+          : invoke<string>('load_provider_api_key', {
+              provider: newProvider,
+              profileId: config.active_profile_id,
+            }),
       ]);
       config.api_base_url = defaults.base_url;
       config.available_models = defaults.models;
@@ -236,9 +239,9 @@
     }
   }
 
-  async function retryHistoryEntry(entryId: string) {
+  async function retryHistoryEntry(entryId: string, retryWithOriginal: boolean) {
     try {
-      await invoke('replay_translation_history_entry', { entryId });
+      await invoke('replay_translation_history_entry', { entryId, retryWithOriginal });
     } catch (e) {
       panelErrorMessage = '无法重试选中的历史记录。';
       console.error('Failed to replay history entry:', { error: e });

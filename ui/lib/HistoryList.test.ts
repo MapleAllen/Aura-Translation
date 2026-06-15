@@ -12,6 +12,8 @@ const sampleEntry: TranslationHistoryEntry = {
   target_lang: 'Chinese',
   provider: 'deepseek',
   model: 'deepseek-chat',
+  api_base_url: 'https://api.deepseek.com',
+  profile_id: 'default',
   usage: { prompt_tokens: 5, completion_tokens: 4, total_tokens: 9 },
   status: 'success',
   created_at_ms: Date.UTC(2026, 0, 1, 12, 0, 0),
@@ -74,9 +76,50 @@ describe('HistoryList operator log view', () => {
     await fireEvent.click(screen.getByTestId('history-copy-entry-1'));
     await fireEvent.click(screen.getByTestId('history-delete-entry-1'));
 
-    expect(onretry).toHaveBeenCalledWith('entry-1');
+    expect(onretry).toHaveBeenCalledWith('entry-1', true);
     expect(oncopy).toHaveBeenCalledWith('你好世界');
     expect(ondelete).toHaveBeenCalledWith('entry-1');
+  });
+
+  it('filters entries by text, status, and language pair', async () => {
+    const errorEntry: TranslationHistoryEntry = {
+      ...sampleEntry,
+      id: 'entry-2',
+      source_text: 'Goodbye',
+      translated_text: '',
+      error_message: 'Network error',
+      source_lang: 'Japanese',
+      target_lang: 'English',
+      status: 'error',
+    };
+    render(HistoryList, { entries: [sampleEntry, errorEntry] });
+
+    await fireEvent.input(screen.getByTestId('history-search'), {
+      target: { value: 'hello' },
+    });
+    expect(screen.getByTestId('history-list')).toHaveTextContent('Hello world');
+    expect(screen.getByTestId('history-list')).not.toHaveTextContent('Goodbye');
+
+    await fireEvent.input(screen.getByTestId('history-search'), { target: { value: '' } });
+    await fireEvent.change(screen.getByTestId('history-status-filter'), {
+      target: { value: 'error' },
+    });
+    expect(screen.getByTestId('history-list')).toHaveTextContent('Goodbye');
+    expect(screen.getByTestId('history-list')).not.toHaveTextContent('Hello world');
+
+    await fireEvent.change(screen.getByTestId('history-language-filter'), {
+      target: { value: '["English","Chinese"]' },
+    });
+    expect(screen.getByTestId('history-no-results')).toBeInTheDocument();
+  });
+
+  it('shows the original provider and model in the retry tooltip', () => {
+    render(HistoryList, { entries: [sampleEntry] });
+
+    expect(screen.getByTestId('history-retry-entry-1')).toHaveAttribute(
+      'title',
+      '使用原始配置重试：DeepSeek · deepseek-chat',
+    );
   });
 
   it('calls onclear only when the user confirms', async () => {

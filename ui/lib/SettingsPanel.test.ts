@@ -60,6 +60,8 @@ const baseHistoryEntries = [
     target_lang: 'Chinese',
     provider: 'deepseek',
     model: 'deepseek-chat',
+    api_base_url: 'https://api.deepseek.com',
+    profile_id: 'default',
     usage: {
       prompt_tokens: 9,
       completion_tokens: 4,
@@ -462,6 +464,7 @@ describe('SettingsPanel operator console layout', () => {
 
     expect(invokeMock).toHaveBeenCalledWith('load_provider_api_key', {
       provider: 'openrouter',
+      profileId: 'default',
     });
     await waitFor(() => {
       expect(screen.getByDisplayValue('sk-loaded')).toBeInTheDocument();
@@ -544,6 +547,7 @@ describe('SettingsPanel operator console layout', () => {
     await fireEvent.click(screen.getByTestId('history-retry-history-1'));
     expect(invokeMock).toHaveBeenCalledWith('replay_translation_history_entry', {
       entryId: 'history-1',
+      retryWithOriginal: true,
     });
 
     await fireEvent.click(screen.getByTestId('history-copy-history-1'));

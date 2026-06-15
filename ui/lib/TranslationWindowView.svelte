@@ -68,6 +68,11 @@
     usage: TranslationUsage;
   };
 
+  type HistoryReplayPayload = {
+    text: string;
+    config: AppConfig;
+  };
+
   type PasteBackStatus = {
     available: boolean;
   };
@@ -257,6 +262,7 @@
         requestId,
         apiBaseUrl: requestConfig.api_base_url,
         provider: requestConfig.provider,
+        profileId: requestConfig.active_profile_id,
       });
     } catch (e) {
       if (isCurrentRequest(requestId) && errorMessage === '') {
@@ -466,6 +472,20 @@
           if (!loadedConfig) return;
           lastRequestConfig = cloneAppConfig(loadedConfig);
           await startTranslation(loadedConfig);
+        }),
+      );
+
+      unlisteners.push(
+        await listen<HistoryReplayPayload>('trigger-translate-with-override', async (event) => {
+          const text = event.payload.text?.trim();
+          if (!text) return;
+
+          await cancelCurrentTranslation();
+          currentRequestId += 1;
+          translatedTextTriggerText = text;
+          draftSourceText = text;
+          showBubble();
+          await startTranslation(cloneAppConfig(event.payload.config), text);
         }),
       );
 

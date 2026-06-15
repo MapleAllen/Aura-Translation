@@ -10,7 +10,7 @@ mod translate;
 
 use capabilities::get_system_capabilities;
 
-use config::{AppConfig, Provider, WindowPlacement};
+use config::{ApiKeyStorage, AppConfig, Provider, WindowPlacement};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
@@ -110,6 +110,12 @@ struct DaemonErrorPayload {
 }
 
 #[derive(Clone, Serialize)]
+struct HistoryReplayPayload {
+    text: String,
+    config: AppConfig,
+}
+
+#[derive(Clone, Serialize)]
 struct AuraGuardBlockedPayload {
     reason: String,
 }
@@ -162,8 +168,8 @@ fn get_provider_defaults(provider: Provider) -> ProviderDefaults {
 
 
 #[tauri::command]
-fn load_provider_api_key(provider: Provider) -> Result<String, String> {
-    secrets::load_provider_api_key(&provider)
+fn load_provider_api_key(provider: Provider, profile_id: Option<String>) -> Result<String, String> {
+    secrets::load_provider_api_key(&provider, profile_id.as_deref())
 }
 
 #[tauri::command]
@@ -311,7 +317,10 @@ async fn clear_translation_history(
 async fn replay_translation_history_entry(
     app: AppHandle,
     state: State<'_, HistoryState>,
+    config_state: State<'_, ConfigState>,
+    profiles_state: State<'_, ProfilesState>,
     entry_id: String,
+    retry_with_original: bool,
 ) -> Result<(), String> {
     let history_state = state.inner().clone();
     let entry = history_state
@@ -319,8 +328,62 @@ async fn replay_translation_history_entry(
         .await
         .find(&entry_id)
         .ok_or_else(|| format!("History entry '{}' was not found.", entry_id))?;
-    trigger_translation(app, entry.source_text).await;
+    if !retry_with_original {
+        trigger_translation(app, entry.source_text).await;
+        return Ok(());
+    }
+
+    let replay_api_key =
+        resolve_history_replay_api_key(&entry, &profiles_state.read().unwrap())?;
+    let mut request_config = config_state.read().unwrap().clone();
+    request_config.provider = entry.provider.clone();
+    request_config.model = entry.model;
+    request_config.source_lang = entry.source_lang;
+    request_config.target_lang = entry.target_lang;
+    request_config.api_base_url = if entry.api_base_url.trim().is_empty() {
+        entry.provider.default_base_url().to_string()
+    } else {
+        entry.api_base_url
+    };
+    request_config.api_key = replay_api_key;
+    if let Some(profile_id) = entry.profile_id {
+        request_config.active_profile_id = profile_id;
+    }
+
+    trigger_translation_with_override(
+        app,
+        HistoryReplayPayload {
+            text: entry.source_text,
+            config: request_config,
+        },
+    )
+    .await;
     Ok(())
+}
+
+fn resolve_history_replay_api_key(
+    entry: &history::TranslationHistoryEntry,
+    profiles: &profiles::TranslationProfilesStore,
+) -> Result<String, String> {
+    if !entry.provider.requires_api_key() {
+        return Ok(String::new());
+    }
+
+    if let Some(profile) = entry
+        .profile_id
+        .as_deref()
+        .and_then(|profile_id| profiles.find(profile_id))
+        .filter(|profile| profile.provider == entry.provider)
+    {
+        match profile.api_key_storage {
+            ApiKeyStorage::PlaintextFallback | ApiKeyStorage::LegacyPlaintext => {
+                return Ok(profile.api_key);
+            }
+            ApiKeyStorage::System => {}
+        }
+    }
+
+    secrets::load_provider_api_key(&entry.provider, entry.profile_id.as_deref())
 }
 
 #[tauri::command]
@@ -1572,6 +1635,35 @@ async fn trigger_translation(app: AppHandle, clipboard_text: String) {
     let _ = window.emit("trigger-translate", clipboard_text);
 }
 
+async fn trigger_translation_with_override(app: AppHandle, payload: HistoryReplayPayload) {
+    let window = match ensure_window(&app, TRANSLATION_WINDOW_LABEL) {
+        Ok(window) => window,
+        Err(err) => {
+            emit_daemon_error(&app, "translation-window-create-failed", err, false);
+            return;
+        }
+    };
+
+    let runtime = app.state::<RuntimeState>().inner().clone();
+    if let Err(err) =
+        prepare_translation_window_for_new_request(&window, &current_config(&app), &runtime).await
+    {
+        emit_daemon_error(&app, "translation-window-prepare-failed", err, true);
+    }
+
+    let _ = window.show();
+    let _ = window.set_focus();
+
+    if let Err(err) =
+        wait_for_ui_ready(&app, TRANSLATION_WINDOW_LABEL, Duration::from_secs(5)).await
+    {
+        emit_daemon_error(&app, "translation-window-ui-timeout", err, true);
+        return;
+    }
+
+    let _ = window.emit("trigger-translate-with-override", payload);
+}
+
 async fn show_existing_translation_window(app: AppHandle) {
     let window = match ensure_window(&app, TRANSLATION_WINDOW_LABEL) {
         Ok(window) => window,
@@ -2190,5 +2282,54 @@ mod startup_tests {
         });
 
         assert!(!should_show_settings_on_startup(&config));
+    }
+}
+
+#[cfg(test)]
+mod p2_tests {
+    use super::resolve_history_replay_api_key;
+    use crate::config::{ApiKeyStorage, AppConfig, Provider};
+    use crate::history::{TranslationHistoryEntry, TranslationHistoryStatus};
+    use crate::profiles::{TranslationProfile, TranslationProfilesStore};
+
+    #[test]
+    fn history_replay_uses_original_plaintext_profile_key_without_activation() {
+        let active_config = AppConfig::default();
+        let entry = TranslationHistoryEntry {
+            id: "history-1".to_string(),
+            source_text: "hello".to_string(),
+            translated_text: "你好".to_string(),
+            error_message: None,
+            source_lang: "English".to_string(),
+            target_lang: "Chinese".to_string(),
+            provider: Provider::OpenRouter,
+            model: "mistral".to_string(),
+            api_base_url: "https://openrouter.ai/api".to_string(),
+            profile_id: Some("archived-openrouter".to_string()),
+            usage: None,
+            status: TranslationHistoryStatus::Success,
+            created_at_ms: 1,
+        };
+        let profiles = TranslationProfilesStore {
+            active_profile_id: active_config.active_profile_id.clone(),
+            profiles: vec![TranslationProfile {
+                id: "archived-openrouter".to_string(),
+                name: "Archived OpenRouter".to_string(),
+                api_key: "sk-original".to_string(),
+                api_key_storage: ApiKeyStorage::PlaintextFallback,
+                model: "mistral".to_string(),
+                source_lang: "English".to_string(),
+                target_lang: "Chinese".to_string(),
+                provider: Provider::OpenRouter,
+                api_base_url: "https://openrouter.ai/api".to_string(),
+                available_models: vec!["mistral".to_string()],
+            }],
+        };
+
+        assert_eq!(
+            resolve_history_replay_api_key(&entry, &profiles).unwrap(),
+            "sk-original"
+        );
+        assert_eq!(profiles.active_profile_id, active_config.active_profile_id);
     }
 }

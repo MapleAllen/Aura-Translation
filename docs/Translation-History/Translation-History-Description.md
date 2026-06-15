@@ -6,7 +6,7 @@ Translation History
 
 ## Purpose
 
-Translation History gives users a persistent audit log of their recent translation requests. Every successful or failed translation is recorded automatically with its source text, translated output (or error message), language pair, provider, model, token usage, and timestamp. Users can review, copy, retry, and delete individual entries or clear all history from the Settings panel. The history is capped at 50 entries and is stored on disk so it survives app restarts.
+Translation History gives users a persistent audit log of their recent translation requests. Every successful or failed translation is recorded automatically with its source text, translated output (or error message), language pair, provider, model, token usage, and timestamp. Users can search and filter history, review, copy, retry with the original request configuration, and delete individual entries or clear all history from the Settings panel. The history is capped at 50 entries and is stored on disk so it survives app restarts.
 
 ## Current Implementation
 
@@ -59,7 +59,7 @@ Service-layer pattern. The Rust `history.rs` module owns the `TranslationHistory
     - `id`: `"history-{ms}-{counter}"`
     - `source_text`, `translated_text`, `error_message: Option<String>`
     - `source_lang`, `target_lang`: language codes (e.g. `"auto"`, `"Chinese"`)
-    - `provider: Provider`, `model: String`
+    - `provider: Provider`, `model: String`, `api_base_url: String`, `profile_id: Option<String>`
     - `usage: Option<TranslationUsage>` — `#[serde(default)]` so older entries deserialise cleanly
     - `status: TranslationHistoryStatus`, `created_at_ms: u64`
   - `TranslationHistoryStore`: `{ entries: Vec<TranslationHistoryEntry> }` (private field, public methods only)
@@ -110,21 +110,18 @@ Service-layer pattern. The Rust `history.rs` module owns the `TranslationHistory
   - Invokes `get_translation_history` on mount
   - Listens for `translation-history-updated` event and refreshes the list
   - Passes `entries` to `HistoryList` and handles `oncopy`, `onretry`, `ondelete`, `onclear` callbacks
-  - Retry action: looks up the entry by ID and re-invokes translation with the stored source text
+  - Retry action: looks up the entry by ID and emits a one-shot request config using the stored source text, language pair, provider, model, base URL, and profile-scoped credential when available
 
 ## Current Limitations
 
 - **Startup history failures surface after Tauri setup begins**: load issues are emitted through `daemon-error`, but if no Aura window is visible the user may first see an OS notification before opening Settings.
 - **In-memory only during session**: history entries recorded during a session are only visible to the frontend after a `translation-history-updated` event; there is no live reactive store that updates automatically.
-- **Retry re-uses stored provider and model, not the current profile**: when the user retries from history, the retry uses the stored `source_text` but the current active provider/model, not the provider/model recorded in the entry.
-- **No search or filter**: the history list has no text search, language filter, or status filter.
+- **Older history entries have partial retry metadata**: entries written before P2 do not contain `api_base_url` or `profile_id`; they use the provider default base URL and legacy provider-scoped credential fallback.
 - **50-entry hard cap**: entries beyond 50 are permanently discarded; there is no configurable limit.
 - **No export**: history cannot be exported to a file.
 
 ## Future Directions
 
-- Add text search and status/language filter controls to `HistoryList.svelte`.
 - Make the history cap configurable in `AppConfig` (with a reasonable default of 50).
 - Add a history export action that writes the entry list to a user-chosen JSON or CSV file.
 - Show history entries in the translation bubble itself (a "Recent" tab or expandable section) for quick access without opening Settings.
-- Support retry-with-original-provider by storing the provider/model snapshot and using it when the user explicitly requests it.

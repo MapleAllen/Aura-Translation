@@ -4,12 +4,12 @@ use crate::config::{ApiKeyStorage, AppConfig, Provider};
 const SERVICE_NAME: &str = "Aura Translation";
 
 #[cfg(all(test, any(target_os = "windows", target_os = "macos")))]
-fn test_secret_store() -> &'static std::sync::Mutex<std::collections::HashMap<&'static str, String>>
+fn test_secret_store() -> &'static std::sync::Mutex<std::collections::HashMap<String, String>>
 {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
 
-    static STORE: OnceLock<Mutex<HashMap<&'static str, String>>> = OnceLock::new();
+    static STORE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
     STORE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -25,7 +25,8 @@ pub fn hydrate_api_key(config: &mut AppConfig) -> Result<(), String> {
 
     match config.api_key_storage {
         ApiKeyStorage::System => {
-            config.api_key = load_system_api_key(&config.provider)?.unwrap_or_default();
+            config.api_key =
+                load_profile_api_key(&config.provider, Some(&config.active_profile_id))?;
         }
         ApiKeyStorage::PlaintextFallback | ApiKeyStorage::LegacyPlaintext => {}
     }
@@ -50,7 +51,12 @@ pub fn migrate_legacy_plaintext_key(config: &mut AppConfig) -> Result<bool, Stri
         );
     }
 
-    save_system_api_key(&config.provider, config.api_key.trim())?;
+    save_system_api_key(
+        &config
+            .provider
+            .profile_secret_account_name(&config.active_profile_id),
+        config.api_key.trim(),
+    )?;
     config.api_key_storage = ApiKeyStorage::System;
     Ok(true)
 }
@@ -72,17 +78,31 @@ pub fn persist_api_key(config: &mut AppConfig, old_config: &AppConfig) -> Result
             }
 
             if config.api_key.is_empty() {
-                delete_system_api_key(&config.provider)?;
+                delete_system_api_key(
+                    &config
+                        .provider
+                        .profile_secret_account_name(&config.active_profile_id),
+                )?;
             } else {
-                save_system_api_key(&config.provider, &config.api_key)?;
+                save_system_api_key(
+                    &config
+                        .provider
+                        .profile_secret_account_name(&config.active_profile_id),
+                    &config.api_key,
+                )?;
             }
         }
         ApiKeyStorage::PlaintextFallback | ApiKeyStorage::LegacyPlaintext => {
             config.api_key_storage = ApiKeyStorage::PlaintextFallback;
             if matches!(old_config.api_key_storage, ApiKeyStorage::System)
                 && old_config.provider == config.provider
+                && old_config.active_profile_id == config.active_profile_id
             {
-                let _ = delete_system_api_key(&config.provider);
+                let _ = delete_system_api_key(
+                    &config
+                        .provider
+                        .profile_secret_account_name(&config.active_profile_id),
+                );
             }
         }
     }
@@ -90,19 +110,33 @@ pub fn persist_api_key(config: &mut AppConfig, old_config: &AppConfig) -> Result
     Ok(())
 }
 
-pub fn load_provider_api_key(provider: &Provider) -> Result<String, String> {
+pub fn load_provider_api_key(
+    provider: &Provider,
+    profile_id: Option<&str>,
+) -> Result<String, String> {
     if !provider.requires_api_key() {
         return Ok(String::new());
     }
 
-    Ok(load_system_api_key(provider)?.unwrap_or_default())
+    load_profile_api_key(provider, profile_id)
+}
+
+fn load_profile_api_key(provider: &Provider, profile_id: Option<&str>) -> Result<String, String> {
+    if let Some(profile_id) = profile_id {
+        let account_name = provider.profile_secret_account_name(profile_id);
+        if let Some(api_key) = load_system_api_key(&account_name)? {
+            return Ok(api_key);
+        }
+    }
+
+    Ok(load_system_api_key(provider.secret_account_name())?.unwrap_or_default())
 }
 
 #[cfg(all(not(test), any(target_os = "windows", target_os = "macos")))]
-fn load_system_api_key(provider: &Provider) -> Result<Option<String>, String> {
+fn load_system_api_key(account_name: &str) -> Result<Option<String>, String> {
     use keyring::{Entry, Error};
 
-    let entry = Entry::new(SERVICE_NAME, provider.secret_account_name())
+    let entry = Entry::new(SERVICE_NAME, account_name)
         .map_err(|err| format!("无法打开系统凭据项：{err}"))?;
 
     match entry.get_password() {
@@ -113,24 +147,24 @@ fn load_system_api_key(provider: &Provider) -> Result<Option<String>, String> {
 }
 
 #[cfg(all(test, any(target_os = "windows", target_os = "macos")))]
-fn load_system_api_key(provider: &Provider) -> Result<Option<String>, String> {
+fn load_system_api_key(account_name: &str) -> Result<Option<String>, String> {
     Ok(test_secret_store()
         .lock()
         .unwrap()
-        .get(provider.secret_account_name())
+        .get(account_name)
         .cloned())
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn load_system_api_key(_provider: &Provider) -> Result<Option<String>, String> {
+fn load_system_api_key(_account_name: &str) -> Result<Option<String>, String> {
     Ok(None)
 }
 
 #[cfg(all(not(test), any(target_os = "windows", target_os = "macos")))]
-fn save_system_api_key(provider: &Provider, api_key: &str) -> Result<(), String> {
+fn save_system_api_key(account_name: &str, api_key: &str) -> Result<(), String> {
     use keyring::Entry;
 
-    let entry = Entry::new(SERVICE_NAME, provider.secret_account_name())
+    let entry = Entry::new(SERVICE_NAME, account_name)
         .map_err(|err| format!("无法打开系统凭据项：{err}"))?;
     entry
         .set_password(api_key)
@@ -138,24 +172,24 @@ fn save_system_api_key(provider: &Provider, api_key: &str) -> Result<(), String>
 }
 
 #[cfg(all(test, any(target_os = "windows", target_os = "macos")))]
-fn save_system_api_key(provider: &Provider, api_key: &str) -> Result<(), String> {
+fn save_system_api_key(account_name: &str, api_key: &str) -> Result<(), String> {
     test_secret_store()
         .lock()
         .unwrap()
-        .insert(provider.secret_account_name(), api_key.to_string());
+        .insert(account_name.to_string(), api_key.to_string());
     Ok(())
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn save_system_api_key(_provider: &Provider, _api_key: &str) -> Result<(), String> {
+fn save_system_api_key(_account_name: &str, _api_key: &str) -> Result<(), String> {
     Err("当前构建不支持系统凭据存储。".to_string())
 }
 
 #[cfg(all(not(test), any(target_os = "windows", target_os = "macos")))]
-fn delete_system_api_key(provider: &Provider) -> Result<(), String> {
+fn delete_system_api_key(account_name: &str) -> Result<(), String> {
     use keyring::{Entry, Error};
 
-    let entry = Entry::new(SERVICE_NAME, provider.secret_account_name())
+    let entry = Entry::new(SERVICE_NAME, account_name)
         .map_err(|err| format!("无法打开系统凭据项：{err}"))?;
 
     match entry.delete_credential() {
@@ -165,16 +199,16 @@ fn delete_system_api_key(provider: &Provider) -> Result<(), String> {
 }
 
 #[cfg(all(test, any(target_os = "windows", target_os = "macos")))]
-fn delete_system_api_key(provider: &Provider) -> Result<(), String> {
+fn delete_system_api_key(account_name: &str) -> Result<(), String> {
     test_secret_store()
         .lock()
         .unwrap()
-        .remove(provider.secret_account_name());
+        .remove(account_name);
     Ok(())
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn delete_system_api_key(_provider: &Provider) -> Result<(), String> {
+fn delete_system_api_key(_account_name: &str) -> Result<(), String> {
     Ok(())
 }
 
@@ -198,7 +232,8 @@ mod tests {
         let mut config = secure_config();
         persist_api_key(&mut config, &old_config).expect("system store should accept the password");
 
-        let loaded = load_provider_api_key(&Provider::DeepSeek).expect("secret should load");
+        let loaded = load_provider_api_key(&Provider::DeepSeek, Some("default"))
+            .expect("secret should load");
         assert_eq!(loaded, "sk-test");
         assert_eq!(config.api_key_storage, ApiKeyStorage::System);
     }
@@ -212,8 +247,43 @@ mod tests {
         assert!(migrate_legacy_plaintext_key(&mut config).expect("migration should succeed"));
         assert_eq!(config.api_key_storage, ApiKeyStorage::System);
         assert_eq!(
-            load_provider_api_key(&Provider::DeepSeek).expect("secret should load"),
+            load_provider_api_key(&Provider::DeepSeek, Some("default"))
+                .expect("secret should load"),
             "sk-test"
+        );
+    }
+
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    #[test]
+    fn profile_secret_reads_fall_back_to_legacy_provider_entry() {
+        save_system_api_key(Provider::DeepSeek.secret_account_name(), "sk-legacy").unwrap();
+
+        assert_eq!(
+            load_provider_api_key(&Provider::DeepSeek, Some("focus-jp")).unwrap(),
+            "sk-legacy"
+        );
+    }
+
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    #[test]
+    fn profiles_for_the_same_provider_keep_independent_keys() {
+        let old_config = AppConfig::default();
+        let mut first = secure_config();
+        first.active_profile_id = "first".to_string();
+        persist_api_key(&mut first, &old_config).unwrap();
+
+        let mut second = secure_config();
+        second.active_profile_id = "second".to_string();
+        second.api_key = "sk-second".to_string();
+        persist_api_key(&mut second, &first).unwrap();
+
+        assert_eq!(
+            load_provider_api_key(&Provider::DeepSeek, Some("first")).unwrap(),
+            "sk-test"
+        );
+        assert_eq!(
+            load_provider_api_key(&Provider::DeepSeek, Some("second")).unwrap(),
+            "sk-second"
         );
     }
 

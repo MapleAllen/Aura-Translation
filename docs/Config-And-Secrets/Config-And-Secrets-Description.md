@@ -15,7 +15,7 @@ At startup, `AppConfig::load_with_issues()` reads `{config_dir}/aura-translation
 `AppConfig` uses a hand-written `Deserialize` implementation (via the `Helper` internal struct) instead of the default derive. This lets the deserializer apply provider-aware defaults: `api_base_url` and `available_models` are both seeded from the selected `Provider`'s built-in defaults when their JSON fields are absent. The `model` field falls back to the first available model rather than staying blank.
 
 API key storage has three modes, captured in `ApiKeyStorage`:
-- `System` (default) — key lives in the OS keychain under the service name `"Aura Translation"` and the provider's account key (e.g. `"provider:deepseek"`); the `api_key` JSON field is omitted from `config.json`.
+- `System` (default) — new keys live in the OS keychain under the service name `"Aura Translation"` and a profile-scoped account key (e.g. `"profile:default:provider:deepseek"`); legacy provider-scoped entries remain readable; the `api_key` JSON field is omitted from `config.json`.
 - `PlaintextFallback` — user explicitly chose to store the key in the JSON file; `api_key` is written to `config.json`.
 - `LegacyPlaintext` — detected automatically when an existing `config.json` contains a non-empty `api_key` field without an `api_key_storage` field. On the next `save_config`, `secrets::migrate_legacy_plaintext_key` migrates it to `System` and sets the mode to `System`.
 
@@ -43,9 +43,9 @@ Saves are atomic: the config is serialised to `config.json.tmp` then renamed int
 - `hydrate_api_key()`: populates `config.api_key` from the keychain after load when storage is `System`
 - `migrate_legacy_plaintext_key()`: detects `LegacyPlaintext` storage, moves the key to the keychain, and updates `api_key_storage` to `System`
 - `persist_api_key()`: called during `save_config`; saves/clears/deletes the keychain entry or switches storage to `PlaintextFallback` depending on user intent; also deletes the old system key when the user switches from `System` to `PlaintextFallback` for the same provider
-- `load_provider_api_key()`: exposes a direct keychain read for the `load_provider_api_key` Tauri command (used by Settings to display the masked current key)
+- `load_provider_api_key()`: resolves an optional profile-scoped key first, then falls back to the legacy provider-scoped entry
 - `system_storage_supported()`: returns `true` on Windows and macOS; used to gate feature availability before attempting keychain operations
-- Keychain operations use the `keyring` crate with `SERVICE_NAME = "Aura Translation"` and per-provider account names
+- Keychain operations use the `keyring` crate with `SERVICE_NAME = "Aura Translation"` and profile-scoped account names for new writes
 - Test builds substitute a thread-local `HashMap`-backed mock store so unit tests do not touch the real OS keychain
 
 **Frontend mirror**
@@ -77,7 +77,7 @@ Service-layer pattern. The Rust `config.rs` module owns the data model and on-di
   - `hydrate_api_key(config: &mut AppConfig)`: fills `config.api_key` from keychain; no-op for Ollama
   - `migrate_legacy_plaintext_key(config: &mut AppConfig)`: one-time migration; returns `Ok(true)` if migration was performed
   - `persist_api_key(config: &mut AppConfig, old_config: &AppConfig)`: writes/deletes keychain entries; normalises `LegacyPlaintext` to `PlaintextFallback` on save
-  - `load_provider_api_key(provider: &Provider)`: direct keychain read for the `load_provider_api_key` command
+  - `load_provider_api_key(provider: &Provider, profile_id: Option<&str>)`: profile-scoped read with legacy provider fallback
 
 ### Frontend (`ui/lib/`)
 
@@ -96,7 +96,7 @@ Service-layer pattern. The Rust `config.rs` module owns the data model and on-di
   - Startup load issues from `AppConfig::load_with_issues()` are emitted through `emit_daemon_error()` during `setup()`
   - `get_config()`: returns the current in-memory `AppConfig` (no disk I/O)
   - `save_config(config: AppConfig)`: calls `secrets::persist_api_key`, `secrets::migrate_legacy_plaintext_key`, then `AppConfig::save()`; re-registers the hotkey if the `hotkey` field changed; applies `window_pinned` to the live Tauri window
-  - `load_provider_api_key(provider)`: calls `secrets::load_provider_api_key`; exposed as a Tauri command
+  - `load_provider_api_key(provider, profile_id)`: calls `secrets::load_provider_api_key`; exposed as a Tauri command
 
 - `src-tauri/src/profiles.rs`
   - `TranslationProfile::from_config()`: snapshots the provider/model/language/key fields from `AppConfig`

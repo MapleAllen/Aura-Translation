@@ -7,10 +7,10 @@ Dependencies: `4fe5f24` documentation baseline
 
 ## Active Task Lock
 
-Owner: none - implementation lock released after `P1A` push
-Task: none - awaiting coordinator assignment of the next implementation lock
+Owner: none - P2 implementation lock released after Codex review
+Task: none - awaiting pushed P2 handoff verification
 Starting main SHA: n/a
-Status: NO ACTIVE IMPLEMENTATION LOCK - `P1A` HANDOFF AND WINDOWS EVIDENCE RECORDED; WINDOWS UI/TRAY FOLLOW-UP DEFERRED
+Status: NO ACTIVE IMPLEMENTATION LOCK - P2 REVIEW COMPLETE; HANDOFF PUSH PENDING
 
 ## Allowed Files
 
@@ -34,6 +34,8 @@ When an implementation lock is assigned for this plan, edits may be limited to:
 - `ui/lib/HistoryList.svelte`
 - `ui/lib/HistoryList.test.ts`
 - `ui/lib/SetupStatusCard.svelte`
+- `ui/lib/TranslationWindowView.svelte`
+- `ui/lib/TranslationWindowView.test.ts`
 - tray/icon assets only if required for readiness-badge parity
 - touched module docs under `docs/`
 - this plan folder and related ADR files under `plan/`
@@ -96,6 +98,7 @@ When an implementation lock is assigned for this plan, edits may be limited to:
 - `TranslationHistoryStore::record_error(...) -> Result<(), String>`
 - `TranslationHistoryStore::find(&self, entry_id) -> Option<TranslationHistoryEntry>`
   - P1/P2 contract: load failures become structured errors; insert ordering and persisted shape remain backward-compatible.
+  - P2 contract amendment: `api_base_url` and optional `profile_id` are backward-compatible defaulted fields used only to make original-config retry faithful.
 
 `src-tauri/src/readiness.rs`
 
@@ -107,6 +110,7 @@ When an implementation lock is assigned for this plan, edits may be limited to:
 
 - Translation entry point that consumes provider/model/base URL inputs
   - P2 contract: if retry-with-original-provider requires override fields, the override must be explicit and one-shot; it must not mutate active-profile config as a side effect.
+  - P2 contract amendment: history retry may carry a backward-compatible optional original profile ID so profile-scoped credentials can be resolved without mutating the active profile.
 
 ## Tasks
 
@@ -135,7 +139,16 @@ When an implementation lock is assigned for this plan, edits may be limited to:
 - `P1A` handoff SHA pushed to `origin/main`: `569d229`
 - Windows verifier evidence was recorded on shared `main` by `cba33c9`; the verified runtime/source handoff remains `569d229`, and `cba33c9` is the current shared plan baseline.
 - Current `P1A` implementation scope: `src-tauri/src/config.rs`, `src-tauri/src/profiles.rs`, `src-tauri/src/history.rs`, `src-tauri/src/lib.rs`, plus synchronized `docs/` and plan evidence files.
+- Complete `P2` working-tree implementation started from `d141ac27d493c26fa272b9ba5855a8574ff9d91f`.
+- Local `P2` shared verification passed on macOS:
+  - `npm run check`
+  - `npm test` (49 tests)
+  - `cargo test --manifest-path src-tauri/Cargo.toml` with proxy variables cleared for localhost WireMock (57 tests)
+  - `npm run tauri build` (macOS `.app` bundle produced)
+- Current `P2` implementation scope: profile-scoped system credentials with legacy fallback, client-side history search/filter, backward-compatible retry metadata, and explicit one-shot original-config replay.
+- P2 review fixed plaintext-fallback history replay so it resolves the original profile's stored plaintext key without activating that profile.
 
 ## Deviations
 
 - Windows verifier environment did not expose an inspectable tray shell handle, so tray/UI visibility rows remain a deferred target-host follow-up rather than a blocker for the next implementation lock.
+- `TranslationWindowView.svelte` and its test surface were added to the allowed set because the explicit one-shot retry override cannot reach `translate_text` without the translation-window request boundary.

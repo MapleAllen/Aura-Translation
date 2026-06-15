@@ -35,10 +35,10 @@ Open follow-up:
 
 ## macOS Codex Review
 
-Status: P1A SHARED-SOURCE REVIEW COMPLETE; MANUAL TARGET-HOST EVIDENCE STILL PENDING ON CURRENT SHARED `main` (`cba33c9`)
+Status: P2 SHARED-SOURCE CODEX REVIEW COMPLETE FROM `d141ac2`; MANUAL TARGET-HOST EVIDENCE PENDING
 Blocking findings:
 
-- none recorded yet
+- Resolved during P2 review: original-config history replay initially resolved only system credentials, which would fail for a `plaintext_fallback` profile. Replay now reads the matching stored profile key without activating or mutating that profile.
 
 ## Plan Compliance
 

@@ -28,21 +28,24 @@ Completed work:
 - `lib.rs` emits those issues through `daemon-error` during `setup()` while preserving the existing empty-store fallback.
 - When no Aura window is visible, startup profile issues also surface via background OS notifications.
 
-## Phase 2: Per-Profile Independent API Keys — NOT STARTED
+## Phase 2: Per-Profile Independent API Keys — CORE CONTRACT DONE
 
-Status: **Not Started**
+Status: **Core contract done; non-active profile editor follow-up remains**
 
 Goals:
 
 - Allow two profiles for the same provider to hold independent API keys in the system keychain.
 - Change the keychain account key from `"provider:deepseek"` to `"profile:{profile_id}:provider:deepseek"` for new system-stored profiles.
 
-Remaining features:
+Completed work:
 
-- Define a new keychain account naming scheme that includes the profile ID.
-- Write a migration that upgrades existing `"provider:{name}"` keychain entries on first activation of a profile that uses `api_key_storage: System`.
-- Update `secrets::persist_api_key` and `secrets::load_provider_api_key` to accept an optional `profile_id` argument.
-- Update `TranslationProfile::from_config` and `apply_to_config` to use the new account naming scheme.
+- New system-store writes use `"profile:{profile_id}:provider:{name}"`.
+- Reads check the profile-scoped entry first and fall back to the legacy `"provider:{name}"` entry.
+- A legacy provider-scoped key loaded into an active profile is migrated to the profile-scoped entry on the next successful save.
+- Settings provider changes resolve the key for the active profile.
+
+Remaining follow-up:
+
 - Expose the per-profile key in the Settings profile editor so users can edit the key associated with a non-active profile without activating it first.
 
 ### Key Naming Migration

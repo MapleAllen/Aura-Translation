@@ -53,6 +53,10 @@ impl Provider {
             Provider::Ollama => "provider:ollama",
         }
     }
+
+    pub fn profile_secret_account_name(&self, profile_id: &str) -> String {
+        format!("profile:{}:{}", profile_id, self.secret_account_name())
+    }
 }
 
 impl Default for Provider {

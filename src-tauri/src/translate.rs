@@ -251,6 +251,7 @@ pub async fn translate_text(
     request_id: u64,
     api_base_url: String,
     provider: Provider,
+    profile_id: Option<String>,
 ) -> Result<(), String> {
     // Set up cancellation channel for this request
     let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
@@ -296,6 +297,8 @@ pub async fn translate_text(
                 &target_lang,
                 &provider,
                 &model,
+                &api_base_url,
+                profile_id.as_deref(),
                 completion.usage.clone(),
             )
             .await
@@ -312,6 +315,8 @@ pub async fn translate_text(
                 &target_lang,
                 &provider,
                 &model,
+                &api_base_url,
+                profile_id.as_deref(),
             )
             .await
             {
@@ -523,6 +528,8 @@ async fn record_history_success(
     target_lang: &str,
     provider: &Provider,
     model: &str,
+    api_base_url: &str,
+    profile_id: Option<&str>,
     usage: Option<TranslationUsage>,
 ) -> Result<(), String> {
     history_state.lock().await.record_success(
@@ -532,6 +539,8 @@ async fn record_history_success(
         target_lang,
         provider,
         model,
+        api_base_url,
+        profile_id,
         usage,
     )
 }
@@ -544,6 +553,8 @@ async fn record_history_error(
     target_lang: &str,
     provider: &Provider,
     model: &str,
+    api_base_url: &str,
+    profile_id: Option<&str>,
 ) -> Result<(), String> {
     history_state.lock().await.record_error(
         source_text,
@@ -552,6 +563,8 @@ async fn record_history_error(
         target_lang,
         provider,
         model,
+        api_base_url,
+        profile_id,
         None,
     )
 }

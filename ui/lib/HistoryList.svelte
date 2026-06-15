@@ -9,7 +9,7 @@
   type Props = {
     entries: TranslationHistoryEntry[];
     oncopy?: (translatedText: string) => void;
-    onretry?: (entryId: string) => void;
+    onretry?: (entryId: string, retryWithOriginal: boolean) => void;
     ondelete?: (entryId: string) => void;
     onclear?: () => void;
   };
@@ -19,7 +19,33 @@
   const CLEAR_CONFIRM_TIMEOUT_MS = 5000;
   let confirmingClear = $state(false);
   let expandedEntryId = $state<string | null>(null);
+  let searchQuery = $state('');
+  let statusFilter = $state<'all' | 'success' | 'error'>('all');
+  let languagePairFilter = $state('all');
   let clearConfirmTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const languagePairs = $derived.by(() => {
+    const pairs = new Map<string, string>();
+    for (const entry of entries) {
+      const key = JSON.stringify([entry.source_lang, entry.target_lang]);
+      pairs.set(key, `${languageLabel(entry.source_lang)} → ${languageLabel(entry.target_lang)}`);
+    }
+    return Array.from(pairs.entries());
+  });
+
+  const filteredEntries = $derived.by(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return entries.filter((entry) => {
+      const pairKey = JSON.stringify([entry.source_lang, entry.target_lang]);
+      const matchesText =
+        !query ||
+        entry.source_text.toLocaleLowerCase().includes(query) ||
+        entry.translated_text.toLocaleLowerCase().includes(query);
+      const matchesStatus = statusFilter === 'all' || entry.status === statusFilter;
+      const matchesPair = languagePairFilter === 'all' || pairKey === languagePairFilter;
+      return matchesText && matchesStatus && matchesPair;
+    });
+  });
 
   function clearClearConfirmTimer() {
     if (clearConfirmTimer !== null) {
@@ -45,6 +71,9 @@
   function commitClear() {
     clearClearConfirmTimer();
     confirmingClear = false;
+    searchQuery = '';
+    statusFilter = 'all';
+    languagePairFilter = 'all';
     onclear?.();
   }
 
@@ -68,6 +97,14 @@
   function languageLabel(code: string) {
     return LANGUAGES.find((language) => language.code === code)?.label ?? code;
   }
+
+  $effect(() => {
+    if (entries.length === 0) {
+      searchQuery = '';
+      statusFilter = 'all';
+      languagePairFilter = 'all';
+    }
+  });
 
   $effect(() => {
     return () => clearClearConfirmTimer();
@@ -125,8 +162,37 @@
       暂无翻译历史。开始翻译后，最近的成功和失败记录会显示在这里。
     </div>
   {:else}
+    <div class="grid gap-2 rounded-lg border border-aura-border bg-aura-surface-soft/60 p-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
+      <input
+        class="aura-input"
+        type="search"
+        placeholder="搜索原文或译文"
+        data-testid="history-search"
+        bind:value={searchQuery}
+      />
+      <select class="aura-input" data-testid="history-status-filter" bind:value={statusFilter}>
+        <option value="all">全部状态</option>
+        <option value="success">成功</option>
+        <option value="error">失败</option>
+      </select>
+      <select class="aura-input" data-testid="history-language-filter" bind:value={languagePairFilter}>
+        <option value="all">全部语言对</option>
+        {#each languagePairs as [value, label]}
+          <option {value}>{label}</option>
+        {/each}
+      </select>
+    </div>
+
+    {#if filteredEntries.length === 0}
+      <div
+        class="rounded-lg border border-dashed border-aura-border bg-aura-surface-soft px-3.5 py-3 text-xs leading-relaxed text-aura-text-dim"
+        data-testid="history-no-results"
+      >
+        没有符合当前筛选条件的历史记录。
+      </div>
+    {:else}
     <div class="overflow-hidden rounded-lg border border-aura-border bg-white/80" data-testid="history-list">
-      {#each entries as entry, index (entry.id)}
+      {#each filteredEntries as entry, index (entry.id)}
         <article class={index === 0 ? '' : 'border-t border-aura-border'}>
           <div class="grid gap-3 px-4 py-3.5 lg:grid-cols-[minmax(0,1fr)_auto]">
             <div class="min-w-0">
@@ -151,7 +217,8 @@
                 class="aura-console-button"
                 type="button"
                 data-testid={`history-retry-${entry.id}`}
-                onclick={() => onretry?.(entry.id)}
+                title={`使用原始配置重试：${providerLabel(entry.provider)} · ${entry.model}`}
+                onclick={() => onretry?.(entry.id, true)}
               >
                 重试
               </button>
@@ -221,5 +288,6 @@
         </article>
       {/each}
     </div>
+    {/if}
   {/if}
 </section>

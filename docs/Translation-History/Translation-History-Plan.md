@@ -28,16 +28,16 @@ Completed work:
 - `lib.rs` emits those issues through `daemon-error` during `setup()` while preserving the existing empty-store fallback.
 - When no Aura window is visible, startup history issues also surface via background OS notifications.
 
-## Phase 2: Search and Filter — NOT STARTED
+## Phase 2: Search and Filter — DONE
 
-Status: **Not Started**
+Status: **Done**
 
 Goals:
 
 - Add text search and status/language filters to `HistoryList.svelte`.
 - Allow users to find specific past translations without scrolling through the full list.
 
-Remaining features:
+Completed work:
 
 - Add a search input above the history list in `HistoryList.svelte`; filter entries client-side by matching `source_text` and `translated_text`.
 - Add a status toggle (All / Success / Error) to the filter bar.
@@ -61,20 +61,20 @@ Remaining features:
 - Expose the setting in the Settings panel (a numeric input with min 10, max 500).
 - On cap reduction, prune the existing list to the new cap and save immediately.
 
-## Phase 4: Retry with Original Provider — NOT STARTED
+## Phase 4: Retry with Original Provider — DONE
 
-Status: **Not Started**
+Status: **Done**
 
 Goals:
 
 - Allow users to replay a history entry using the exact provider and model recorded in the entry, not the current active profile.
 - Make the retry intent explicit in the UI.
 
-Remaining features:
+Completed work:
 
 - Add a `retry_with_original` flag to the `onretry` callback in `HistoryList.svelte`.
 - Pass the `provider`, `model`, and `api_base_url` fields from the entry to the translation invocation when `retry_with_original` is true.
-- Expose a `translate_with_override(source_text, provider, model, api_base_url)` Tauri command or extend `translate_text` to accept provider overrides.
+- `replay_translation_history_entry` emits an explicit one-shot request config containing the stored provider, model, base URL, language pair, and resolvable profile-scoped credential.
 - Show the entry's provider and model in the retry confirmation tooltip so users can see what will be used.
 
 ## Phase 5: History Export — NOT STARTED
