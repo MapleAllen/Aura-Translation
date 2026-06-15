@@ -78,9 +78,9 @@ Starting SHA: `98c20a284ad40784ef1a7d2b7b11f80e101fa463` for the current target-
   - status filter `失败` narrowed to the same error entry
   - language pair filter `法语 → 英语` combined with the status filter continued to isolate the expected row
 - The expanded error entry continued to show the stored source text and error details without crashing the settings UI.
+- The locally installed `/Applications/Aura Translation.app` was then updated from the shared build artifact and manually tested by the user on macOS. The user reported no blocking regressions and approved plan closure.
 
 ## Deviations and Remaining Risks
 
-- Interactive Keychain migration remains unverified on a safe isolated Keychain state.
-- Corrupt-startup notification rows, probe-cache invalidation, tray tooltip and state changes, and paste-back or Aura-mode behavior remain unverified on macOS.
-- The history replay path is covered by code review plus automated tests, but full target-host proof that the retry action behaves correctly without mutating the active profile is still pending.
+- No blocking macOS regression remains for this plan after user target-host verification.
+- Fine-grained reproduction details for each manual row were not re-captured in Codex, but the user accepted the installed app behavior as sufficient for closure.

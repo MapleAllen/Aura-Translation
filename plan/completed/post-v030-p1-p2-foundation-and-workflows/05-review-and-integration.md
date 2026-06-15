@@ -35,11 +35,12 @@ Open follow-up:
 
 ## macOS Codex Review
 
-Status: P2 SHARED-SOURCE HANDOFF `19a1bad` REVIEWED AND PUSHED AS `98c20a2`; MACOS TARGET-HOST EVIDENCE PARTIAL
+Status: P2 SHARED-SOURCE HANDOFF `19a1bad` REVIEWED AND PUSHED AS `98c20a2`; MACOS TARGET-HOST EVIDENCE ACCEPTED AND PLAN READY TO ARCHIVE
 Blocking findings:
 
 - Resolved during P2 review: original-config history replay initially resolved only system credentials, which would fail for a `plaintext_fallback` profile. Replay now reads the matching stored profile key without activating or mutating that profile.
 - No new blocking code findings remain on `98c20a2`.
+- The user manually tested the updated local `/Applications/Aura Translation.app` and reported no blocking regression across the remaining macOS manual rows.
 
 ## Plan Compliance
 
@@ -64,7 +65,7 @@ Blocking findings:
 6. Assigned owner pulls latest `main`, records starting SHA, and performs only the allowed shared-source edit set for `P2`.
 7. Codex reviews findings first, then commits and pushes approved `P2` work.
 8. Windows and macOS verifiers confirm final shared checks and target-host behavior on the same SHA.
-9. Codex syncs `docs/`, closes residual risks, and archives the plan only after the remaining required macOS target-host rows are either verified or formally split into a follow-up plan.
+9. Codex syncs `docs/`, closes residual risks, and archives the plan.
 
 ## Rollback Plan
 
@@ -76,11 +77,11 @@ Blocking findings:
 
 - [x] Shared and platform-specific tests pass.
 - [x] Windows and macOS CI pass.
-- [ ] Required target-host evidence is recorded.
+- [x] Required target-host evidence is recorded.
 - [x] Windows tray and UI rows are explicitly deferred until a real Windows host is available.
 - [x] Blocking review findings are resolved.
 - [x] `docs/` reflects the implemented current state.
 - [x] Remaining risks and deviations are recorded.
 - [x] Both CI gates pass on the same final `main` SHA.
 - [x] One task owner was active at a time.
-- [ ] Plan moved to `plan/completed/`.
+- [x] Plan moved to `plan/completed/`.

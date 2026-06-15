@@ -1,7 +1,7 @@
 # post-v030-p1-p2-foundation-and-workflows Overview
 
 Created: 2026-06-11
-Status: P2 SHARED-SOURCE HANDOFF `19a1bad` PUSHED AS `98c20a2` - WINDOWS INTERACTIVE VERIFICATION DEFERRED, MACOS TARGET-HOST VERIFICATION PARTIAL
+Status: COMPLETE - P1/P2 CLOSED ON SHARED `main`; WINDOWS INTERACTIVE VERIFICATION DEFERRED BY FOLLOW-UP
 Coordination owner: Codex coordinator
 Working branch: `main`
 
@@ -86,7 +86,7 @@ Execute the first two post-`v0.3.0` priorities sequentially on `main` with one a
 - History UI supports client-side search and filters, and users can retry an entry with its original provider/model/base URL without switching the active profile.
 - Shared checks and both CI gates pass on the same final `main` SHA.
 - `docs/` is updated to reflect the implemented current state before archiving this plan.
-- Required macOS target-host evidence is recorded for the implemented `P2` UI workflow, and any deferred Windows/manual follow-up is called out explicitly before archive.
+- Required macOS target-host evidence is recorded for closure, and the deferred Windows/manual follow-up is called out explicitly before archive.
 
 ## Main-Branch Handoff Sequence
 

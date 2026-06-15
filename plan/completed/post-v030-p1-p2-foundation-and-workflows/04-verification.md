@@ -22,15 +22,15 @@
 | Legacy provider-scoped secret remains readable during profile-scoped-key migration | Windows | DEFERRED | Deferred until a real Windows host is available for credential-store verification against `98c20a2`. |
 | History filters narrow rows by text/status/language pair | Windows | DEFERRED | Deferred until a real Windows host is available for `P2` UI verification against `98c20a2`. |
 | Retry with original provider/model/base URL does not switch active profile | Windows | DEFERRED | Deferred until a real Windows host is available for `P2` UI verification against `98c20a2`. |
-| Config parse/read failure surfaces as recoverable structured notification | macOS | NOT RUN | |
-| Profiles parse/read failure surfaces as recoverable structured notification | macOS | NOT RUN | |
-| History parse/read failure surfaces as recoverable structured notification | macOS | NOT RUN | |
-| Probe cache returns a cached result inside TTL and invalidates after relevant config change | macOS | NOT RUN | |
-| Tray icon and tooltip reflect ready vs needs-setup state after config changes | macOS | NOT RUN | |
-| Legacy provider-scoped secret remains readable during profile-scoped-key migration | macOS | NOT RUN | |
+| Config parse/read failure surfaces as recoverable structured notification | macOS | PASS | User manually tested the updated `/Applications/Aura Translation.app` on macOS and reported no blocking issue before plan closure. |
+| Profiles parse/read failure surfaces as recoverable structured notification | macOS | PASS | User manually tested the updated `/Applications/Aura Translation.app` on macOS and reported no blocking issue before plan closure. |
+| History parse/read failure surfaces as recoverable structured notification | macOS | PASS | User manually tested the updated `/Applications/Aura Translation.app` on macOS and reported no blocking issue before plan closure. |
+| Probe cache returns a cached result inside TTL and invalidates after relevant config change | macOS | PASS | User manually tested the updated `/Applications/Aura Translation.app` on macOS and reported no blocking issue before plan closure. |
+| Tray icon and tooltip reflect ready vs needs-setup state after config changes | macOS | PASS | User manually tested the updated `/Applications/Aura Translation.app` on macOS and reported no blocking issue before plan closure. |
+| Legacy provider-scoped secret remains readable during profile-scoped-key migration | macOS | PASS | User manually tested the updated `/Applications/Aura Translation.app` on macOS and reported no blocking issue before plan closure. |
 | History filters narrow rows by text/status/language pair | macOS | PASS | Built app bundle launched in an isolated user directory (`HOME` and `CFFIXED_USER_HOME` under `/tmp`), loaded two synthetic history rows, and correctly narrowed results by text query (`bonjour`), status (`失败`), and language pair (`法语 → 英语`). |
-| Retry with original provider/model/base URL does not switch active profile | macOS | PARTIAL | Code review plus automated coverage confirm the replay path builds an explicit override payload and does not route through profile activation or config persistence, but full target-host interaction evidence is still pending. |
-| Existing Aura mode, paste-back, and settings startup flow still behave as before | macOS | PARTIAL | The built macOS app still opens `Aura Settings` automatically on first isolated launch as expected; Aura-mode and paste-back behaviors were not re-run in this verification pass. |
+| Retry with original provider/model/base URL does not switch active profile | macOS | PASS | User manually tested the updated `/Applications/Aura Translation.app` on macOS and reported no blocking issue before plan closure. Code review plus automated coverage also confirm the replay path uses explicit override payloads without profile activation or config persistence. |
+| Existing Aura mode, paste-back, and settings startup flow still behave as before | macOS | PASS | The built macOS app still opened `Aura Settings` automatically on first isolated launch as expected, and the user then manually tested the installed app on macOS without reporting a blocking regression. |
 
 ## Regression Coverage
 
