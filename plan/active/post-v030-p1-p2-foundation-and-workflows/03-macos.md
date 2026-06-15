@@ -1,9 +1,9 @@
 # macOS Implementation and Verification
 
-Owner: macOS implementation agent
+Owner: Codex macOS verifier
 Dependencies: Shared contracts frozen
 Working branch: `main`
-Starting SHA: `d141ac27d493c26fa272b9ba5855a8574ff9d91f`
+Starting SHA: `98c20a284ad40784ef1a7d2b7b11f80e101fa463` for the current target-host verification pass
 
 ## Allowed Files
 
@@ -71,7 +71,16 @@ Starting SHA: `d141ac27d493c26fa272b9ba5855a8574ff9d91f`
 - Unit and component coverage confirms profile-scoped secret isolation, legacy provider fallback, backward-compatible history metadata, client-side filters, and explicit retry intent.
 - P2 review added regression coverage for plaintext-fallback replay using the original profile key without changing the active profile.
 - Reviewed P2 shared-source handoff commit: `19a1bad`.
+- Built macOS bundle launch verified on `98c20a2` with an isolated user directory via `HOME=/tmp/...` and `CFFIXED_USER_HOME=/tmp/...`.
+- First launch on the isolated macOS instance opened `Aura Settings` automatically and showed the expected "needs setup" readiness summary because no API key was present.
+- The isolated macOS instance loaded two synthetic history rows and passed client-side `P2` filtering checks on the real bundle UI:
+  - text search for `bonjour` narrowed to the French error entry
+  - status filter `失败` narrowed to the same error entry
+  - language pair filter `法语 → 英语` combined with the status filter continued to isolate the expected row
+- The expanded error entry continued to show the stored source text and error details without crashing the settings UI.
 
 ## Deviations and Remaining Risks
 
-- Interactive Keychain migration and end-to-end history replay still require target-host manual verification after review.
+- Interactive Keychain migration remains unverified on a safe isolated Keychain state.
+- Corrupt-startup notification rows, probe-cache invalidation, tray tooltip and state changes, and paste-back or Aura-mode behavior remain unverified on macOS.
+- The history replay path is covered by code review plus automated tests, but full target-host proof that the retry action behaves correctly without mutating the active profile is still pending.

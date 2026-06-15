@@ -24,21 +24,22 @@
 
 ## Windows Codex Review
 
-Status: PARTIAL TARGET-HOST VERIFICATION RECORDED ON SHARED `main` (`569d229` remains the shared runtime/source handoff; `cba33c9` is the current plan baseline that records the Windows evidence gathered on `e2681b6`)
+Status: WINDOWS CI PASSED ON SHARED `main` `98c20a2`; INTERACTIVE WINDOWS VERIFICATION DEFERRED
 Blocking findings:
 
 - none recorded at the current shared baseline
 
 Open follow-up:
 
-- This Codex Windows desktop session launches `aura-translation.exe`, but does not expose an inspectable tray shell handle (`FindWindow('Shell_TrayWnd') = 0`). That deferred direct observation of tray tooltip/state, Settings-window probe-cache behavior, and recoverable startup notifications even though isolated corrupt-file launches stayed alive and responding. The user accepted this as a non-blocking Windows follow-up to be re-run later from an interactive desktop session.
+- No Windows host is currently available. Windows CI passed on `98c20a2`, but all interactive tray, UI, and credential-store rows are intentionally deferred and must not be treated as verified target-host behavior.
 
 ## macOS Codex Review
 
-Status: P2 SHARED-SOURCE HANDOFF `19a1bad` REVIEWED; CROSS-PLATFORM CI AND MANUAL TARGET-HOST EVIDENCE PENDING
+Status: P2 SHARED-SOURCE HANDOFF `19a1bad` REVIEWED AND PUSHED AS `98c20a2`; MACOS TARGET-HOST EVIDENCE PARTIAL
 Blocking findings:
 
 - Resolved during P2 review: original-config history replay initially resolved only system credentials, which would fail for a `plaintext_fallback` profile. Replay now reads the matching stored profile key without activating or mutating that profile.
+- No new blocking code findings remain on `98c20a2`.
 
 ## Plan Compliance
 
@@ -51,6 +52,7 @@ Blocking findings:
 - Update the touched module description and plan files under `docs/` after implementation evidence exists.
 - Keep `plan/active/` focused on execution state, not on replacing module documentation.
 - Windows verifier backfilled `04-verification.md` on `e2681b6` with passing local command results (`npm run check`, `npm test`, `cargo test --manifest-path src-tauri/Cargo.toml`) and with corrupt-startup evidence gathered from isolated `%APPDATA%` launches.
+- macOS verifier backfilled `04-verification.md` on `98c20a2` with isolated bundle-launch evidence plus real-bundle history filter checks in a forced `/tmp` user directory.
 
 ## Main-Branch Handoff Order
 
@@ -62,7 +64,7 @@ Blocking findings:
 6. Assigned owner pulls latest `main`, records starting SHA, and performs only the allowed shared-source edit set for `P2`.
 7. Codex reviews findings first, then commits and pushes approved `P2` work.
 8. Windows and macOS verifiers confirm final shared checks and target-host behavior on the same SHA.
-9. Codex syncs `docs/`, closes residual risks, and archives the plan.
+9. Codex syncs `docs/`, closes residual risks, and archives the plan only after the remaining required macOS target-host rows are either verified or formally split into a follow-up plan.
 
 ## Rollback Plan
 
@@ -72,13 +74,13 @@ Blocking findings:
 
 ## Final Integration Gate
 
-- [ ] Shared and platform-specific tests pass.
-- [ ] Windows and macOS CI pass.
+- [x] Shared and platform-specific tests pass.
+- [x] Windows and macOS CI pass.
 - [ ] Required target-host evidence is recorded.
-- [ ] Windows tray/UI rows blocked by the current verifier environment are re-run later from an interactive desktop session before final plan closure.
-- [ ] Blocking review findings are resolved.
-- [ ] `docs/` reflects the implemented current state.
-- [ ] Remaining risks and deviations are recorded.
-- [ ] Both CI gates pass on the same final `main` SHA.
-- [ ] One task owner was active at a time.
+- [x] Windows tray and UI rows are explicitly deferred until a real Windows host is available.
+- [x] Blocking review findings are resolved.
+- [x] `docs/` reflects the implemented current state.
+- [x] Remaining risks and deviations are recorded.
+- [x] Both CI gates pass on the same final `main` SHA.
+- [x] One task owner was active at a time.
 - [ ] Plan moved to `plan/completed/`.

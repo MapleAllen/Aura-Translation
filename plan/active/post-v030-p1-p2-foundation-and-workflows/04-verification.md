@@ -4,33 +4,33 @@
 
 | Check | Windows | macOS | Evidence |
 |---|---|---|---|
-| `npm run check` | PASS | PASS | Local Windows run passed on shared verification baseline `e2681b6`; local macOS P2 working-tree run passed from starting SHA `d141ac2` |
-| `npm test` | PASS | PASS | Local Windows run passed on shared verification baseline `e2681b6` with 47 tests; local macOS P2 working-tree run passed with 49 tests |
-| `cargo test --manifest-path src-tauri/Cargo.toml` | PASS | PASS | Local Windows run passed on shared verification baseline `e2681b6` with 48 Rust tests; local macOS P2 working-tree run passed with 57 tests after clearing proxy variables for localhost WireMock |
-| Production build | NOT RUN | PASS | Windows CI bundle/build still pending; macOS `npm run tauri build` produced `Aura Translation.app` from the P2 working tree |
-| Final shared CI SHA | NOT RUN | NOT RUN | Reviewed P2 shared-source handoff is `19a1bad`; both host gates must still pass on the same final `main` commit |
+| `npm run check` | PASS | PASS | Local Windows run passed on shared verification baseline `e2681b6`; local macOS P2 run passed from starting SHA `d141ac2`, and the final shared SHA `98c20a2` also passed in CI |
+| `npm test` | PASS | PASS | Local Windows run passed on shared verification baseline `e2681b6` with 47 tests; local macOS P2 run passed with 49 tests, and the final shared SHA `98c20a2` also passed in CI |
+| `cargo test --manifest-path src-tauri/Cargo.toml` | PASS | PASS | Local Windows run passed on shared verification baseline `e2681b6` with 48 Rust tests; local macOS P2 run passed with 57 Rust tests after clearing proxy variables for localhost WireMock, and the final shared SHA `98c20a2` also passed in CI |
+| Production build | PASS | PASS | Windows CI release and build workflow passed on `98c20a2`; macOS `npm run tauri build` produced `Aura Translation.app` locally and the macOS CI workflow also passed on `98c20a2` |
+| Final shared CI SHA | PASS | PASS | Both Windows and macOS CI gates passed on the same shared `main` commit `98c20a2` |
 
 ## Manual Platform Checks
 
 | Behavior | Required Host | Status | Evidence |
 |---|---|---|---|
-| Config parse/read failure surfaces as recoverable structured notification | Windows | BLOCKED | Isolated `%APPDATA%` launch with malformed `config.json` kept `aura-translation.exe` alive and responding after 5s (`PID 25168`, `config.json:18`, `profiles.json:50`, `history.json:7`), but the recoverable `daemon-error` notification could not be inspected from this Codex desktop session because no tray shell handle was exposed (`Shell_TrayWnd=0`). |
-| Profiles parse/read failure surfaces as recoverable structured notification | Windows | BLOCKED | Isolated `%APPDATA%` launch with malformed `profiles.json` kept `aura-translation.exe` alive and responding after 5s (`PID 28268`, `config.json:329`, `profiles.json:18`, `history.json:7`), but the recoverable `daemon-error` notification could not be inspected from this Codex desktop session because no tray shell handle was exposed (`Shell_TrayWnd=0`). |
-| History parse/read failure surfaces as recoverable structured notification | Windows | BLOCKED | Isolated `%APPDATA%` launch with malformed `history.json` kept `aura-translation.exe` alive and responding after 5s (`PID 22596`, `config.json:329`, `profiles.json:50`, `history.json:18`), but the recoverable `daemon-error` notification could not be inspected from this Codex desktop session because no tray shell handle was exposed (`Shell_TrayWnd=0`). |
-| Probe cache returns a cached result inside TTL and invalidates after relevant config change | Windows | BLOCKED | Requires interactive Settings-window access to drive repeated probe clicks and config saves. In this Codex Windows session the app process launches, but the tray/desktop shell is not enumerable (`Shell_TrayWnd=0`) so Settings could not be opened for UI-level verification. |
-| Tray icon and tooltip reflect ready vs needs-setup state after config changes | Windows | BLOCKED | Direct tray verification is blocked in this Codex session: `explorer.exe` is present in session 5, but `FindWindow('Shell_TrayWnd')` returns `0`, so the tray tooltip/state cannot be observed. |
-| Legacy provider-scoped secret remains readable during profile-scoped-key migration | Windows | N/A ON `e2681b6` | Shared runtime/source handoff for this verification remains `569d229` (`P1A` only). Profile-scoped secret migration is a later `P2` concern and is not present on the verified Windows baseline. |
-| History filters narrow rows by text/status/language pair | Windows | N/A ON `e2681b6` | `P2` history-filter scope has not been assigned or delivered on the shared verification baseline. |
-| Retry with original provider/model/base URL does not switch active profile | Windows | N/A ON `e2681b6` | `P2` retry-override scope has not been assigned or delivered on the shared verification baseline. |
+| Config parse/read failure surfaces as recoverable structured notification | Windows | DEFERRED | No Windows host is currently available. Prior isolated `%APPDATA%` survivability evidence exists for `P1A`, but `98c20a2` has no current target-host UI confirmation. |
+| Profiles parse/read failure surfaces as recoverable structured notification | Windows | DEFERRED | No Windows host is currently available. Prior isolated `%APPDATA%` survivability evidence exists for `P1A`, but `98c20a2` has no current target-host UI confirmation. |
+| History parse/read failure surfaces as recoverable structured notification | Windows | DEFERRED | No Windows host is currently available. Prior isolated `%APPDATA%` survivability evidence exists for `P1A`, but `98c20a2` has no current target-host UI confirmation. |
+| Probe cache returns a cached result inside TTL and invalidates after relevant config change | Windows | DEFERRED | Deferred until a real Windows desktop session is available. CI pass on `98c20a2` is not treated as proof of UI-level probe behavior. |
+| Tray icon and tooltip reflect ready vs needs-setup state after config changes | Windows | DEFERRED | Deferred until a real Windows desktop session is available. CI pass on `98c20a2` is not treated as proof of tray behavior. |
+| Legacy provider-scoped secret remains readable during profile-scoped-key migration | Windows | DEFERRED | Deferred until a real Windows host is available for credential-store verification against `98c20a2`. |
+| History filters narrow rows by text/status/language pair | Windows | DEFERRED | Deferred until a real Windows host is available for `P2` UI verification against `98c20a2`. |
+| Retry with original provider/model/base URL does not switch active profile | Windows | DEFERRED | Deferred until a real Windows host is available for `P2` UI verification against `98c20a2`. |
 | Config parse/read failure surfaces as recoverable structured notification | macOS | NOT RUN | |
 | Profiles parse/read failure surfaces as recoverable structured notification | macOS | NOT RUN | |
 | History parse/read failure surfaces as recoverable structured notification | macOS | NOT RUN | |
 | Probe cache returns a cached result inside TTL and invalidates after relevant config change | macOS | NOT RUN | |
 | Tray icon and tooltip reflect ready vs needs-setup state after config changes | macOS | NOT RUN | |
 | Legacy provider-scoped secret remains readable during profile-scoped-key migration | macOS | NOT RUN | |
-| History filters narrow rows by text/status/language pair | macOS | NOT RUN | |
-| Retry with original provider/model/base URL does not switch active profile | macOS | NOT RUN | |
-| Existing Aura mode, paste-back, and settings startup flow still behave as before | macOS | NOT RUN | |
+| History filters narrow rows by text/status/language pair | macOS | PASS | Built app bundle launched in an isolated user directory (`HOME` and `CFFIXED_USER_HOME` under `/tmp`), loaded two synthetic history rows, and correctly narrowed results by text query (`bonjour`), status (`失败`), and language pair (`法语 → 英语`). |
+| Retry with original provider/model/base URL does not switch active profile | macOS | PARTIAL | Code review plus automated coverage confirm the replay path builds an explicit override payload and does not route through profile activation or config persistence, but full target-host interaction evidence is still pending. |
+| Existing Aura mode, paste-back, and settings startup flow still behave as before | macOS | PARTIAL | The built macOS app still opens `Aura Settings` automatically on first isolated launch as expected; Aura-mode and paste-back behaviors were not re-run in this verification pass. |
 
 ## Regression Coverage
 
@@ -45,3 +45,4 @@
 - Linux secret-service support remains out of scope for this plan.
 - Profile reorder, import/export, and history export remain out of scope for this plan.
 - Aura Guard future phases remain unstarted and must not be treated as part of P1/P2 closure.
+- Windows interactive verification is intentionally deferred because no Windows host is currently available.

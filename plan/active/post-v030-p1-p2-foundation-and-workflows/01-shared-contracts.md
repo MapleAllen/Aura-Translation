@@ -10,7 +10,7 @@ Dependencies: `4fe5f24` documentation baseline
 Owner: none - P2 implementation lock released after Codex review
 Task: none - awaiting pushed P2 handoff verification
 Starting main SHA: n/a
-Status: NO ACTIVE IMPLEMENTATION LOCK - P2 HANDOFF `19a1bad` RECORDED; CROSS-PLATFORM VERIFICATION PENDING
+Status: NO ACTIVE IMPLEMENTATION LOCK - P2 HANDOFF `19a1bad` PUSHED AS `98c20a2`; WINDOWS INTERACTIVE VERIFICATION DEFERRED, MACOS TARGET-HOST VERIFICATION PARTIAL
 
 ## Allowed Files
 
@@ -148,8 +148,12 @@ When an implementation lock is assigned for this plan, edits may be limited to:
 - Current `P2` implementation scope: profile-scoped system credentials with legacy fallback, client-side history search/filter, backward-compatible retry metadata, and explicit one-shot original-config replay.
 - P2 review fixed plaintext-fallback history replay so it resolves the original profile's stored plaintext key without activating that profile.
 - Reviewed `P2` shared-source handoff commit: `19a1bad`.
+- Shared `main` plan-sync baseline: `98c20a2`.
+- Shared CI passed on `98c20a2` for both Windows and macOS workflows.
+- Current target-host focus is macOS because no Windows host is available for direct UI/tray verification.
 
 ## Deviations
 
 - Windows verifier environment did not expose an inspectable tray shell handle, so tray/UI visibility rows remain a deferred target-host follow-up rather than a blocker for the next implementation lock.
 - `TranslationWindowView.svelte` and its test surface were added to the allowed set because the explicit one-shot retry override cannot reach `translate_text` without the translation-window request boundary.
+- Windows interactive verification is now deferred by coordination decision until a real Windows host is available; do not treat CI-only success as equivalent target-host proof.

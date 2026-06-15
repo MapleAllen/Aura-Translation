@@ -1,7 +1,7 @@
 # post-v030-p1-p2-foundation-and-workflows Overview
 
 Created: 2026-06-11
-Status: P2 SHARED-SOURCE HANDOFF `19a1bad` RECORDED - CROSS-PLATFORM VERIFICATION PENDING
+Status: P2 SHARED-SOURCE HANDOFF `19a1bad` PUSHED AS `98c20a2` - WINDOWS INTERACTIVE VERIFICATION DEFERRED, MACOS TARGET-HOST VERIFICATION PARTIAL
 Coordination owner: Codex coordinator
 Working branch: `main`
 
@@ -41,10 +41,11 @@ Execute the first two post-`v0.3.0` priorities sequentially on `main` with one a
 - `00d91ec` established the cross-platform execution contract and locked `P1A` to sequential main-branch implementation.
 - `P1A` now routes config/profile/history startup load failures through `daemon-error` plus background notifications while preserving fallback startup behavior.
 - `P1A` also adds a 30-second readiness probe cache keyed by provider/base URL/model/hydrated API key and keeps the tray tooltip summary aligned with the current readiness state.
-- `569d229` is the pushed `P1A` runtime handoff commit, and `89a7bf2` is the current shared `main` baseline that records the handoff status without further source changes.
-- `19a1bad` is the reviewed `P2` shared-source handoff commit; final cross-platform CI and target-host evidence remain pending before plan closure.
-- `src-tauri/src/config.rs` still uses provider-scoped secret account names (`provider:deepseek`, `provider:openrouter`, `provider:ollama`).
-- `ui/lib/HistoryList.svelte` has no search/filter controls, and retry currently follows the active config rather than an explicit entry override path.
+- `569d229` is the pushed `P1A` runtime handoff commit, and `89a7bf2` records the handoff status without further source changes.
+- `19a1bad` is the reviewed `P2` shared-source handoff commit, and `98c20a2` is the pushed plan-sync baseline on shared `main`.
+- Shared CI passed on the same final SHA `98c20a2` for both Windows and macOS workflows.
+- Windows interactive verification is explicitly deferred because no Windows host is currently available.
+- macOS target-host verification has confirmed first-launch Settings behavior plus isolated history search, status, and language-pair filters on the built app bundle.
 - Existing regression coverage already touches the target surface:
   - `ui/lib/SettingsPanel.test.ts`
   - `ui/lib/ProfileManager.test.ts`
@@ -83,8 +84,9 @@ Execute the first two post-`v0.3.0` priorities sequentially on `main` with one a
 - Tray readiness tooltip reflects ready vs needs-setup state on both Windows and macOS, and icon-badge follow-up work is tracked explicitly.
 - Profiles can resolve provider secrets through a profile-scoped system-store naming contract while preserving legacy-entry fallback during migration.
 - History UI supports client-side search and filters, and users can retry an entry with its original provider/model/base URL without switching the active profile.
-- Shared checks and both platform-specific gates pass on the same final `main` SHA.
+- Shared checks and both CI gates pass on the same final `main` SHA.
 - `docs/` is updated to reflect the implemented current state before archiving this plan.
+- Required macOS target-host evidence is recorded for the implemented `P2` UI workflow, and any deferred Windows/manual follow-up is called out explicitly before archive.
 
 ## Main-Branch Handoff Sequence
 
