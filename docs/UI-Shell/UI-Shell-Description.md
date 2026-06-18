@@ -34,7 +34,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - When unpinned, the backend repositions the bubble above the cursor and clamps it to the current monitor work area.
 - When pinned, the bubble stops auto-hiding on blur and persists its dragged size and position.
 - When pinned, the source preview becomes a lightweight draft composer so the user can edit source text in place and re-translate with `Cmd/Ctrl+Enter`.
-- On Windows and macOS, the translation bubble can paste the latest translated text back into the original source app when Aura captured that source window/app at trigger time.
+- Result actions rely on explicit copy; source-app paste-back is no longer part of the UI shell.
 
 ### Settings window behavior
 
@@ -86,7 +86,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 ### Backend
 
 - `src-tauri/src/lib.rs`
-  - owns both window lifecycles, hotkey handling, cursor-anchored positioning, settings placement restore, and Windows clipboard polling for Aura mode
+  - owns both window lifecycles, hotkey handling, cursor-anchored positioning, settings placement restore, and platform clipboard polling for Aura mode
   - persists window placement metadata into config
   - suppresses self-originated clipboard writes when the translation bubble copies its own result
 

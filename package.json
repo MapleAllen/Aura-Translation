@@ -1,7 +1,7 @@
 {
   "name": "aura-translation",
   "version": "0.3.1",
-  "description": "",
+  "description": "Local-first Tauri desktop translator with hotkey and clipboard-triggered workflows.",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
