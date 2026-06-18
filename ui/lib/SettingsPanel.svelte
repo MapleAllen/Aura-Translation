@@ -73,7 +73,6 @@
   let profileDraftName = $state('');
   let capabilities = $state<SystemCapabilities>({
     aura_mode: 'unsupported',
-    paste_back: 'unsupported',
   });
   let runtimeStatus = $state<RuntimeStatus | null>(null);
   let probeResult = $state<ProviderProbeResult | null>(null);

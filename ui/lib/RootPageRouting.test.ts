@@ -112,8 +112,6 @@ describe('root page window routing', () => {
       switch (command) {
         case 'get_config':
           return Promise.resolve(baseConfig);
-        case 'get_paste_back_status':
-          return Promise.resolve({ supported: true, available: false });
         case 'get_runtime_status':
           return Promise.resolve(readyStatus);
         case 'get_translation_history':

@@ -113,7 +113,6 @@ describe('SettingsPanel operator console layout', () => {
         case 'get_system_capabilities':
           return Promise.resolve({
             aura_mode: 'ready',
-            paste_back: 'ready',
           });
         case 'get_runtime_status':
           return Promise.resolve(readyStatus);
@@ -208,7 +207,6 @@ describe('SettingsPanel operator console layout', () => {
         case 'get_system_capabilities':
           return Promise.resolve({
             aura_mode: 'ready',
-            paste_back: 'ready',
           });
         case 'get_config':
           return Promise.resolve({
@@ -330,7 +328,6 @@ describe('SettingsPanel operator console layout', () => {
         case 'get_system_capabilities':
           return Promise.resolve({
             aura_mode: 'unsupported',
-            paste_back: 'unsupported',
           });
         case 'get_runtime_status':
           return Promise.resolve(readyStatus);
@@ -416,7 +413,6 @@ describe('SettingsPanel operator console layout', () => {
         case 'get_system_capabilities':
           return Promise.resolve({
             aura_mode: 'ready',
-            paste_back: 'ready',
           });
         case 'get_runtime_status':
           return Promise.resolve(needsSetupStatus);
@@ -477,7 +473,6 @@ describe('SettingsPanel operator console layout', () => {
         case 'get_system_capabilities':
           return Promise.resolve({
             aura_mode: 'ready',
-            paste_back: 'ready',
           });
         case 'get_config':
           return Promise.resolve(baseConfig);

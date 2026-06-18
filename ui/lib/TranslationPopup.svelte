@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { TranslationUsage } from './translationHistory';
-  import type { FeatureCapability } from './capabilities';
 
   type Props = {
     viewState: 'idle' | 'loading' | 'streaming' | 'result' | 'error';
@@ -16,9 +15,6 @@
     showComposer: boolean;
     hasDraftChanges: boolean;
     usage: TranslationUsage | null;
-    canPasteBack?: boolean;
-    pasteBackCapability?: FeatureCapability;
-    pasteBackAvailable?: boolean;
     windowPinned: boolean;
     ondraftsourcechange?: (value: string) => void;
     ontranslatedraft?: () => void;
@@ -28,7 +24,6 @@
     oncancel?: () => void;
     ondismiss?: () => void;
     oncopy?: () => void;
-    onpasteback?: () => void;
   };
 
   let {
@@ -45,9 +40,6 @@
     showComposer,
     hasDraftChanges,
     usage,
-    canPasteBack,
-    pasteBackCapability = 'unsupported',
-    pasteBackAvailable,
     windowPinned,
     ondraftsourcechange,
     ontranslatedraft,
@@ -57,21 +49,11 @@
     oncancel,
     ondismiss,
     oncopy,
-    onpasteback,
   }: Props = $props();
 
   let sourceExpanded = $state(false);
 
   const isBusy = $derived(viewState === 'loading' || viewState === 'streaming');
-
-  const canPasteBackDerived = $derived(
-    canPasteBack ?? (
-      pasteBackCapability === 'needs_permission' ||
-      (pasteBackCapability === 'ready' && Boolean(pasteBackAvailable))
-    ),
-  );
-
-  const showPasteBackAction = $derived(pasteBackCapability !== 'unsupported');
 
   const statusLabel = $derived.by(() => {
     if (viewState === 'loading') return '连接中';
@@ -111,22 +93,6 @@
   );
 
   const showSourceToggle = $derived(Boolean(sourceText) && !showComposer);
-
-  const pasteBackTooltip = $derived.by(() => {
-    if (!translatedText || isBusy) {
-      return '请先完成翻译再回填。';
-    }
-    if (pasteBackCapability === 'unsupported') {
-      return '回填功能当前不支持此平台。';
-    }
-    if (pasteBackCapability === 'needs_permission') {
-      return '回填需要系统辅助功能权限，点击回填以请求授权。';
-    }
-    if (!pasteBackAvailable) {
-      return '请先从前台应用复制文本，Aura 才能回填。';
-    }
-    return '将译文回填到原应用。';
-  });
 
   $effect(() => {
     if (showComposer) {
@@ -345,18 +311,6 @@
                 {/if}
 
                 <div class="flex flex-wrap items-center justify-end gap-2">
-                  {#if showPasteBackAction}
-                  <button
-                    class="aura-console-button disabled:cursor-not-allowed disabled:opacity-40"
-                    onclick={() => onpasteback?.()}
-                    title={pasteBackTooltip}
-                    type="button"
-                    disabled={!canPasteBackDerived}
-                  >
-                    回填
-                  </button>
-                  {/if}
-
                   <button
                     class="aura-console-button"
                     data-variant="primary"

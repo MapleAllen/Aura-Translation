@@ -63,8 +63,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 
 - `ui/lib/TranslationPopup.svelte`
   - renders the minimal floating translation bubble
-  - exposes pin, retry, paste-back, copy, cancel, close, pinned-mode draft editing controls, and token usage badges when available
-  - hides the paste-back action when paste-back capability is `unsupported`
+  - exposes pin, retry, copy, cancel, close, pinned-mode draft editing controls, and token usage badges when available
 
 - `ui/lib/SettingsPanel.svelte`
   - renders the dedicated settings form
@@ -89,7 +88,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - `src-tauri/src/lib.rs`
   - owns both window lifecycles, hotkey handling, cursor-anchored positioning, settings placement restore, and Windows clipboard polling for Aura mode
   - persists window placement metadata into config
-  - suppresses self-originated clipboard writes when the translation bubble copies its own result or temporarily swaps the clipboard for paste-back
+  - suppresses self-originated clipboard writes when the translation bubble copies its own result
 
 - `src-tauri/src/config.rs`
   - stores `aura_mode_enabled`
@@ -100,13 +99,10 @@ Tauri creates the hidden translation window during startup and lazily creates th
 
 - `invoke('get_config')`
 - `invoke('get_system_capabilities')`
-- `invoke('request_accessibility_permission')`
 - `invoke('save_config', { config })`
 - `invoke('save_window_placement', { kind, placement })`
 - `invoke('realign_translation_window')`
 - `invoke('copy_result_to_clipboard', { text })`
-- `invoke('get_paste_back_status')`
-- `invoke('paste_translation_back', { text })`
 - `invoke('translate_text', { ... })`
 - `invoke('cancel_translate', { requestId })`
 - `invoke('get_translation_history')`
@@ -138,8 +134,7 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - The cursor-near bubble uses cursor position rather than exact cross-application text selection bounds.
 - Translation history is currently managed from Settings only; the tray still does not expose recent entries directly.
 - Translation profiles intentionally scope only translation provider and language defaults; hotkey and window placement stay global.
-- Paste-back is unsupported on Linux, and requires Accessibility permissions on macOS. It restores only text clipboard content, not non-text clipboard payloads.
-- Paste-back controls are hidden when paste-back is unsupported, and require permission prompts if permissions are missing (e.g. on macOS).
+- Source-app paste-back has been removed from the UI shell; result actions now rely on explicit copy.
 
 ## Future Directions
 

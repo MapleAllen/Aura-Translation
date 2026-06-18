@@ -17,7 +17,6 @@ function renderPopup(overrides: Record<string, unknown> = {}) {
     showComposer: false,
     hasDraftChanges: false,
     usage: null,
-    canPasteBack: false,
     windowPinned: false,
     ondraftsourcechange: vi.fn(),
     ontranslatedraft: vi.fn(),
@@ -27,7 +26,6 @@ function renderPopup(overrides: Record<string, unknown> = {}) {
     oncancel: vi.fn(),
     ondismiss: vi.fn(),
     oncopy: vi.fn(),
-    onpasteback: vi.fn(),
     ...overrides,
   });
 }
@@ -56,7 +54,6 @@ describe('TranslationPopup', () => {
         completion_tokens: 6,
         total_tokens: 15,
       },
-      canPasteBack: true,
     });
 
     expect(screen.getByTestId('popup-context-row')).toHaveTextContent('英语');
@@ -81,7 +78,6 @@ describe('TranslationPopup', () => {
       providerLabel: 'DeepSeek',
       modelLabel: 'deepseek-chat',
       translatedText: '请复制这条翻译结果',
-      canPasteBack: true,
       windowPinned: false,
       onTogglePinned,
       oncopy,
@@ -98,7 +94,7 @@ describe('TranslationPopup', () => {
     expect(oncopy).toHaveBeenCalledTimes(1);
   });
 
-  it('hides paste-back action when the current platform does not support it', () => {
+  it('does not render a paste-back action in result mode', () => {
     renderPopup({
       viewState: 'result',
       sourceText: 'Copy this result',
@@ -108,8 +104,6 @@ describe('TranslationPopup', () => {
       providerLabel: 'DeepSeek',
       modelLabel: 'deepseek-chat',
       translatedText: 'Translated result',
-      canPasteBack: true,
-      pasteBackCapability: 'unsupported',
     });
 
     expect(screen.queryByRole('button', { name: /回填/ })).not.toBeInTheDocument();
@@ -154,7 +148,6 @@ describe('TranslationPopup', () => {
       showComposer: false,
       hasDraftChanges: false,
       usage: null,
-      canPasteBack: false,
       windowPinned: false,
       ondraftsourcechange: vi.fn(),
       ontranslatedraft: vi.fn(),
@@ -164,7 +157,6 @@ describe('TranslationPopup', () => {
       oncancel: vi.fn(),
       ondismiss: vi.fn(),
       oncopy: vi.fn(),
-      onpasteback: vi.fn(),
     });
 
     expect(screen.getByTestId('popup-main-surface')).toBeInTheDocument();

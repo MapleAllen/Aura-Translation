@@ -14,7 +14,7 @@ cargo test --manifest-path ./src-tauri/Cargo.toml
 npm run tauri build
 ```
 
-## Latest Local Run - 2026-06-09
+## Latest Local Run - 2026-06-18
 
 Host: local macOS desktop (`aarch64-apple-darwin`)
 
@@ -22,8 +22,8 @@ Automated results:
 
 - `npm ci`: passed
 - `npm run check`: passed
-- `npm test`: passed (`47` UI tests)
-- `cargo test --manifest-path src-tauri/Cargo.toml`: passed (`53` Rust tests)
+- `npm test`: passed (`49` UI tests)
+- `cargo test --manifest-path src-tauri/Cargo.toml`: passed (`57` Rust tests)
 - `npm run tauri build`: passed and produced `/src-tauri/target/release/bundle/macos/Aura Translation.app`
 
 Build notes:
@@ -43,7 +43,7 @@ Run these on a real macOS desktop after downloading or building the app bundle.
 6. Confirm the translation and settings windows render as transparent, borderless tool windows.
 7. Enable pinned mode and confirm the translation window stays above normal app windows.
 8. Confirm Aura mode automatic clipboard translation is supported on macOS when capabilities are ready.
-9. Confirm paste-back is supported on macOS, requesting Accessibility permissions if needed, and focusing and pasting back into the target app.
+9. Confirm result actions expose copy only; source-app paste-back and Accessibility permission prompts are absent.
 
 ## Latest Manual Validation Notes - 2026-06-09
 
@@ -55,7 +55,7 @@ Verified on this host:
 - **Keychain Storage**: API credentials successfully save, read, and delete via the macOS native Keychain.
 - **Visuals and Window States**: Frameless translucent window styling, pinned always-on-top behaviors, and close/reopen routines operate as expected.
 - **Aura Mode on macOS**: Clipboard changes are tracked using native `NSPasteboard` polling and successfully trigger translations automatically when enabled.
-- **Paste-back on macOS**: App-level targeting successfully focuses the originating process and simulates key events to inject translation results. Gracefully requests Accessibility permissions when needed.
+- **Result actions on macOS**: The translation result exposes copy only; source-app paste-back and Accessibility permission prompts are absent.
 - **Native Notifications**: System alerts/notifications fire correctly on completion, retry, or connection failure events.
 - **Tray Menu**: Menu bar icon interactions and click responses behave correctly.
 
@@ -74,4 +74,4 @@ Reproduction notes for the hotkey conflict:
 
 - macOS supports manual hotkey translation, Settings, profiles, history, Keychain-backed secrets, notifications, tray/menu bar control, and pinned-window behavior.
 - macOS fully supports Aura mode automatic clipboard monitoring.
-- macOS supports source-app paste-back, utilizing a backend-driven capability model and requesting Accessibility permissions (AXIsProcessTrusted) when required.
+- Source-app paste-back has been removed; macOS no longer requests Accessibility permission for this flow.
