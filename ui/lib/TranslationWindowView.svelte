@@ -171,6 +171,21 @@
     pushNotification(createTranslationErrorNotification(message));
   }
 
+  /**
+   * Releases a backend request reservation for a dispatch this window decided not to perform.
+   *
+   * A successful emit only proves the event reached the webview; the request is not real until
+   * `translate_text` runs. A failure before that point must hand the reservation back, or the next
+   * press for this text collapses instead of translating.
+   */
+  async function releaseReservation(text: string) {
+    try {
+      await invoke('release_request_reservation', { text });
+    } catch (e) {
+      console.error('Failed to release the request reservation:', e);
+    }
+  }
+
   async function cancelCurrentTranslation() {
     if (currentRequestId > 0) {
       try {
@@ -458,7 +473,6 @@
         await listen<string>('trigger-translate', async (event) => {
           const text = event.payload?.trim();
           if (!text) return;
-
           await cancelCurrentTranslation();
           currentRequestId += 1;
 
@@ -468,7 +482,12 @@
           draftSourceText = text;
           showBubble();
           const loadedConfig = await loadConfig();
-          if (!loadedConfig) return;
+          if (!loadedConfig) {
+            // The backend reserved this request before emitting it. Abandoning the dispatch here
+            // must release that reservation.
+            await releaseReservation(text);
+            return;
+          }
           lastRequestConfig = cloneAppConfig(loadedConfig);
           await startTranslation(loadedConfig);
         }),
@@ -485,7 +504,14 @@
           translatedTextTriggerText = text;
           draftSourceText = text;
           showBubble();
-          await startTranslation(cloneAppConfig(event.payload.config), text);
+          const overrideConfig = event.payload.config
+            ? cloneAppConfig(event.payload.config)
+            : null;
+          if (!overrideConfig) {
+            await releaseReservation(text);
+            return;
+          }
+          await startTranslation(overrideConfig, text);
         }),
       );
 
@@ -613,10 +639,18 @@
       );
     };
 
-    void register();
-    void invoke('mark_ui_ready').catch((e) => {
-      console.error('Failed to mark UI as ready:', e);
-    });
+    // Registration must complete before the backend is told the UI is ready. Reporting readiness
+    // while listeners were still being attached let a trigger be emitted into a window with no
+    // listener yet, which also left that request's reservation pending.
+    void register()
+      .catch((e) => {
+        console.error('Failed to register translation window listeners:', e);
+      })
+      .finally(() => {
+        void invoke('mark_ui_ready').catch((e) => {
+          console.error('Failed to mark UI as ready:', e);
+        });
+      });
 
     return () => {
       if (placementSaveTimeoutId !== null) clearTimeout(placementSaveTimeoutId);

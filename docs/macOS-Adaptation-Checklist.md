@@ -80,6 +80,8 @@ Baseline `a6d1d16` plus the M1 working tree. Host: local macOS desktop (`aarch64
 - `cargo test --manifest-path src-tauri/Cargo.toml --locked`: passed (`75` Rust tests)
 - `scripts/release/mock-translate-server.py`: exercised by hand for both the streaming and
   non-streaming paths and for counter reset
+- `python3 -m unittest discover -s scripts/release -p 'test_*.py'`: passed, 11 tests covering the
+  cold/warm split, recall-latency arithmetic, the sample-count gates, and malformed trace lines
 
 The M1 interaction rules are asserted without a Tauri `AppHandle` in
 `src-tauri/src/interaction.rs`, which is what makes "recalling the same text issues no request"

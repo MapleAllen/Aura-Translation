@@ -74,13 +74,21 @@ def recall_report(log_path: pathlib.Path, out_path: pathlib.Path, expected: int)
 
     deltas: list[int] = []
     pending_request: int | None = None
+    superseded = 0
     for name, t_ms in events:
         if name == RECALL_REQUEST:
+            if pending_request is not None:
+                # A second request arrived before the first produced a show. Counting these
+                # separately keeps "the window never appeared" distinguishable from "the user
+                # pressed again before it did".
+                superseded += 1
             pending_request = t_ms
         elif name == RECALL_SHOWN and pending_request is not None:
             deltas.append(t_ms - pending_request)
             pending_request = None
 
+    # A request that is still pending at the end never produced a show.
+    unanswered = 1 if pending_request is not None else 0
     sample_count_ok = len(deltas) == expected
     summary = summarize(deltas) if deltas else None
 
@@ -89,7 +97,8 @@ def recall_report(log_path: pathlib.Path, out_path: pathlib.Path, expected: int)
         "expectedRecalls": expected,
         "observedRecalls": len(deltas),
         "sampleCountMatches": sample_count_ok,
-        "unpairedRequests": 1 if pending_request is not None else 0,
+        "requestsWithoutShow": unanswered,
+        "supersededRequests": superseded,
         "warmRecallMs": summary,
         "thresholds": {"warmRecallP95Ms": WARM_RECALL_P95_BUDGET_MS},
         # A short sample count must fail even when the samples that did arrive were fast: one
@@ -102,7 +111,7 @@ def recall_report(log_path: pathlib.Path, out_path: pathlib.Path, expected: int)
         "note": (
             "warmRecallMs is window-shown minus recall-requested, so it measures local recall "
             "latency and includes no provider time. It is not process uptime. A sample count "
-            "below expectedRecalls, or an unpaired request, fails the run."
+            "below expectedRecalls, or a request that produced no show, fails the run."
         ),
     }
 

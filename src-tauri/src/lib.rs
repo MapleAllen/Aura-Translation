@@ -1,5 +1,6 @@
 mod aura_guard;
 mod capabilities;
+mod clipboard_monitor;
 mod config;
 mod history;
 mod hotkey;
@@ -30,9 +31,6 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_notification::NotificationExt;
 
-#[cfg(windows)]
-use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
-
 const TRANSLATION_WINDOW_LABEL: &str = "translation";
 const SETTINGS_WINDOW_LABEL: &str = "settings";
 const TRAY_ID: &str = "main";
@@ -46,11 +44,6 @@ const SETTINGS_EDGE_MARGIN: f64 = 18.0;
 const TRANSLATION_EDGE_MARGIN: f64 = 14.0;
 const TRANSLATION_CURSOR_GAP: f64 = 18.0;
 const MAX_SUPPRESSED_CLIPBOARD_TEXTS: usize = 4;
-/// Clipboard poll cadence while automatic translation is enabled.
-const CLIPBOARD_POLL_ENABLED: Duration = Duration::from_millis(275);
-/// Idle cadence while automatic translation is disabled. The loop never reads the clipboard in
-/// this state; the longer period only reduces how often it re-reads the configuration.
-const CLIPBOARD_POLL_DISABLED: Duration = Duration::from_millis(1000);
 
 pub type ConfigState = Arc<RwLock<AppConfig>>;
 type HistoryState = Arc<Mutex<history::TranslationHistoryStore>>;
@@ -168,11 +161,34 @@ pub async fn record_request_identity(
         .clone();
 
     let mut state = runtime.lock().await;
-    // The reservation is released unconditionally. A history replay dispatches with the entry's
-    // own configuration, so its request identity need not equal the reserved one; either way a
-    // request is genuinely being sent now, which is exactly what the reservation guarded.
-    state.translation.pending_request_identity = None;
+    // Only the reservation this call owns is released. Clearing the slot unconditionally let a
+    // request whose identity did not match delete a *different* request's reservation, after
+    // which that other request could be dispatched a second time.
+    if interaction::owns_reservation(state.translation.pending_request_identity.as_ref(), &identity) {
+        state.translation.pending_request_identity = None;
+    }
     state.translation.last_request_identity = Some(identity);
+    Ok(())
+}
+
+/// Releases a reservation whose request the frontend decided not to dispatch.
+///
+/// A successful `emit` only proves the event was handed to the webview. The frontend can still
+/// abandon the request before calling `translate_text` — it reloads its configuration first and
+/// returns early if that fails. Without an explicit release the reservation would outlive the
+/// request it was guarding, and the next press for that text would collapse instead of translating.
+#[tauri::command]
+async fn release_request_reservation(app: AppHandle, text: String) -> Result<(), String> {
+    let runtime = app
+        .try_state::<RuntimeState>()
+        .ok_or_else(|| "runtime state is unavailable".to_string())?
+        .inner()
+        .clone();
+
+    let mut state = runtime.lock().await;
+    if interaction::reservation_matches_text(state.translation.pending_request_identity.as_ref(), &text) {
+        state.translation.pending_request_identity = None;
+    }
     Ok(())
 }
 
@@ -1414,12 +1430,23 @@ async fn show_existing_translation_window(app: AppHandle) {
         emit_daemon_error(&app, "translation-window-recall-failed", err, true);
     }
 
-    trace_ui_event(&app, "window-show:translation-recall");
-    let _ = window.show();
-    let _ = window.set_focus();
-    // Emitted after the show so the recall delta measures the real interval rather than a
-    // pre-show marker.
-    trace_ui_event(&app, "window-shown:translation-recall");
+    // Only a successful show produces a completion marker. Recording one regardless meant a
+    // window that never appeared still contributed a fast, passing sample.
+    match window.show() {
+        Ok(()) => {
+            let _ = window.set_focus();
+            trace_ui_event(&app, "window-shown:translation-recall");
+        }
+        Err(err) => {
+            emit_daemon_error(
+                &app,
+                "translation-window-show-failed",
+                format!("Failed to show the translation window: {err}"),
+                true,
+            );
+            return;
+        }
+    }
 
     if let Err(err) =
         wait_for_ui_ready(&app, TRANSLATION_WINDOW_LABEL, Duration::from_secs(5)).await
@@ -1786,227 +1813,8 @@ fn register_fallback_hotkey(app: &AppHandle) {
     }
 }
 
-#[cfg(windows)]
-fn clipboard_sequence_number() -> Option<u32> {
-    let sequence = unsafe { GetClipboardSequenceNumber() };
-    if sequence == 0 {
-        None
-    } else {
-        Some(sequence)
-    }
-}
-
-
 fn spawn_clipboard_monitor(app: &AppHandle) {
-    #[cfg(target_os = "macos")]
-    {
-        use tauri_plugin_clipboard_manager::ClipboardExt;
-        use objc2_app_kit::NSPasteboard;
-
-        let app_handle = app.clone();
-        tauri::async_runtime::spawn(async move {
-            let runtime_state = app_handle.state::<RuntimeState>().inner().clone();
-            let config_changed = app_handle.state::<Arc<tokio::sync::Notify>>().inner().clone();
-            let mut resume = interaction::ClipboardResumeState::default();
-
-            loop {
-                wait_for_monitor_tick(&app_handle, &config_changed).await;
-
-                // Read the mode *before* touching the pasteboard. When automatic translation is
-                // off this loop must not call into NSPasteboard at all, which is what makes
-                // "paused" mean paused instead of merely unread.
-                let config = current_config(&app_handle);
-                match resume.tick(config.aura_mode_enabled) {
-                    interaction::ClipboardRunState::Paused => continue,
-                    interaction::ClipboardRunState::ResumeBaseline => {
-                        // The pasteboard was not sampled while paused, so the stored sequence is
-                        // stale. Record the current one and translate nothing: text copied during
-                        // the pause must not be sent when automatic translation comes back.
-                        let sequence = {
-                            let pb = NSPasteboard::generalPasteboard();
-                            pb.changeCount() as u32
-                        };
-                        let mut runtime = runtime_state.lock().await;
-                        runtime.clipboard.last_sequence = Some(sequence);
-                        runtime.clipboard.last_dispatched_text = None;
-                        continue;
-                    }
-                    interaction::ClipboardRunState::Running => {}
-                }
-
-                let sequence = {
-                    let pb = NSPasteboard::generalPasteboard();
-                    pb.changeCount() as u32
-                };
-
-                {
-                    let mut runtime = runtime_state.lock().await;
-                    if runtime.clipboard.last_sequence == Some(sequence) {
-                        continue;
-                    }
-                    runtime.clipboard.last_sequence = Some(sequence);
-                }
-
-                let text = app_handle.clipboard().read_text().unwrap_or_default();
-                let trimmed = text.trim().to_string();
-                if trimmed.is_empty() {
-                    continue;
-                }
-
-                if config.aura_guard_enabled {
-                    if let Some(block) = aura_guard::detect_sensitive_clipboard(&trimmed) {
-                        emit_aura_guard_blocked(&app_handle, block.reason);
-                        continue;
-                    }
-                }
-
-                let mut runtime = runtime_state.lock().await;
-                let suppressed = consume_suppressed_clipboard_text(&mut runtime.clipboard, trimmed.as_str());
-                let duplicate =
-                    runtime.clipboard.last_dispatched_text.as_deref() == Some(trimmed.as_str());
-                let action = interaction::decide_clipboard_tick(suppressed, duplicate);
-
-                if action != interaction::MonitorAction::Dispatch {
-                    continue;
-                }
-
-                runtime.clipboard.last_dispatched_text = Some(trimmed.clone());
-                drop(runtime);
-
-                let identity = interaction::RequestIdentity::from_config(&trimmed, &config);
-                let app_clone = app_handle.clone();
-                tauri::async_runtime::spawn(async move {
-                    match reserve_request_identity(&app_clone, identity.clone()).await {
-                        Ok(interaction::ReservationOutcome::Reserved) => {
-                            trigger_translation(app_clone, trimmed, identity).await;
-                        }
-                        // Another path already dispatched this exact request.
-                        Ok(interaction::ReservationOutcome::AlreadyInFlight) => {}
-                        Err(err) => {
-                            emit_daemon_error(
-                                &app_clone,
-                                "request-reservation-failed",
-                                err,
-                                true,
-                            );
-                        }
-                    }
-                });
-            }
-        });
-    }
-
-    #[cfg(windows)]
-    {
-        use tauri_plugin_clipboard_manager::ClipboardExt;
-
-        let app_handle = app.clone();
-        tauri::async_runtime::spawn(async move {
-            let runtime_state = app_handle.state::<RuntimeState>().inner().clone();
-            let config_changed = app_handle.state::<Arc<tokio::sync::Notify>>().inner().clone();
-            let mut resume = interaction::ClipboardResumeState::default();
-
-            loop {
-                wait_for_monitor_tick(&app_handle, &config_changed).await;
-
-                // Mode is read before the clipboard sequence number so a disabled monitor does
-                // no clipboard work at all.
-                let config = current_config(&app_handle);
-                match resume.tick(config.aura_mode_enabled) {
-                    interaction::ClipboardRunState::Paused => continue,
-                    interaction::ClipboardRunState::ResumeBaseline => {
-                        // Pasteboard was not sampled while paused, so the stored sequence is stale.
-                        // Record it and translate nothing, so text copied during the pause is not
-                        // sent when automatic translation comes back.
-                        let mut runtime = runtime_state.lock().await;
-                        runtime.clipboard.last_sequence = clipboard_sequence_number();
-                        runtime.clipboard.last_dispatched_text = None;
-                        continue;
-                    }
-                    interaction::ClipboardRunState::Running => {}
-                }
-
-                let sequence = clipboard_sequence_number();
-                {
-                    let mut runtime = runtime_state.lock().await;
-                    if sequence.is_some() && runtime.clipboard.last_sequence == sequence {
-                        continue;
-                    }
-                    if sequence.is_some() {
-                        runtime.clipboard.last_sequence = sequence;
-                    }
-                }
-
-                let text = app_handle.clipboard().read_text().unwrap_or_default();
-                let trimmed = text.trim().to_string();
-                if trimmed.is_empty() {
-                    continue;
-                }
-
-                if config.aura_guard_enabled {
-                    if let Some(block) = aura_guard::detect_sensitive_clipboard(&trimmed) {
-                        emit_aura_guard_blocked(&app_handle, block.reason);
-                        continue;
-                    }
-                }
-
-                let mut runtime = runtime_state.lock().await;
-                let suppressed = consume_suppressed_clipboard_text(&mut runtime.clipboard, trimmed.as_str());
-                let duplicate =
-                    runtime.clipboard.last_dispatched_text.as_deref() == Some(trimmed.as_str());
-                let action = interaction::decide_clipboard_tick(suppressed, duplicate);
-
-                if action != interaction::MonitorAction::Dispatch {
-                    continue;
-                }
-
-                runtime.clipboard.last_dispatched_text = Some(trimmed.clone());
-                drop(runtime);
-
-                let identity = interaction::RequestIdentity::from_config(&trimmed, &config);
-                let app_clone = app_handle.clone();
-                tauri::async_runtime::spawn(async move {
-                    match reserve_request_identity(&app_clone, identity.clone()).await {
-                        Ok(interaction::ReservationOutcome::Reserved) => {
-                            trigger_translation(app_clone, trimmed, identity).await;
-                        }
-                        // Another path already dispatched this exact request.
-                        Ok(interaction::ReservationOutcome::AlreadyInFlight) => {}
-                        Err(err) => {
-                            emit_daemon_error(
-                                &app_clone,
-                                "request-reservation-failed",
-                                err,
-                                true,
-                            );
-                        }
-                    }
-                });
-            }
-        });
-    }
-
-    #[cfg(not(any(windows, target_os = "macos")))]
-    {
-        let _ = app;
-    }
-}
-
-/// Sleeps until the next monitor tick, or until the configuration changes.
-///
-/// A slower cadence while automatic translation is disabled keeps the idle loop cheap without
-/// ever reading the clipboard; the `config_changed` notification makes the toggle feel immediate.
-async fn wait_for_monitor_tick(app: &AppHandle, config_changed: &tokio::sync::Notify) {
-    let period = if current_config(app).aura_mode_enabled {
-        CLIPBOARD_POLL_ENABLED
-    } else {
-        CLIPBOARD_POLL_DISABLED
-    };
-
-    tokio::select! {
-        _ = tokio::time::sleep(period) => {}
-        _ = config_changed.notified() => {}
-    }
+    clipboard_monitor::spawn(app);
 }
 
 /// Single hotkey entry point for both automatic and manual modes.
@@ -2153,6 +1961,7 @@ pub fn run() {
             mark_ui_ready,
             save_config,
             complete_setup,
+            release_request_reservation,
             save_window_placement,
             realign_translation_window,
             copy_result_to_clipboard,

@@ -232,6 +232,26 @@ pub fn reserve_identity(
     ReservationOutcome::Reserved
 }
 
+/// Whether `identity` owns the current reservation.
+///
+/// A reservation is released only by the request it was taken for. Releasing the slot regardless
+/// of identity let one request delete another request's reservation, which then allowed the other
+/// request to be dispatched twice.
+pub fn owns_reservation(
+    pending: Option<&RequestIdentity>,
+    identity: &RequestIdentity,
+) -> bool {
+    pending == Some(identity)
+}
+
+/// Whether a reservation belongs to a dispatch of `text`.
+///
+/// Used by the frontend's abandon path, where only the text is known: the configuration that
+/// produced the reservation may already have failed to load.
+pub fn reservation_matches_text(pending: Option<&RequestIdentity>, text: &str) -> bool {
+    pending.map(|identity| identity.text == text).unwrap_or(false)
+}
+
 /// Whether the configuration is complete enough for a hotkey to attempt a translation.
 pub fn is_ready(config: &AppConfig) -> bool {
     readiness::is_translation_ready(config)
@@ -339,6 +359,35 @@ mod tests {
         let mut changed = config.clone();
         changed.active_profile_id = "work".to_string();
         assert_ne!(base, RequestIdentity::from_config("hello", &changed));
+    }
+
+    #[test]
+    fn a_request_only_releases_its_own_reservation() {
+        // The defect this guards: request A recorded its identity and cleared the slot
+        // unconditionally, deleting request B's reservation. B could then be dispatched a second
+        // time, which is precisely the double request the reservation exists to prevent.
+        let config = ready_config();
+        let a = RequestIdentity::from_config("hello", &config);
+        let b = RequestIdentity::from_config("goodbye", &config);
+
+        // B currently owns the slot.
+        assert!(!owns_reservation(Some(&b), &a), "A must not release B's reservation");
+        assert!(owns_reservation(Some(&b), &b), "B owns its own reservation");
+        assert!(owns_reservation(Some(&a), &a));
+        assert!(!owns_reservation(None, &a), "an empty slot has no owner");
+    }
+
+    #[test]
+    fn abandoning_a_dispatch_releases_the_matching_reservation() {
+        let config = ready_config();
+        let reserved = RequestIdentity::from_config("hello", &config);
+
+        assert!(reservation_matches_text(Some(&reserved), "hello"));
+        assert!(
+            !reservation_matches_text(Some(&reserved), "goodbye"),
+            "abandoning one request must not release another one's reservation"
+        );
+        assert!(!reservation_matches_text(None, "hello"));
     }
 
     #[test]

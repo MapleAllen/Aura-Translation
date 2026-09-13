@@ -146,7 +146,14 @@ macOS acceptance helpers run directly on a Mac host and write JSON evidence unde
 scripts/release/mock-translate-server.py --port 8787     # request-counting stub provider
 scripts/release/accept-interaction-macos.sh              # same-text recall must not re-request
 scripts/release/measure-resources-macos.sh               # CPU/memory plus a clipboard-frame check
-scripts/release/measure-startup-macos.sh                 # cold start and warm recall percentiles
+scripts/release/measure-startup-macos.sh                 # cold start and warm recall latencies
+```
+
+The startup trace analysis has its own regression tests, because it has twice reported a wrong
+number silently (process uptime as recall latency, and the wrong run dropped from the warm set):
+
+```bash
+python3 -m unittest discover -s scripts/release -p 'test_*.py'
 ```
 
 `measure-startup-macos.sh` relies on `AURA_TRACE=1`, which makes the app emit timestamped
