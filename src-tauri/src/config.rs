@@ -46,6 +46,16 @@ impl Provider {
         !matches!(self, Provider::Ollama)
     }
 
+    /// Returns a stable lowercase identifier for diagnostics and request identity.
+    /// Matches the persisted `serde` representation so identity comparisons stay readable.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Provider::DeepSeek => "deepseek",
+            Provider::OpenRouter => "openrouter",
+            Provider::Ollama => "ollama",
+        }
+    }
+
     pub fn secret_account_name(&self) -> &'static str {
         match self {
             Provider::DeepSeek => "provider:deepseek",
@@ -118,6 +128,14 @@ pub struct AppConfig {
     pub settings_window_placement: Option<WindowPlacement>,
     /// Last known placement for the pinned translation window.
     pub pinned_translation_placement: Option<WindowPlacement>,
+    /// Whether the user has completed first-run setup.
+    ///
+    /// This is an explicit flag rather than an inference from window placement, so onboarding
+    /// shows exactly once and upgrading users are never re-onboarded.
+    pub setup_completed: bool,
+    /// Whether background translation events may raise system notifications.
+    /// Translation chatter only; startup configuration failures are always reported.
+    pub notifications_enabled: bool,
 }
 
 // Custom Deserialize so provider-dependent defaults keep following the selected provider.
@@ -153,6 +171,8 @@ impl<'de> Deserialize<'de> for AppConfig {
             available_models: Option<Vec<String>>,
             settings_window_placement: Option<WindowPlacement>,
             pinned_translation_placement: Option<WindowPlacement>,
+            setup_completed: Option<bool>,
+            notifications_enabled: Option<bool>,
         }
 
         fn default_source_lang() -> String {
@@ -168,6 +188,9 @@ impl<'de> Deserialize<'de> for AppConfig {
             "default".to_string()
         }
         fn default_aura_guard_enabled() -> bool {
+            true
+        }
+        fn default_notifications_enabled() -> bool {
             true
         }
 
@@ -195,6 +218,21 @@ impl<'de> Deserialize<'de> for AppConfig {
             }
         });
         let hotkey = hotkey::normalize_persisted_hotkey(&helper.hotkey);
+        let notifications_enabled = helper
+            .notifications_enabled
+            .unwrap_or_else(default_notifications_enabled);
+        // An explicit flag always wins. When it is absent the installation predates M1, so
+        // completion is inferred from observable setup progress. Getting this wrong in the safe
+        // direction means never re-onboarding someone who already configured Aura.
+        let setup_completed = helper.setup_completed.unwrap_or_else(|| {
+            let configured_credential = provider == Provider::Ollama
+                || api_key_storage == ApiKeyStorage::LegacyPlaintext
+                || !helper.api_key.trim().is_empty();
+            let ready_to_translate = !api_base_url.trim().is_empty()
+                && !model.trim().is_empty()
+                && configured_credential;
+            ready_to_translate || helper.settings_window_placement.is_some()
+        });
 
         Ok(AppConfig {
             api_key: helper.api_key,
@@ -212,6 +250,8 @@ impl<'de> Deserialize<'de> for AppConfig {
             available_models,
             settings_window_placement: helper.settings_window_placement,
             pinned_translation_placement: helper.pinned_translation_placement,
+            setup_completed,
+            notifications_enabled,
         })
     }
 }
@@ -237,6 +277,9 @@ impl Default for AppConfig {
             available_models,
             settings_window_placement: None,
             pinned_translation_placement: None,
+            // A brand-new install has not been through onboarding yet.
+            setup_completed: false,
+            notifications_enabled: true,
         }
     }
 }
@@ -305,6 +348,8 @@ impl AppConfig {
             available_models: &'a [String],
             settings_window_placement: &'a Option<WindowPlacement>,
             pinned_translation_placement: &'a Option<WindowPlacement>,
+            setup_completed: bool,
+            notifications_enabled: bool,
         }
 
         let persisted = PersistedConfig {
@@ -330,6 +375,8 @@ impl AppConfig {
             available_models: &self.available_models,
             settings_window_placement: &self.settings_window_placement,
             pinned_translation_placement: &self.pinned_translation_placement,
+            setup_completed: self.setup_completed,
+            notifications_enabled: self.notifications_enabled,
         };
 
         let path = Self::config_path();
@@ -381,6 +428,72 @@ mod tests {
         assert!(config.settings_window_placement.is_none());
         assert!(config.pinned_translation_placement.is_none());
         assert!(!config.available_models.is_empty());
+        // M1 fields are absent from this pre-M1 file. The credential is present, so the user has
+        // clearly set Aura up and must not be shown onboarding again.
+        assert!(
+            config.setup_completed,
+            "an existing configured install must not be re-onboarded"
+        );
+        assert!(config.notifications_enabled);
+    }
+
+    #[test]
+    fn default_config_has_not_completed_setup() {
+        let config = AppConfig::default();
+        assert!(!config.setup_completed);
+        assert!(config.notifications_enabled);
+    }
+
+    #[test]
+    fn bare_pre_m1_config_without_credential_or_placement_needs_setup() {
+        let legacy_json = r#"{
+            "api_key": "",
+            "model": "deepseek-chat",
+            "source_lang": "auto",
+            "target_lang": "Chinese"
+        }"#;
+        let config: AppConfig = serde_json::from_str(legacy_json).expect("should parse");
+        assert!(
+            !config.setup_completed,
+            "nothing indicates this install was ever configured"
+        );
+    }
+
+    #[test]
+    fn saved_settings_placement_implies_completed_setup_for_existing_installs() {
+        let legacy_json = r#"{
+            "api_key": "",
+            "model": "deepseek-chat",
+            "settings_window_placement": { "x": 10.0, "y": 20.0, "width": null, "height": null, "monitor": null }
+        }"#;
+        let config: AppConfig = serde_json::from_str(legacy_json).expect("should parse");
+        assert!(
+            config.setup_completed,
+            "an install that already opened and positioned Settings has been set up"
+        );
+    }
+
+    #[test]
+    fn explicit_setup_flag_overrides_inference_in_both_directions() {
+        // Opting in explicitly, even without a credential yet.
+        let explicit_true = r#"{ "api_key": "", "setup_completed": true }"#;
+        let config: AppConfig = serde_json::from_str(explicit_true).expect("should parse");
+        assert!(config.setup_completed);
+
+        // And opting out explicitly, even with a credential present.
+        let explicit_false = r#"{ "api_key": "sk-test", "setup_completed": false }"#;
+        let config: AppConfig = serde_json::from_str(explicit_false).expect("should parse");
+        assert!(!config.setup_completed);
+    }
+
+    #[test]
+    fn ollama_install_counts_as_configured_without_an_api_key() {
+        let legacy_json = r#"{ "provider": "ollama", "model": "mistral", "api_key": "" }"#;
+        let config: AppConfig = serde_json::from_str(legacy_json).expect("should parse");
+        assert!(
+            config.setup_completed,
+            "Ollama needs no credential, so an existing local setup is already configured"
+        );
     }
 
     #[cfg(target_os = "macos")]
@@ -427,6 +540,8 @@ mod tests {
                 height: Some(260.0),
                 monitor: None,
             }),
+            setup_completed: true,
+            notifications_enabled: false,
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: AppConfig = serde_json::from_str(&json).unwrap();
@@ -436,6 +551,8 @@ mod tests {
         assert!(restored.aura_mode_enabled);
         assert!(!restored.aura_guard_enabled);
         assert!(restored.window_pinned);
+        assert!(restored.setup_completed);
+        assert!(!restored.notifications_enabled);
         assert_eq!(restored.api_base_url, "http://localhost:11434");
         assert_eq!(restored.available_models, vec!["mistral", "llama3"]);
         assert_eq!(

@@ -302,6 +302,8 @@ mod tests {
             available_models: vec!["deepseek-chat".to_string()],
             settings_window_placement: None,
             pinned_translation_placement: None,
+            setup_completed: true,
+            notifications_enabled: true,
         }
     }
 

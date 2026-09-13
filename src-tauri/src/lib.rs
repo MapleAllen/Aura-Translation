@@ -3,6 +3,7 @@ mod capabilities;
 mod config;
 mod history;
 mod hotkey;
+pub mod interaction;
 mod profiles;
 mod readiness;
 mod secrets;
@@ -35,6 +36,8 @@ use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
 const TRANSLATION_WINDOW_LABEL: &str = "translation";
 const SETTINGS_WINDOW_LABEL: &str = "settings";
 const TRAY_ID: &str = "main";
+const TRAY_OPEN_TRANSLATION_ID: &str = "open-translation";
+const TRAY_AURA_MODE_ID: &str = "aura-mode-toggle";
 const DEFAULT_TRANSLATION_WIDTH: f64 = 392.0;
 const DEFAULT_TRANSLATION_HEIGHT: f64 = 188.0;
 const DEFAULT_SETTINGS_WIDTH: f64 = 480.0;
@@ -43,8 +46,13 @@ const SETTINGS_EDGE_MARGIN: f64 = 18.0;
 const TRANSLATION_EDGE_MARGIN: f64 = 14.0;
 const TRANSLATION_CURSOR_GAP: f64 = 18.0;
 const MAX_SUPPRESSED_CLIPBOARD_TEXTS: usize = 4;
+/// Clipboard poll cadence while automatic translation is enabled.
+const CLIPBOARD_POLL_ENABLED: Duration = Duration::from_millis(275);
+/// Idle cadence while automatic translation is disabled. The loop never reads the clipboard in
+/// this state; the longer period only reduces how often it re-reads the configuration.
+const CLIPBOARD_POLL_DISABLED: Duration = Duration::from_millis(1000);
 
-type ConfigState = Arc<RwLock<AppConfig>>;
+pub type ConfigState = Arc<RwLock<AppConfig>>;
 type HistoryState = Arc<Mutex<history::TranslationHistoryStore>>;
 type ProfilesState = Arc<RwLock<profiles::TranslationProfilesStore>>;
 type ReadinessState = Arc<RwLock<ReadinessProbeCache>>;
@@ -57,10 +65,115 @@ fn log_clipboard_action(message: impl AsRef<str>) {
     eprintln!("[aura][clipboard] {}", message.as_ref());
 }
 
+/// Whether opt-in timing traces are enabled.
+///
+/// The proposal's latency and cold-start thresholds ("warm recall p95", "cold start under 2s")
+/// describe moments inside the process that external tooling cannot observe. These traces make
+/// them measurable without adding any cost or output to a normal run.
+fn trace_enabled() -> bool {
+    matches!(
+        std::env::var("AURA_TRACE").ok().as_deref(),
+        Some("1") | Some("true") | Some("yes")
+    )
+}
+
+fn trace_ui_event(app: &AppHandle, event: &str) {
+    if !trace_enabled() {
+        return;
+    }
+
+    let elapsed = app
+        .try_state::<ProcessStart>()
+        .map(|start| start.0.elapsed().as_millis())
+        .unwrap_or(0);
+
+    eprintln!(
+        "[aura][trace] {{\"event\":\"{}\",\"t_ms\":{}}}",
+        event, elapsed
+    );
+}
+
+/// Wall-clock origin for `trace_ui_event`, captured before the Tauri builder runs.
+struct ProcessStart(Instant);
+
 #[derive(Default)]
 struct AppRuntimeState {
     clipboard: ClipboardWatcherState,
     translation: TranslationRuntimeState,
+}
+
+/// Reserves a request identity before its window is prepared or its event is emitted.
+///
+/// The match check and the reservation happen under one lock. Two concurrent hotkey presses used
+/// to read "no match" in the same instant and both dispatch, issuing two paid requests for one
+/// press. With the reservation, the second caller sees the first caller's pending identity and
+/// treats the press as a collapse instead.
+pub async fn reserve_request_identity(
+    app: &AppHandle,
+    identity: interaction::RequestIdentity,
+) -> Result<interaction::ReservationOutcome, String> {
+    let runtime = app
+        .try_state::<RuntimeState>()
+        .ok_or_else(|| "runtime state is unavailable".to_string())?
+        .inner()
+        .clone();
+
+    // The check and the write share one lock. Splitting them let two concurrent presses both
+    // observe "no match" and both dispatch.
+    let mut state = runtime.lock().await;
+    let outcome = interaction::reserve_identity(
+        state.translation.pending_request_identity.as_ref(),
+        state.translation.last_request_identity.as_ref(),
+        &identity,
+    );
+
+    if outcome == interaction::ReservationOutcome::Reserved {
+        state.translation.pending_request_identity = Some(identity);
+    }
+
+    Ok(outcome)
+}
+
+/// Releases a reservation whose request was never handed to the translator.
+///
+/// `trigger_translation` can fail after reserving — an unavailable window or a frontend handshake
+/// timeout. Without this release, the next hotkey press would treat a request that never reached
+/// the provider as an existing result and collapse instead of translating.
+pub async fn clear_pending_request_identity(app: &AppHandle, identity: &interaction::RequestIdentity) {
+    let Some(runtime) = app.try_state::<RuntimeState>() else {
+        return;
+    };
+    let runtime = runtime.inner().clone();
+
+    let mut state = runtime.lock().await;
+    if state.translation.pending_request_identity.as_ref() == Some(identity) {
+        state.translation.pending_request_identity = None;
+    }
+}
+
+/// Records the identity of the request that is actually being dispatched.
+///
+/// Called from `translate_text`, the one boundary every request passes through: the hotkey, the
+/// clipboard monitor, an in-window draft re-translation, and a history replay. Reserving here
+/// rather than at the hotkey or monitor entry means the stored identity always describes a request
+/// that was really sent.
+pub async fn record_request_identity(
+    app: &AppHandle,
+    identity: interaction::RequestIdentity,
+) -> Result<(), String> {
+    let runtime = app
+        .try_state::<RuntimeState>()
+        .ok_or_else(|| "runtime state is unavailable".to_string())?
+        .inner()
+        .clone();
+
+    let mut state = runtime.lock().await;
+    // The reservation is released unconditionally. A history replay dispatches with the entry's
+    // own configuration, so its request identity need not equal the reserved one; either way a
+    // request is genuinely being sent now, which is exactly what the reservation guarded.
+    state.translation.pending_request_identity = None;
+    state.translation.last_request_identity = Some(identity);
+    Ok(())
 }
 
 #[derive(Default)]
@@ -73,7 +186,14 @@ struct ClipboardWatcherState {
 #[derive(Default)]
 struct TranslationRuntimeState {
     last_anchor: Option<CursorAnchor>,
-    last_requested_text: Option<String>,
+    /// Identity of the last request that really reached the translator. Reuse is only allowed on a
+    /// full match, so a language, provider, model, base URL, or profile change always issues a
+    /// fresh request.
+    last_request_identity: Option<interaction::RequestIdentity>,
+    /// Identity reserved for a dispatch that is still being prepared. Keeping it separate from
+    /// `last_request_identity` means a dispatch that never reaches the translator is not mistaken
+    /// for an existing result.
+    pending_request_identity: Option<interaction::RequestIdentity>,
 }
 
 #[derive(Clone, Copy)]
@@ -291,7 +411,23 @@ async fn replay_translation_history_entry(
         .find(&entry_id)
         .ok_or_else(|| format!("History entry '{}' was not found.", entry_id))?;
     if !retry_with_original {
-        trigger_translation(app, entry.source_text).await;
+        let identity = {
+            let config = config_state.read().unwrap().clone();
+            interaction::RequestIdentity::from_config(&entry.source_text, &config)
+        };
+        match reserve_request_identity(&app, identity.clone()).await {
+            Ok(interaction::ReservationOutcome::Reserved) => {
+                trigger_translation(app, entry.source_text, identity).await;
+            }
+            Ok(interaction::ReservationOutcome::AlreadyInFlight) => {
+                // The same request is already on its way; surfacing the existing window is what
+                // the user means by pressing replay twice.
+                show_existing_translation_window(app).await;
+            }
+            Err(err) => {
+                emit_daemon_error(&app, "request-reservation-failed", err, true);
+            }
+        }
         return Ok(());
     }
 
@@ -373,8 +509,10 @@ async fn probe_provider(
 }
 
 #[tauri::command]
-fn mark_ui_ready(window: WebviewWindow, state: State<'_, UiReadyState>) {
-    state.write().unwrap().insert(window.label().to_string());
+fn mark_ui_ready(app: AppHandle, window: WebviewWindow, state: State<'_, UiReadyState>) {
+    let label = window.label().to_string();
+    trace_ui_event(&app, &format!("ui-ready:{}", label));
+    state.write().unwrap().insert(label);
 }
 
 #[tauri::command]
@@ -427,6 +565,28 @@ fn save_window_placement(
     next.save()?;
     *state.write().unwrap() = next;
     Ok(())
+}
+
+/// Records that first-run onboarding finished.
+///
+/// Onboarding is only allowed to conclude after a successful trial translation, so this is a
+/// separate explicit step rather than a side effect of saving settings. Saving an unrelated
+/// setting must never mark setup as done.
+#[tauri::command]
+fn complete_setup(
+    app: AppHandle,
+    state: State<'_, ConfigState>,
+    profiles_state: State<'_, ProfilesState>,
+) -> Result<(), String> {
+    let old_config = state.read().unwrap().clone();
+    if old_config.setup_completed {
+        return Ok(());
+    }
+
+    let mut next_config = old_config.clone();
+    next_config.setup_completed = true;
+    persist_config_and_sync(&app, &state, &profiles_state, &old_config, &mut next_config)?;
+    sync_tray_menu(&app)
 }
 
 #[tauri::command]
@@ -550,6 +710,9 @@ fn persist_config_and_sync(
     sync_existing_windows(app, config);
     sync_tray_runtime_status(app, config)?;
     emit_config_updated(app, config);
+    // Wake the clipboard monitor so a paused/resumed automatic mode takes effect immediately
+    // instead of waiting for the next poll period.
+    app.state::<Arc<tokio::sync::Notify>>().notify_waiters();
     Ok(())
 }
 
@@ -992,10 +1155,15 @@ fn restore_settings_window(window: &WebviewWindow, config: &AppConfig) {
     }
 }
 
+/// Whether the settings/onboarding window should open on launch.
+///
+/// Keyed on the explicit `setup_completed` flag rather than window placement. Placement was only
+/// ever a proxy for "has this person been here before", and it could both re-open Setup for
+/// configured users and skip it for users who closed the window before configuring anything.
 fn should_show_settings_on_startup(config: &AppConfig) -> bool {
     #[cfg(target_os = "macos")]
     {
-        readiness::should_prompt_for_setup(config) || config.settings_window_placement.is_none()
+        !config.setup_completed
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -1131,11 +1299,31 @@ async fn prepare_translation_window_for_recall(
     position_translation_near_anchor(window, runtime, config).await
 }
 
-async fn trigger_translation(app: AppHandle, clipboard_text: String) {
+/// Prepares the window and hands a translation request to the frontend.
+///
+/// The caller has already reserved `identity` through [`reserve_request_identity`]. This function
+/// owns releasing that reservation whenever the request never reaches the frontend, so a failed
+/// dispatch cannot masquerade as an existing result. The reservation is deliberately *not* turned
+/// into `last_request_identity` here: that happens in `translate_text`, once the frontend really
+/// dispatches.
+async fn trigger_translation(
+    app: AppHandle,
+    clipboard_text: String,
+    identity: interaction::RequestIdentity,
+) {
+    let release = |app: &AppHandle| {
+        let app = app.clone();
+        let identity = identity.clone();
+        async move {
+            clear_pending_request_identity(&app, &identity).await;
+        }
+    };
+
     let window = match ensure_window(&app, TRANSLATION_WINDOW_LABEL) {
         Ok(window) => window,
         Err(err) => {
             emit_daemon_error(&app, "translation-window-create-failed", err, false);
+            release(&app).await;
             return;
         }
     };
@@ -1146,12 +1334,14 @@ async fn trigger_translation(app: AppHandle, clipboard_text: String) {
         emit_daemon_error(&app, "translation-window-prepare-failed", err, true);
     }
 
+    // Marked for clipboard de-duplication only. The request identity is recorded by
+    // `translate_text` so it always describes a request that was really sent.
     {
         let mut state = runtime.lock().await;
-        state.translation.last_requested_text = Some(clipboard_text.clone());
         state.clipboard.last_dispatched_text = Some(clipboard_text.clone());
     }
 
+    trace_ui_event(&app, "window-show:translation");
     let _ = window.show();
     let _ = window.set_focus();
 
@@ -1159,10 +1349,19 @@ async fn trigger_translation(app: AppHandle, clipboard_text: String) {
         wait_for_ui_ready(&app, TRANSLATION_WINDOW_LABEL, Duration::from_secs(5)).await
     {
         emit_daemon_error(&app, "translation-window-ui-timeout", err, true);
+        release(&app).await;
         return;
     }
 
-    let _ = window.emit("trigger-translate", clipboard_text);
+    if let Err(err) = window.emit("trigger-translate", clipboard_text) {
+        emit_daemon_error(
+            &app,
+            "translation-window-emit-failed",
+            format!("Failed to hand the request to the translation window: {err}"),
+            true,
+        );
+        release(&app).await;
+    }
 }
 
 async fn trigger_translation_with_override(app: AppHandle, payload: HistoryReplayPayload) {
@@ -1181,6 +1380,7 @@ async fn trigger_translation_with_override(app: AppHandle, payload: HistoryRepla
         emit_daemon_error(&app, "translation-window-prepare-failed", err, true);
     }
 
+    trace_ui_event(&app, "window-show:translation");
     let _ = window.show();
     let _ = window.set_focus();
 
@@ -1195,6 +1395,11 @@ async fn trigger_translation_with_override(app: AppHandle, payload: HistoryRepla
 }
 
 async fn show_existing_translation_window(app: AppHandle) {
+    // Start of a recall, whether it came from the hotkey or the menu bar. Paired with
+    // `window-shown:translation-recall` this yields the local recall latency; the absolute
+    // timestamp alone is just process uptime and would grow the longer the user waits to press.
+    trace_ui_event(&app, "recall-requested");
+
     let window = match ensure_window(&app, TRANSLATION_WINDOW_LABEL) {
         Ok(window) => window,
         Err(err) => {
@@ -1209,6 +1414,44 @@ async fn show_existing_translation_window(app: AppHandle) {
         emit_daemon_error(&app, "translation-window-recall-failed", err, true);
     }
 
+    trace_ui_event(&app, "window-show:translation-recall");
+    let _ = window.show();
+    let _ = window.set_focus();
+    // Emitted after the show so the recall delta measures the real interval rather than a
+    // pre-show marker.
+    trace_ui_event(&app, "window-shown:translation-recall");
+
+    if let Err(err) =
+        wait_for_ui_ready(&app, TRANSLATION_WINDOW_LABEL, Duration::from_secs(5)).await
+    {
+        emit_daemon_error(&app, "translation-window-ui-timeout", err, true);
+        return;
+    }
+
+    let _ = window.emit("show-existing-translation", ());
+}
+
+/// Opens the translation window in an empty, directly editable state.
+///
+/// This replaces the previous split behaviour where automatic mode recalled a stale window and
+/// manual mode emitted a `hotkey-empty-clipboard` error. Both modes now land on one editable
+/// empty state, matching the documented contract.
+async fn show_empty_translation_window(app: AppHandle) {
+    let window = match ensure_window(&app, TRANSLATION_WINDOW_LABEL) {
+        Ok(window) => window,
+        Err(err) => {
+            emit_daemon_error(&app, "translation-window-create-failed", err, false);
+            return;
+        }
+    };
+
+    let config = current_config(&app);
+    let runtime = app.state::<RuntimeState>().inner().clone();
+    if let Err(err) = prepare_translation_window_for_recall(&window, &config, &runtime).await {
+        emit_daemon_error(&app, "translation-window-recall-failed", err, true);
+    }
+
+    trace_ui_event(&app, "window-show:translation-empty");
     let _ = window.show();
     let _ = window.set_focus();
 
@@ -1219,7 +1462,7 @@ async fn show_existing_translation_window(app: AppHandle) {
         return;
     }
 
-    let _ = window.emit("show-existing-translation", ());
+    let _ = window.emit("show-empty-translation", ());
 }
 
 async fn show_settings_window(app: AppHandle) {
@@ -1233,6 +1476,7 @@ async fn show_settings_window(app: AppHandle) {
 
     let config = current_config(&app);
     restore_settings_window(&window, &config);
+    trace_ui_event(&app, "window-show:settings");
     let _ = window.show();
     let _ = window.set_focus();
 
@@ -1241,6 +1485,8 @@ async fn show_settings_window(app: AppHandle) {
     }
 }
 
+/// Quick recall from a right click on the tray icon, kept for parity with the old behaviour.
+/// Left click now opens the action menu, so this preserves the one-click recall path.
 async fn handle_tray_primary_action(app: AppHandle) {
     if readiness::should_prompt_for_setup(&current_config(&app)) {
         show_settings_window(app).await;
@@ -1299,6 +1545,26 @@ fn build_tray_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String> {
         .collect();
     let profiles_submenu = Submenu::with_items(app, "配置方案", true, &profile_refs)
         .map_err(|e| format!("Failed to build tray Profiles submenu: {}", e))?;
+
+    // Direct actions first: the menu bar is the always-available control surface, so opening the
+    // translator and pausing automatic translation must not require a trip through Settings.
+    let open_item = MenuItem::with_id(app, TRAY_OPEN_TRANSLATION_ID, "打开翻译", true, None::<&str>)
+        .map_err(|e| format!("Failed to build tray Open item: {}", e))?;
+    let config = current_config(app);
+    let aura_mode_supported = get_system_capabilities().aura_mode
+        == capabilities::FeatureCapability::Ready;
+    let aura_mode_item = CheckMenuItem::with_id(
+        app,
+        TRAY_AURA_MODE_ID,
+        "自动翻译",
+        aura_mode_supported,
+        config.aura_mode_enabled,
+        None::<&str>,
+    )
+    .map_err(|e| format!("Failed to build tray Aura mode item: {}", e))?;
+    let actions_separator = PredefinedMenuItem::separator(app)
+        .map_err(|e| format!("Failed to build tray separator: {}", e))?;
+
     let settings_item = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)
         .map_err(|e| format!("Failed to build tray Settings item: {}", e))?;
     let separator = PredefinedMenuItem::separator(app)
@@ -1308,9 +1574,36 @@ fn build_tray_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String> {
 
     Menu::with_items(
         app,
-        &[&profiles_submenu, &settings_item, &separator, &quit_item],
+        &[
+            &open_item,
+            &aura_mode_item,
+            &actions_separator,
+            &profiles_submenu,
+            &settings_item,
+            &separator,
+            &quit_item,
+        ],
     )
     .map_err(|e| format!("Failed to build tray menu: {}", e))
+}
+
+/// Applies the tray automatic-translation toggle through the same persistence path as
+/// `save_config`, so the menu, the settings window, and the clipboard monitor cannot drift apart.
+fn toggle_aura_mode_from_tray(app: &AppHandle) -> Result<(), String> {
+    let config_state = app.state::<ConfigState>();
+    let profiles_state = app.state::<ProfilesState>();
+    let old_config = config_state.read().unwrap().clone();
+    let mut next_config = old_config.clone();
+    next_config.aura_mode_enabled = !old_config.aura_mode_enabled;
+
+    persist_config_and_sync(
+        app,
+        &config_state,
+        &profiles_state,
+        &old_config,
+        &mut next_config,
+    )?;
+    sync_tray_menu(app)
 }
 
 fn sync_tray_menu(app: &AppHandle) -> Result<(), String> {
@@ -1368,8 +1661,21 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
         .icon(icon)
         .menu(&menu)
         .tooltip(tooltip)
-        .show_menu_on_left_click(false)
+        // The menu bar is the discoverable control surface: a left click opens the action menu
+        // instead of silently recalling the last translation.
+        .show_menu_on_left_click(true)
         .on_menu_event(move |app, event| match event.id.as_ref() {
+            TRAY_OPEN_TRANSLATION_ID => {
+                let app_handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    handle_tray_primary_action(app_handle).await;
+                });
+            }
+            TRAY_AURA_MODE_ID => {
+                if let Err(err) = toggle_aura_mode_from_tray(app) {
+                    emit_daemon_error(app, "aura-mode-toggle-failed", err, true);
+                }
+            }
             "settings" => {
                 let app_handle = app.clone();
                 tauri::async_runtime::spawn(async move {
@@ -1392,10 +1698,11 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
         })
         .on_tray_icon_event(move |tray, event| match event {
             TrayIconEvent::Click {
-                button: MouseButton::Left,
+                button: MouseButton::Right,
                 button_state: MouseButtonState::Up,
                 ..
             } => {
+                // Right click keeps the quick recall shortcut that left click used to provide.
                 let app_handle = tray.app_handle().clone();
                 tauri::async_runtime::spawn(async move {
                     handle_tray_primary_action(app_handle).await;
@@ -1498,12 +1805,34 @@ fn spawn_clipboard_monitor(app: &AppHandle) {
 
         let app_handle = app.clone();
         tauri::async_runtime::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_millis(275));
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             let runtime_state = app_handle.state::<RuntimeState>().inner().clone();
+            let config_changed = app_handle.state::<Arc<tokio::sync::Notify>>().inner().clone();
+            let mut resume = interaction::ClipboardResumeState::default();
 
             loop {
-                interval.tick().await;
+                wait_for_monitor_tick(&app_handle, &config_changed).await;
+
+                // Read the mode *before* touching the pasteboard. When automatic translation is
+                // off this loop must not call into NSPasteboard at all, which is what makes
+                // "paused" mean paused instead of merely unread.
+                let config = current_config(&app_handle);
+                match resume.tick(config.aura_mode_enabled) {
+                    interaction::ClipboardRunState::Paused => continue,
+                    interaction::ClipboardRunState::ResumeBaseline => {
+                        // The pasteboard was not sampled while paused, so the stored sequence is
+                        // stale. Record the current one and translate nothing: text copied during
+                        // the pause must not be sent when automatic translation comes back.
+                        let sequence = {
+                            let pb = NSPasteboard::generalPasteboard();
+                            pb.changeCount() as u32
+                        };
+                        let mut runtime = runtime_state.lock().await;
+                        runtime.clipboard.last_sequence = Some(sequence);
+                        runtime.clipboard.last_dispatched_text = None;
+                        continue;
+                    }
+                    interaction::ClipboardRunState::Running => {}
+                }
 
                 let sequence = {
                     let pb = NSPasteboard::generalPasteboard();
@@ -1518,11 +1847,6 @@ fn spawn_clipboard_monitor(app: &AppHandle) {
                     runtime.clipboard.last_sequence = Some(sequence);
                 }
 
-                let config = current_config(&app_handle);
-                if !config.aura_mode_enabled {
-                    continue;
-                }
-
                 let text = app_handle.clipboard().read_text().unwrap_or_default();
                 let trimmed = text.trim().to_string();
                 if trimmed.is_empty() {
@@ -1537,21 +1861,36 @@ fn spawn_clipboard_monitor(app: &AppHandle) {
                 }
 
                 let mut runtime = runtime_state.lock().await;
-                if consume_suppressed_clipboard_text(&mut runtime.clipboard, trimmed.as_str()) {
-                    continue;
-                }
+                let suppressed = consume_suppressed_clipboard_text(&mut runtime.clipboard, trimmed.as_str());
+                let duplicate =
+                    runtime.clipboard.last_dispatched_text.as_deref() == Some(trimmed.as_str());
+                let action = interaction::decide_clipboard_tick(suppressed, duplicate);
 
-                if runtime.clipboard.last_dispatched_text.as_deref() == Some(trimmed.as_str()) {
+                if action != interaction::MonitorAction::Dispatch {
                     continue;
                 }
 
                 runtime.clipboard.last_dispatched_text = Some(trimmed.clone());
-                runtime.translation.last_requested_text = Some(trimmed.clone());
                 drop(runtime);
 
+                let identity = interaction::RequestIdentity::from_config(&trimmed, &config);
                 let app_clone = app_handle.clone();
                 tauri::async_runtime::spawn(async move {
-                    trigger_translation(app_clone, trimmed).await;
+                    match reserve_request_identity(&app_clone, identity.clone()).await {
+                        Ok(interaction::ReservationOutcome::Reserved) => {
+                            trigger_translation(app_clone, trimmed, identity).await;
+                        }
+                        // Another path already dispatched this exact request.
+                        Ok(interaction::ReservationOutcome::AlreadyInFlight) => {}
+                        Err(err) => {
+                            emit_daemon_error(
+                                &app_clone,
+                                "request-reservation-failed",
+                                err,
+                                true,
+                            );
+                        }
+                    }
                 });
             }
         });
@@ -1563,12 +1902,29 @@ fn spawn_clipboard_monitor(app: &AppHandle) {
 
         let app_handle = app.clone();
         tauri::async_runtime::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_millis(275));
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             let runtime_state = app_handle.state::<RuntimeState>().inner().clone();
+            let config_changed = app_handle.state::<Arc<tokio::sync::Notify>>().inner().clone();
+            let mut resume = interaction::ClipboardResumeState::default();
 
             loop {
-                interval.tick().await;
+                wait_for_monitor_tick(&app_handle, &config_changed).await;
+
+                // Mode is read before the clipboard sequence number so a disabled monitor does
+                // no clipboard work at all.
+                let config = current_config(&app_handle);
+                match resume.tick(config.aura_mode_enabled) {
+                    interaction::ClipboardRunState::Paused => continue,
+                    interaction::ClipboardRunState::ResumeBaseline => {
+                        // Pasteboard was not sampled while paused, so the stored sequence is stale.
+                        // Record it and translate nothing, so text copied during the pause is not
+                        // sent when automatic translation comes back.
+                        let mut runtime = runtime_state.lock().await;
+                        runtime.clipboard.last_sequence = clipboard_sequence_number();
+                        runtime.clipboard.last_dispatched_text = None;
+                        continue;
+                    }
+                    interaction::ClipboardRunState::Running => {}
+                }
 
                 let sequence = clipboard_sequence_number();
                 {
@@ -1581,11 +1937,6 @@ fn spawn_clipboard_monitor(app: &AppHandle) {
                     }
                 }
 
-                let config = current_config(&app_handle);
-                if !config.aura_mode_enabled {
-                    continue;
-                }
-
                 let text = app_handle.clipboard().read_text().unwrap_or_default();
                 let trimmed = text.trim().to_string();
                 if trimmed.is_empty() {
@@ -1600,21 +1951,36 @@ fn spawn_clipboard_monitor(app: &AppHandle) {
                 }
 
                 let mut runtime = runtime_state.lock().await;
-                if consume_suppressed_clipboard_text(&mut runtime.clipboard, trimmed.as_str()) {
-                    continue;
-                }
+                let suppressed = consume_suppressed_clipboard_text(&mut runtime.clipboard, trimmed.as_str());
+                let duplicate =
+                    runtime.clipboard.last_dispatched_text.as_deref() == Some(trimmed.as_str());
+                let action = interaction::decide_clipboard_tick(suppressed, duplicate);
 
-                if runtime.clipboard.last_dispatched_text.as_deref() == Some(trimmed.as_str()) {
+                if action != interaction::MonitorAction::Dispatch {
                     continue;
                 }
 
                 runtime.clipboard.last_dispatched_text = Some(trimmed.clone());
-                runtime.translation.last_requested_text = Some(trimmed.clone());
                 drop(runtime);
 
+                let identity = interaction::RequestIdentity::from_config(&trimmed, &config);
                 let app_clone = app_handle.clone();
                 tauri::async_runtime::spawn(async move {
-                    trigger_translation(app_clone, trimmed).await;
+                    match reserve_request_identity(&app_clone, identity.clone()).await {
+                        Ok(interaction::ReservationOutcome::Reserved) => {
+                            trigger_translation(app_clone, trimmed, identity).await;
+                        }
+                        // Another path already dispatched this exact request.
+                        Ok(interaction::ReservationOutcome::AlreadyInFlight) => {}
+                        Err(err) => {
+                            emit_daemon_error(
+                                &app_clone,
+                                "request-reservation-failed",
+                                err,
+                                true,
+                            );
+                        }
+                    }
                 });
             }
         });
@@ -1626,6 +1992,28 @@ fn spawn_clipboard_monitor(app: &AppHandle) {
     }
 }
 
+/// Sleeps until the next monitor tick, or until the configuration changes.
+///
+/// A slower cadence while automatic translation is disabled keeps the idle loop cheap without
+/// ever reading the clipboard; the `config_changed` notification makes the toggle feel immediate.
+async fn wait_for_monitor_tick(app: &AppHandle, config_changed: &tokio::sync::Notify) {
+    let period = if current_config(app).aura_mode_enabled {
+        CLIPBOARD_POLL_ENABLED
+    } else {
+        CLIPBOARD_POLL_DISABLED
+    };
+
+    tokio::select! {
+        _ = tokio::time::sleep(period) => {}
+        _ = config_changed.notified() => {}
+    }
+}
+
+/// Single hotkey entry point for both automatic and manual modes.
+///
+/// The decision itself lives in `interaction::decide_hotkey` so it stays portable and testable.
+/// `Collapse` and `Recall` deliberately never reach `trigger_translation`, which is what makes
+/// "press again to recall or hide" hold without re-issuing a paid request.
 async fn handle_hotkey_pressed(app: AppHandle) {
     use tauri_plugin_clipboard_manager::ClipboardExt;
 
@@ -1638,50 +2026,67 @@ async fn handle_hotkey_pressed(app: AppHandle) {
         }
     };
 
-    if config.aura_mode_enabled {
-        if matches!(existing_window.is_visible(), Ok(true)) {
-            let _ = existing_window.hide();
-            return;
-        }
-
-        let clipboard_text = app.clipboard().read_text().unwrap_or_default();
-        let trimmed = clipboard_text.trim().to_string();
-        let last_requested = {
-            app.state::<RuntimeState>()
-                .lock()
-                .await
-                .translation
-                .last_requested_text
-                .clone()
-        };
-
-        if !trimmed.is_empty() && last_requested.as_deref() != Some(trimmed.as_str()) {
-            trigger_translation(app, trimmed).await;
-        } else {
-            show_existing_translation_window(app).await;
-        }
-
-        return;
-    }
-
     let clipboard_text = app.clipboard().read_text().unwrap_or_default();
     let trimmed = clipboard_text.trim().to_string();
-    if trimmed.is_empty() {
-        emit_daemon_error(
-            &app,
-            "hotkey-empty-clipboard",
-            "请先复制要翻译的文本，然后按快捷键。",
-            true,
-        );
-        return;
-    }
+    let candidate_identity = interaction::RequestIdentity::from_config(&trimmed, &config);
 
-    trigger_translation(app, trimmed).await;
+    // Reserve before deciding. The check and the reservation share one lock, so two concurrent
+    // presses on the same text cannot both conclude "no match" and both dispatch.
+    let reservation = match reserve_request_identity(&app, candidate_identity.clone()).await {
+        Ok(outcome) => outcome,
+        Err(err) => {
+            emit_daemon_error(&app, "request-reservation-failed", err, true);
+            return;
+        }
+    };
+    let matches_last_request = reservation == interaction::ReservationOutcome::AlreadyInFlight;
+
+    let outcome = interaction::decide_hotkey(interaction::HotkeyContext {
+        window_visible: matches!(existing_window.is_visible(), Ok(true)),
+        clipboard_empty: trimmed.is_empty(),
+        ready: interaction::is_ready(&config),
+        matches_last_request,
+    });
+
+    match outcome {
+        interaction::HotkeyOutcome::Unavailable => {
+            if reservation == interaction::ReservationOutcome::Reserved {
+                clear_pending_request_identity(&app, &candidate_identity).await;
+            }
+            show_settings_window(app).await;
+        }
+        interaction::HotkeyOutcome::ShowEmptyState => {
+            if reservation == interaction::ReservationOutcome::Reserved {
+                clear_pending_request_identity(&app, &candidate_identity).await;
+            }
+            show_empty_translation_window(app).await;
+        }
+        interaction::HotkeyOutcome::Collapse => {
+            // Collapsing must not cancel in-flight work: the request finishes quietly.
+            if reservation == interaction::ReservationOutcome::Reserved {
+                clear_pending_request_identity(&app, &candidate_identity).await;
+            }
+            let _ = existing_window.hide();
+        }
+        interaction::HotkeyOutcome::Recall => {
+            if reservation == interaction::ReservationOutcome::Reserved {
+                clear_pending_request_identity(&app, &candidate_identity).await;
+            }
+            show_existing_translation_window(app).await;
+        }
+        interaction::HotkeyOutcome::TranslateNew => {
+            // `trigger_translation` releases the reservation itself if the request never reaches
+            // the frontend.
+            trigger_translation(app, trimmed, candidate_identity).await;
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let http_client = reqwest::Client::new();
+    // Captured first so cold-start traces measure from process entry, not from builder setup.
+    let process_start = ProcessStart(Instant::now());
+    let http_client = translate::build_http_client();
     let cancel_registry: CancellationRegistry = Arc::new(Mutex::new(HashMap::new()));
     let (config, config_load_issues) = AppConfig::load_with_issues();
     let (history, history_load_issues) = history::TranslationHistoryStore::load_with_issues();
@@ -1707,6 +2112,8 @@ pub fn run() {
         .manage(readiness_state)
         .manage(ui_ready_state)
         .manage(runtime_state)
+        .manage(Arc::new(tokio::sync::Notify::new()))
+        .manage(ProcessStart(process_start.0))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init());
 
@@ -1745,13 +2152,17 @@ pub fn run() {
             probe_provider,
             mark_ui_ready,
             save_config,
+            complete_setup,
             save_window_placement,
             realign_translation_window,
             copy_result_to_clipboard,
             translate::translate_text,
+            translate::trial_translate,
             translate::cancel_translate
         ])
         .setup(move |app| {
+            trace_ui_event(app.app_handle(), "setup-start");
+
             if let Err(err) = initialize_profiles_and_secrets(app.app_handle()) {
                 emit_daemon_error(app.app_handle(), "secret-storage-init-failed", err, true);
             }
@@ -1762,6 +2173,9 @@ pub fn run() {
             if let Err(err) = build_tray(app.app_handle()) {
                 emit_daemon_error(app.app_handle(), "tray-build-failed", err, false);
             }
+            // The menu bar is usable from here on, which is what the cold-start threshold
+            // ("menu bar operable") actually measures.
+            trace_ui_event(app.app_handle(), "tray-ready");
 
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
@@ -1792,12 +2206,13 @@ mod startup_tests {
     #[test]
     fn macos_shows_settings_on_first_launch() {
         let config = AppConfig::default();
+        assert!(!config.setup_completed);
         assert!(should_show_settings_on_startup(&config));
     }
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn macos_hides_startup_settings_after_setup_and_saved_placement() {
+    fn macos_hides_startup_settings_after_setup_completes() {
         let mut config = AppConfig::default();
         config.api_key = "sk-test".to_string();
         config.settings_window_placement = Some(crate::config::WindowPlacement {
@@ -1807,8 +2222,26 @@ mod startup_tests {
             height: Some(680.0),
             monitor: Some("Built-in".to_string()),
         });
+        config.setup_completed = true;
 
         assert!(!should_show_settings_on_startup(&config));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_reopens_setup_when_a_configured_user_never_finished_onboarding() {
+        // Window placement is not evidence of a finished setup: someone can move the window and
+        // still quit before entering a credential.
+        let mut config = AppConfig::default();
+        config.settings_window_placement = Some(crate::config::WindowPlacement {
+            x: 120.0,
+            y: 160.0,
+            width: Some(480.0),
+            height: Some(680.0),
+            monitor: Some("Built-in".to_string()),
+        });
+
+        assert!(should_show_settings_on_startup(&config));
     }
 }
 
