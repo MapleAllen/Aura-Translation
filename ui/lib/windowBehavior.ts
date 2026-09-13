@@ -25,3 +25,30 @@ export const RESIZE_HANDLES: ResizeHandle[] = [
 export function shouldDismissOnBlur(showSettings: boolean, windowPinned: boolean) {
   return !showSettings && !windowPinned;
 }
+
+/**
+ * Whether Escape should collapse the translation window.
+ *
+ * Escape must never interrupt an active IME composition, otherwise typing Chinese would close
+ * the window mid-word. Pinning does not block Escape: the contract is that one Escape always
+ * collapses, and the caller un-pins as part of that.
+ */
+export function shouldDismissOnEscape(isComposing: boolean): boolean {
+  return !isComposing;
+}
+
+/**
+ * Whether an observed resize should be recorded as a user-chosen height.
+ *
+ * `setSize` from the auto-fit path also fires `onResized`. Without this guard the very first
+ * auto-fit would look like a manual resize and permanently freeze the window height. Pinned
+ * windows have their own placement persistence and keep auto-fitting disabled anyway.
+ */
+export function shouldRecordUserResize(programmatic: boolean, windowPinned: boolean): boolean {
+  return !programmatic && !windowPinned;
+}
+
+/** Whether content may resize the window automatically. */
+export function shouldAutoFit(windowPinned: boolean, userResizedHeight: number | null): boolean {
+  return !windowPinned && userResizedHeight === null;
+}

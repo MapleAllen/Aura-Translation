@@ -19,7 +19,14 @@
     type AuraGuardBlockedPayload,
     type DaemonErrorPayload,
   } from './notifications';
-  import { RESIZE_HANDLES, shouldDismissOnBlur, type ResizeDirection } from './windowBehavior';
+  import {
+    RESIZE_HANDLES,
+    shouldAutoFit,
+    shouldDismissOnBlur,
+    shouldDismissOnEscape,
+    shouldRecordUserResize,
+    type ResizeDirection,
+  } from './windowBehavior';
   import { persistCurrentWindowPlacement } from './windowPlacement';
 
   let appState: 'idle' | 'loading' | 'streaming' | 'result' | 'error' = $state('idle');
@@ -30,10 +37,12 @@
   let loadingTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let placementSaveTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let autoSizeTimeoutId: ReturnType<typeof setTimeout> | null = null;
-  let emptyHintTimerId: ReturnType<typeof setTimeout> | null = null;
   let visible = $state(false);
   let config: AppConfig = $state(createDefaultAppConfig());
   let popupElement = $state<HTMLDivElement | null>(null);
+  /** A height the user chose by dragging; non-null disables auto-fitting. */
+  let userResizedHeight = $state<number | null>(null);
+  let suppressNextResizeObservation = false;
 
   const TRANSLATION_WINDOW_WIDTH = 392;
   const TRANSLATION_MIN_HEIGHT = 156;
@@ -42,6 +51,10 @@
 
   const popupScale = new Spring(0.94, { stiffness: 0.16, damping: 0.72 });
   const popupOpacity = new Spring(0, { stiffness: 0.18, damping: 0.82 });
+
+  function setSpringTarget(spring: Spring<number>, value: number) {
+    spring.target = value;
+  }
 
   type TranslationChunkPayload = {
     request_id: number;
@@ -135,39 +148,6 @@
     }
   }
 
-  function clearEmptyHintTimer() {
-    if (emptyHintTimerId !== null) {
-      clearTimeout(emptyHintTimerId);
-      emptyHintTimerId = null;
-    }
-  }
-
-  function showEmptyClipboardHint() {
-    if (visible) {
-      pushNotification(
-        createDaemonErrorNotification({
-          code: 'hotkey-empty-clipboard',
-          message: '请先复制要翻译的文本，然后按快捷键。',
-          recoverable: true,
-        }),
-      );
-      return;
-    }
-
-    clearEmptyHintTimer();
-    appState = 'idle';
-    errorMessage = '';
-    translatedText = '';
-    translatedTextTriggerText = '';
-    draftSourceText = '';
-    showBubble();
-
-    emptyHintTimerId = setTimeout(() => {
-      emptyHintTimerId = null;
-      void dismiss();
-    }, 3000);
-  }
-
   function isCurrentRequest(requestId: number) {
     return requestId === currentRequestId;
   }
@@ -209,12 +189,14 @@
       return;
     }
 
-    clearEmptyHintTimer();
     lastRequestConfig = cloneAppConfig(requestConfig);
     currentRequestId += 1;
     const requestId = currentRequestId;
     translatedTextTriggerText = requestText;
     draftSourceText = requestText;
+    // Cleared only once there is text for the composer to derive from, so an early failure cannot
+    // leave the user without an input box.
+    emptyEntry = false;
     translatedText = '';
     translationUsage = null;
     errorMessage = '';
@@ -244,6 +226,23 @@
   }
 
   let translatedTextTriggerText = $state('');
+
+  /**
+   * Set when the window is opened as an empty entry point because the clipboard had nothing.
+   *
+   * Deriving "can the user type?" from the presence of text is circular for this state: the whole
+   * point is that there is no text yet, so the composer has to be requested explicitly.
+   */
+  let emptyEntry = $state(false);
+
+  /**
+   * Direct source editing is not tied to pinning. The composer shows when there is text to work
+   * with or when the user explicitly opened an empty entry point; pinning only controls whether
+   * the window survives losing focus.
+   */
+  const hasSourceText = $derived(
+    emptyEntry || draftSourceText.trim().length > 0 || translatedTextTriggerText.trim().length > 0,
+  );
 
   async function handleCancel() {
     await cancelCurrentTranslation();
@@ -309,8 +308,8 @@
 
   function showBubble() {
     visible = true;
-    popupScale.target = 1;
-    popupOpacity.target = 1;
+    setSpringTarget(popupScale, 1);
+    setSpringTarget(popupOpacity, 1);
   }
 
   async function dismiss() {
@@ -324,8 +323,8 @@
       appState = translatedText ? 'result' : 'idle';
     }
 
-    popupScale.target = 0.94;
-    popupOpacity.target = 0;
+    setSpringTarget(popupScale, 0.94);
+    setSpringTarget(popupOpacity, 0);
 
     clearLoadingTimeout();
 
@@ -337,6 +336,28 @@
         console.error('Failed to hide window:', e);
       }
     }, 160);
+  }
+
+  /**
+   * Escape is a single, unconditional collapse. A pinned window is un-pinned first so that the
+   * documented "one Escape closes it" contract also holds while pinned, instead of leaving a
+   * window that immediately re-opens on the next focus change.
+   */
+  async function handleEscape() {
+    if (config.window_pinned) {
+      await handlePinnedChange(false);
+    }
+    await dismiss();
+  }
+
+  function handleWindowKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape') return;
+    // Never swallow Escape while an input method editor is composing, or typing Chinese would
+    // close the window mid-word.
+    if (!shouldDismissOnEscape(event.isComposing)) return;
+
+    event.preventDefault();
+    void handleEscape();
   }
 
   async function startResize(direction: ResizeDirection) {
@@ -360,7 +381,8 @@
   }
 
   async function applyAutoSize() {
-    if (!visible || config.window_pinned || !popupElement) return;
+    if (!visible || !popupElement) return;
+    if (!shouldAutoFit(config.window_pinned, userResizedHeight)) return;
 
     await tick();
 
@@ -370,10 +392,31 @@
     );
 
     try {
+      suppressNextResizeObservation = true;
       await getCurrentWindow().setSize(new LogicalSize(TRANSLATION_WINDOW_WIDTH, desiredHeight));
       await invoke('realign_translation_window');
     } catch (e) {
       console.error('Failed to auto-size translation window:', e);
+    } finally {
+      suppressNextResizeObservation = false;
+    }
+  }
+
+  /**
+   * Records a user-initiated height so auto-fitting stops fighting them.
+   *
+   * `setSize` also fires `onResized`, so programmatic sizing is flagged and skipped; otherwise the
+   * first auto-fit would immediately look like a manual resize and freeze the window height.
+   */
+  async function noteUserResize() {
+    if (!shouldRecordUserResize(suppressNextResizeObservation, config.window_pinned)) return;
+
+    try {
+      const size = await getCurrentWindow().innerSize();
+      const scale = await getCurrentWindow().scaleFactor();
+      userResizedHeight = size.height / scale;
+    } catch (e) {
+      console.error('Failed to read the resized window height:', e);
     }
   }
 
@@ -407,10 +450,11 @@
           const text = event.payload?.trim();
           if (!text) return;
 
-          clearEmptyHintTimer();
           await cancelCurrentTranslation();
           currentRequestId += 1;
 
+          // New text: auto-fit may size the window for this content again.
+          userResizedHeight = null;
           translatedTextTriggerText = text;
           draftSourceText = text;
           showBubble();
@@ -428,6 +472,7 @@
 
           await cancelCurrentTranslation();
           currentRequestId += 1;
+          userResizedHeight = null;
           translatedTextTriggerText = text;
           draftSourceText = text;
           showBubble();
@@ -437,6 +482,27 @@
 
       unlisteners.push(
         await listen('show-existing-translation', () => {
+          showBubble();
+          scheduleAutoSize();
+        }),
+      );
+
+      unlisteners.push(
+        await listen('show-empty-translation', () => {
+          // Empty clipboard: open a directly editable empty state instead of an error. This is a
+          // new request boundary, so any previous result is cleared rather than left stale.
+          void cancelCurrentTranslation();
+          currentRequestId += 1;
+          translatedTextTriggerText = '';
+          draftSourceText = '';
+          translatedText = '';
+          translationUsage = null;
+          retryAttempt = null;
+          errorMessage = '';
+          lastRequestConfig = null;
+          appState = 'idle';
+          // No text exists yet, so the composer must be requested rather than derived.
+          emptyEntry = true;
           showBubble();
           scheduleAutoSize();
         }),
@@ -504,10 +570,6 @@
 
       unlisteners.push(
         await listen<DaemonErrorPayload>('daemon-error', (event) => {
-          if (event.payload.code === 'hotkey-empty-clipboard') {
-            showEmptyClipboardHint();
-            return;
-          }
           pushNotification(createDaemonErrorNotification(event.payload));
           console.error('Daemon error:', event.payload);
         }),
@@ -535,7 +597,9 @@
         await appWindow.onResized(() => {
           if (config.window_pinned) {
             schedulePinnedPlacementSave();
+            return;
           }
+          void noteUserResize();
         }),
       );
     };
@@ -548,13 +612,14 @@
     return () => {
       if (placementSaveTimeoutId !== null) clearTimeout(placementSaveTimeoutId);
       if (autoSizeTimeoutId !== null) clearTimeout(autoSizeTimeoutId);
-      if (emptyHintTimerId !== null) clearTimeout(emptyHintTimerId);
       for (const unlisten of unlisteners) {
         unlisten();
       }
     };
   });
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} />
 
 <div class="relative h-screen w-screen overflow-hidden">
   {#if config.window_pinned}
@@ -595,7 +660,7 @@
         {retryAttempt}
         {translatedText}
         {errorMessage}
-        showComposer={config.window_pinned}
+        showComposer={hasSourceText}
         hasDraftChanges={draftSourceText.trim() !== translatedTextTriggerText.trim()}
         usage={translationUsage}
         windowPinned={config.window_pinned}

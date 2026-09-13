@@ -52,6 +52,11 @@
   }: Props = $props();
 
   let sourceExpanded = $state(false);
+  /**
+   * Language, provider, model, and token usage are supporting information, not the point of the
+   * window. They start collapsed so the translation itself is the visual subject.
+   */
+  let detailsExpanded = $state(false);
 
   const isBusy = $derived(viewState === 'loading' || viewState === 'streaming');
 
@@ -92,8 +97,10 @@
     contextSummary.length > 0 || Boolean(sourceText) || showComposer,
   );
 
-  const showSourceToggle = $derived(Boolean(sourceText) && !showComposer);
+  /** The result action row keeps only the copy affordance now that usage moved to the details. */
+  const showResultActions = $derived(viewState === 'result');
 
+  const showSourceToggle = $derived(Boolean(sourceText) && !showComposer);
   $effect(() => {
     if (showComposer) {
       sourceExpanded = true;
@@ -108,16 +115,16 @@
 
 <div class="aura-glass-panel flex min-h-0 flex-col">
   <div
-    class="flex shrink-0 items-center gap-3 border-b border-aura-border bg-white/75 px-4 py-2.5"
+    class="flex shrink-0 items-center gap-3 border-b border-aura-border bg-aura-glass px-4 py-2.5"
     data-testid="popup-status-bar"
   >
-    <div class="flex shrink-0 items-center gap-2 text-[11px] font-display font-medium text-aura-text-dim">
+    <div class="flex shrink-0 items-center gap-2 text-xs font-display font-medium text-aura-text-dim">
       <span class="h-2 w-2 rounded-full bg-aura-accent shadow-[0_0_0_4px_var(--color-aura-accent-soft)]"></span>
       <span>{statusLabel}</span>
     </div>
 
     <div
-      class="min-w-[92px] flex-1 cursor-move select-none text-center text-[11px] font-medium uppercase tracking-[0.14em] text-aura-text-muted"
+      class="min-w-[92px] flex-1 cursor-move select-none text-center text-xs font-medium uppercase tracking-[0.14em] text-aura-text-muted"
       data-tauri-drag-region
       data-testid="window-drag-handle"
       aria-label="拖动窗口"
@@ -128,10 +135,10 @@
 
     <div class="flex shrink-0 items-center gap-1.5">
       <button
-        class={`flex h-[2.15rem] items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-display transition-colors duration-150 ${
+        class={`flex h-[2.15rem] items-center gap-1.5 rounded-md border px-2.5 text-xs font-display transition-colors duration-150 ${
           windowPinned
             ? 'border-aura-border-accent bg-aura-accent-soft text-aura-accent'
-            : 'border-aura-border bg-aura-surface-strong text-aura-text-dim hover:border-aura-border-accent hover:bg-white hover:text-aura-text'
+            : 'border-aura-border bg-aura-surface-strong text-aura-text-dim hover:border-aura-border-accent hover:bg-aura-surface-strong hover:text-aura-text'
         }`}
         type="button"
         aria-pressed={windowPinned}
@@ -156,22 +163,18 @@
 
   <div class="min-h-0 flex-1">
     <div
-      class="flex h-full min-h-0 flex-col overflow-hidden bg-white/72"
+      class="flex h-full min-h-0 flex-col overflow-hidden bg-aura-glass"
       data-testid="popup-main-surface"
     >
       {#if showContextBar}
-        <div class="border-b border-aura-border bg-aura-surface-soft/38 px-4 py-2.5">
+        <div class="border-b border-aura-border bg-aura-surface-soft/38 px-4 py-1.5">
           <div
-            class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] text-aura-text-muted"
+            class="flex flex-wrap items-center gap-x-3 text-xs text-aura-text-muted"
             data-testid="popup-context-row"
           >
-            {#each contextSummary as item}
-              <span class="font-mono tracking-[0.02em]">{item}</span>
-            {/each}
-
             {#if showSourceToggle}
               <button
-                class="ml-auto text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:text-aura-accent"
+                class="font-medium text-aura-text-dim transition-colors duration-150 hover:text-aura-accent"
                 type="button"
                 data-testid="source-toggle-button"
                 onclick={() => (sourceExpanded = !sourceExpanded)}
@@ -179,7 +182,30 @@
                 {sourceExpanded ? '收起原文' : '查看原文'}
               </button>
             {/if}
+
+            {#if contextSummary.length > 0}
+              <button
+                class="ml-auto font-medium text-aura-text-dim transition-colors duration-150 hover:text-aura-accent"
+                type="button"
+                data-testid="details-toggle-button"
+                aria-expanded={detailsExpanded}
+                onclick={() => (detailsExpanded = !detailsExpanded)}
+              >
+                {detailsExpanded ? '隐藏详情' : '详情'}
+              </button>
+            {/if}
           </div>
+
+          {#if detailsExpanded && contextSummary.length > 0}
+            <div
+              class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-aura-border pt-1.5 font-mono text-xs text-aura-text-muted"
+              data-testid="popup-context-details"
+            >
+              {#each contextSummary as item}
+                <span class="tracking-[0.02em]">{item}</span>
+              {/each}
+            </div>
+          {/if}
 
           {#if showComposer}
             <div class="mt-2.5 border-t border-aura-border pt-3">
@@ -223,7 +249,7 @@
                   }
                 }}
                 placeholder="在这里输入或修改原文"
-                class="aura-console-textarea mt-3 min-h-[104px] bg-white/80"
+                class="aura-console-textarea mt-3 min-h-[104px] bg-aura-glass"
               ></textarea>
             </div>
           {:else if showSourceToggle}
@@ -234,7 +260,7 @@
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <p class="aura-section-title">原文</p>
                 <button
-                  class="text-[11px] font-medium text-aura-text-dim transition-colors duration-150 hover:text-aura-accent"
+                  class="text-xs font-medium text-aura-text-dim transition-colors duration-150 hover:text-aura-accent"
                   type="button"
                   onclick={() => onretry?.()}
                   disabled={isBusy}
@@ -295,36 +321,24 @@
               </p>
             </div>
 
-            {#if viewState === 'result'}
+            {#if showResultActions}
               <div
-                class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-aura-border pt-3"
+                class="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-aura-border pt-3"
                 data-testid="popup-result-actions"
               >
-                {#if usage}
-                  <div class="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-[11px] text-aura-text-muted">
-                    <span class="font-mono">输入 {usage.prompt_tokens.toLocaleString()}</span>
-                    <span class="font-mono">输出 {usage.completion_tokens.toLocaleString()}</span>
-                    <span class="font-mono">总计 {usage.total_tokens.toLocaleString()}</span>
-                  </div>
-                {:else}
-                  <span class="min-h-[1rem]"></span>
-                {/if}
-
-                <div class="flex flex-wrap items-center justify-end gap-2">
-                  <button
-                    class="aura-console-button"
-                    data-variant="primary"
-                    onclick={() => oncopy?.()}
-                    type="button"
-                  >
-                    复制译文
-                  </button>
-                </div>
+                <button
+                  class="aura-console-button"
+                  data-variant="primary"
+                  onclick={() => oncopy?.()}
+                  type="button"
+                >
+                  复制译文
+                </button>
               </div>
             {/if}
           </div>
         {:else}
-          <div class="flex h-full flex-col items-start justify-center gap-4 border-y border-aura-error/20 bg-[#fff8f9] px-4 py-4">
+          <div class="flex h-full flex-col items-start justify-center gap-4 border-y border-aura-error/20 bg-aura-danger-surface px-4 py-4">
             <div>
               <p class="aura-section-title text-aura-error">翻译失败</p>
               <p class="mt-2 max-w-[320px] text-sm leading-7 text-aura-error/90">

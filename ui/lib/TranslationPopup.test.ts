@@ -56,8 +56,15 @@ describe('TranslationPopup', () => {
       },
     });
 
-    expect(screen.getByTestId('popup-context-row')).toHaveTextContent('英语');
+    // The translation is the visual subject: language, model, and token usage start collapsed
+    // behind the details toggle rather than occupying the header.
+    expect(screen.getByText('你好，世界')).toBeInTheDocument();
+    expect(screen.queryByTestId('popup-context-details')).not.toBeInTheDocument();
     expect(screen.queryByTestId('popup-source-panel')).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByTestId('details-toggle-button'));
+    expect(screen.getByTestId('popup-context-details')).toHaveTextContent('英语');
+    expect(screen.getByTestId('popup-context-details')).toHaveTextContent('15 token');
 
     await fireEvent.click(screen.getByTestId('source-toggle-button'));
 
