@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/*
+ * Light appearance is the default. The dark block below re-declares the same custom properties on
+ * :root, which cascades into every utility that references them, so both appearances resolve from
+ * one semantic palette (see ui/lib/theme.ts).
+ */
 @theme {
   --color-aura-bg: #f4f7fb;
   --color-aura-glass: #fcfdff;
@@ -18,9 +23,40 @@
   --color-aura-focus-ring: rgba(37, 111, 216, 0.14);
   --color-aura-success: #1a7e60;
   --color-aura-error: #c95362;
-  --font-display: 'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans SC', 'PingFang SC', sans-serif;
-  --font-body: 'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans SC', 'PingFang SC', sans-serif;
-  --font-mono: 'Cascadia Mono', 'SFMono-Regular', Consolas, monospace;
+  --color-aura-danger-surface: #fff8f9;
+  --color-aura-warning: #8a6226;
+  --color-aura-warning-surface: #fff7e4;
+  --color-aura-warning-border: #e6c683;
+  /* System-first stacks: macOS resolves to SF Pro and PingFang. */
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Noto Sans SC', sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Noto Sans SC', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-aura-bg: #1c1c1e;
+    --color-aura-glass: #232326;
+    --color-aura-glass-hover: #2b2b2f;
+    --color-aura-border: rgba(235, 240, 248, 0.14);
+    --color-aura-border-accent: rgba(88, 158, 246, 0.42);
+    --color-aura-accent: #5aa2f8;
+    --color-aura-accent-soft: rgba(90, 162, 248, 0.16);
+    --color-aura-accent-glow: rgba(90, 162, 248, 0.2);
+    --color-aura-text: #f2f4f8;
+    --color-aura-text-dim: #b6bdc9;
+    --color-aura-text-muted: #8c94a3;
+    --color-aura-surface-strong: #2a2a2e;
+    --color-aura-surface-soft: #242427;
+    --color-aura-shadow: rgba(0, 0, 0, 0.45);
+    --color-aura-focus-ring: rgba(90, 162, 248, 0.3);
+    --color-aura-success: #4fc79b;
+    --color-aura-error: #ff8a95;
+    --color-aura-danger-surface: #3a2529;
+    --color-aura-warning: #e8bd72;
+    --color-aura-warning-surface: #3a3122;
+    --color-aura-warning-border: #6b5730;
+  }
 }
 
 *, *::before, *::after {
@@ -57,9 +93,9 @@ button, input, select, textarea {
   height: 100%;
   overflow: hidden;
   border: 1px solid var(--color-aura-border);
-  border-radius: 0;
-  background:
-    linear-gradient(180deg, rgba(253, 254, 255, 0.98), rgba(247, 249, 252, 0.98));
+  /* Matches the corner radius macOS uses for floating panels. */
+  border-radius: 10px;
+  background: var(--color-aura-glass);
   box-shadow: 0 14px 30px var(--color-aura-shadow);
   color: var(--color-aura-text);
 }
@@ -284,4 +320,25 @@ button, input, select, textarea {
   background-size: 200% 100%;
   animation: shimmer 1.8s ease-in-out infinite, pulse-glow 2.4s ease-in-out infinite;
   border-radius: 999px;
+}
+
+/*
+ * macOS "Reduce motion" must be honoured rather than merely available. Looping and
+ * entrance animations are removed outright; the window springs are disabled in the
+ * components that own them.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .skeleton-bar {
+    animation: none !important;
+    background: var(--color-aura-surface-soft);
+  }
 }

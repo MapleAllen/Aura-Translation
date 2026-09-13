@@ -191,12 +191,12 @@
         没有符合当前筛选条件的历史记录。
       </div>
     {:else}
-    <div class="overflow-hidden rounded-lg border border-aura-border bg-white/80" data-testid="history-list">
+    <div class="overflow-hidden rounded-lg border border-aura-border bg-aura-glass" data-testid="history-list">
       {#each filteredEntries as entry, index (entry.id)}
         <article class={index === 0 ? '' : 'border-t border-aura-border'}>
           <div class="grid gap-3 px-4 py-3.5 lg:grid-cols-[minmax(0,1fr)_auto]">
             <div class="min-w-0">
-              <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-aura-text-dim">
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-aura-text-dim">
                 <span class={entry.status === 'success' ? 'text-aura-accent' : 'text-aura-error'}>
                   {entry.status === 'success' ? '成功' : '失败'}
                 </span>
@@ -277,7 +277,7 @@
               </div>
 
               {#if entry.usage}
-                <div class="md:col-span-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-aura-border pt-3 text-[11px] text-aura-text-muted">
+                <div class="md:col-span-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-aura-border pt-3 text-xs text-aura-text-muted">
                   <span class="font-mono">输入 {formatTokenCount(entry.usage.prompt_tokens)}</span>
                   <span class="font-mono">输出 {formatTokenCount(entry.usage.completion_tokens)}</span>
                   <span class="font-mono">总计 {formatTokenCount(entry.usage.total_tokens)}</span>

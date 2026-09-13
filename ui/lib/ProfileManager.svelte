@@ -116,7 +116,7 @@
       Aura 会自动创建一个默认翻译配置方案。
     </div>
   {:else}
-    <div class="overflow-hidden rounded-lg border border-aura-border bg-white/80" data-testid="profile-list">
+    <div class="overflow-hidden rounded-lg border border-aura-border bg-aura-glass" data-testid="profile-list">
       {#each store.profiles as profile, index (profile.id)}
         <div
           class={`grid gap-3 px-4 py-3.5 md:grid-cols-[minmax(0,1fr)_auto] ${
@@ -128,12 +128,12 @@
             <div class="flex flex-wrap items-center gap-2">
               <p class="truncate text-sm font-medium text-aura-text">{profile.name}</p>
               {#if profile.id === store.active_profile_id}
-                <span class="rounded-full border border-aura-border-accent bg-aura-accent-soft px-2.5 py-0.5 text-[11px] font-medium text-aura-accent">
+                <span class="rounded-full border border-aura-border-accent bg-aura-accent-soft px-2.5 py-0.5 text-xs font-medium text-aura-accent">
                   当前
                 </span>
               {/if}
             </div>
-            <p class="mt-1 font-mono text-[11px] text-aura-text-dim">
+            <p class="mt-1 font-mono text-xs text-aura-text-dim">
               {providerLabel(profile.provider)} · {profile.model} · {languageLabel(profile.source_lang)} → {languageLabel(profile.target_lang)}
             </p>
           </div>

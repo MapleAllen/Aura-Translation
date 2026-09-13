@@ -9,9 +9,9 @@
   let { notifications, ondismiss }: Props = $props();
 
   const accentByKind = {
-    error: 'border-aura-error bg-white/95 text-aura-text',
-    warning: 'border-[#d39d2f] bg-[#fffaf0] text-aura-text',
-    info: 'border-aura-accent bg-white/95 text-aura-text',
+    error: 'border-aura-error bg-aura-glass text-aura-text',
+    warning: 'border-aura-warning-border bg-aura-warning-surface text-aura-text',
+    info: 'border-aura-accent bg-aura-glass text-aura-text',
   } as const;
 
   const iconByKind = {
@@ -36,7 +36,7 @@
               {iconByKind[notification.kind]}
             </div>
             <div class="min-w-0 flex-1">
-              <p class="text-[11px] font-display font-semibold tracking-[0.08em]">
+              <p class="text-xs font-display font-semibold tracking-[0.08em]">
                 {notification.title}
               </p>
               <p class="mt-0.5 break-words text-xs leading-relaxed text-aura-text-dim">
