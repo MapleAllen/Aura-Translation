@@ -24,6 +24,8 @@ const baseConfig = {
   available_models: ['deepseek-chat', 'deepseek-reasoner'],
   settings_window_placement: null,
   pinned_translation_placement: null,
+  setup_completed: true,
+  notifications_enabled: true,
 };
 
 const readyStatus = {
@@ -99,7 +101,7 @@ function renderPanel(props: { hotkeyConflictMessage?: string; onsaved?: (config:
   });
 }
 
-async function openSection(section: 'overview' | 'general' | 'provider' | 'behavior' | 'profiles' | 'history') {
+async function openSection(section: 'general' | 'provider' | 'profiles' | 'history') {
   await fireEvent.click(await screen.findByTestId(`settings-nav-${section}`));
 }
 
@@ -165,22 +167,22 @@ describe('SettingsPanel operator console layout', () => {
     });
 
     expect(await screen.findByTestId('settings-nav')).toBeInTheDocument();
-    expect(screen.getByTestId('settings-nav-overview')).toHaveAttribute('aria-pressed', 'true');
-    for (const section of ['overview', 'general', 'provider', 'behavior', 'profiles', 'history']) {
+    // Three everyday sections plus an advanced one: the previous six-tab layout is gone.
+    expect(screen.getByTestId('settings-nav-general')).toHaveAttribute('aria-pressed', 'true');
+    for (const section of ['general', 'provider', 'profiles', 'history']) {
       expect(screen.getByTestId(`settings-nav-${section}`).querySelector('svg[aria-hidden="true"]')).not.toBeNull();
     }
-    expect(screen.getByTestId('settings-overview')).toHaveTextContent('DeepSeek');
+    expect(screen.queryByTestId('settings-nav-overview')).toBeNull();
+    expect(screen.queryByTestId('settings-nav-behavior')).toBeNull();
     await waitFor(() => {
       expect(screen.getByTestId('runtime-status-card')).toHaveTextContent('Aura 已准备好');
     });
-    expect(screen.getByTestId('overview-general-card')).toHaveTextContent('自动');
-    expect(screen.getByTestId('runtime-status-card')).toHaveTextContent('Aura 已准备好');
     expect(invokeMock).toHaveBeenCalledWith('get_config');
     expect(invokeMock).toHaveBeenCalledWith('get_runtime_status');
     expect(invokeMock).toHaveBeenCalledWith('get_translation_history');
     expect(invokeMock).toHaveBeenCalledWith('get_translation_profiles');
 
-    await fireEvent.click(screen.getByTestId('overview-provider-card'));
+    await fireEvent.click(screen.getByTestId('settings-nav-provider'));
     expect(screen.getByTestId('settings-nav-provider')).toHaveAttribute('aria-pressed', 'true');
 
     await openSection('history');
@@ -275,7 +277,7 @@ describe('SettingsPanel operator console layout', () => {
     renderPanel({
       hotkeyConflictMessage: '无法注册 "Alt+Shift+T"：已被占用。',
     });
-    await openSection('behavior');
+    await openSection('general');
 
     const input = await screen.findByDisplayValue('CmdOrCtrl+T');
     await fireEvent.focus(input);
@@ -288,7 +290,7 @@ describe('SettingsPanel operator console layout', () => {
 
   it('captures modifier-based hotkeys and clears the inline validation message', async () => {
     renderPanel();
-    await openSection('behavior');
+    await openSection('general');
 
     const input = await screen.findByDisplayValue('CmdOrCtrl+T');
     await fireEvent.focus(input);
@@ -301,7 +303,7 @@ describe('SettingsPanel operator console layout', () => {
 
   it('loads and saves the aura mode preference', async () => {
     renderPanel();
-    await openSection('behavior');
+    await openSection('general');
 
     const auraSwitch = await screen.findByRole('switch', { name: /Aura 模式/ });
     expect(auraSwitch).toHaveAttribute('aria-checked', 'false');
@@ -343,7 +345,7 @@ describe('SettingsPanel operator console layout', () => {
     });
 
     renderPanel();
-    await openSection('behavior');
+    await openSection('general');
 
     const auraSwitch = await screen.findByRole('switch', { name: /Aura/ });
     expect(auraSwitch).toHaveAttribute('aria-checked', 'false');
@@ -363,7 +365,7 @@ describe('SettingsPanel operator console layout', () => {
 
   it('loads and saves the sensitive clipboard guard preference', async () => {
     renderPanel();
-    await openSection('behavior');
+    await openSection('general');
 
     const guardSwitch = await screen.findByRole('switch', { name: /敏感剪贴板保护/ });
     expect(guardSwitch).toHaveAttribute('aria-checked', 'true');
@@ -383,7 +385,7 @@ describe('SettingsPanel operator console layout', () => {
     const onsaved = vi.fn();
 
     renderPanel({ onsaved });
-    await openSection('behavior');
+    await openSection('general');
 
     const pinSwitch = await screen.findByRole('switch', { name: /固定窗口/ });
     expect(pinSwitch).toHaveAttribute('aria-checked', 'false');
@@ -409,6 +411,9 @@ describe('SettingsPanel operator console layout', () => {
           return Promise.resolve({
             ...baseConfig,
             api_key: '',
+            // A credential-less install that never finished onboarding: this is the state in
+            // which the three-step wizard is the right surface.
+            setup_completed: false,
           });
         case 'get_system_capabilities':
           return Promise.resolve({
@@ -427,10 +432,17 @@ describe('SettingsPanel operator console layout', () => {
 
     renderPanel();
 
-    expect(await screen.findByTestId('runtime-status-card')).toHaveTextContent('需要配置');
-    await waitFor(() => {
-      expect(screen.getByTestId('runtime-status-card')).toHaveTextContent('请保存 API Key');
-    });
+    // Without a credential and without a completed setup, the wizard is shown instead of the
+    // old readiness dashboard.
+    expect(await screen.findByTestId('onboarding-steps')).toBeInTheDocument();
+    expect(screen.getByTestId('runtime-status-card')).toHaveTextContent('三步即可完成设置');
+    expect(screen.getByTestId('onboarding-step-service')).toHaveAttribute('data-state', 'done');
+    expect(screen.getByTestId('onboarding-step-credential')).toHaveAttribute('data-state', 'active');
+    expect(screen.getByTestId('onboarding-step-trial')).toHaveAttribute('data-state', 'todo');
+
+    // The trial stays unavailable until a credential exists, so a failed attempt cannot be
+    // mistaken for a completed setup.
+    expect(screen.getByTestId('onboarding-trial-button')).toBeDisabled();
   });
 
   it('runs a provider test using the current unsaved settings', async () => {
@@ -565,5 +577,123 @@ describe('SettingsPanel operator console layout', () => {
 
     await fireEvent.click(screen.getByTestId('clear-confirm-commit'));
     expect(invokeMock).toHaveBeenCalledWith('clear_translation_history');
+  });
+  it('marks setup complete only after a successful trial translation', async () => {
+    let trialCalls = 0;
+    invokeMock.mockImplementation((command: string) => {
+      switch (command) {
+        case 'get_config':
+          return Promise.resolve({ ...baseConfig, setup_completed: false });
+        case 'get_system_capabilities':
+          return Promise.resolve({ aura_mode: 'ready' });
+        case 'get_runtime_status':
+          return Promise.resolve(readyStatus);
+        case 'get_translation_history':
+          return Promise.resolve(baseHistoryEntries);
+        case 'get_translation_profiles':
+          return Promise.resolve(baseProfileStore);
+        case 'trial_translate':
+          trialCalls += 1;
+          return Promise.resolve({
+            ok: true,
+            message: '试译成功。',
+            translated_text: '你好，世界！',
+          });
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+
+    renderPanel();
+
+    const trialButton = await screen.findByTestId('onboarding-trial-button');
+    expect(trialButton).not.toBeDisabled();
+    await fireEvent.click(trialButton);
+
+    expect(trialCalls).toBe(1);
+    // Settings are persisted first so the trial exercises exactly what the hotkey will use.
+    expect(invokeMock).toHaveBeenCalledWith('save_config', expect.anything());
+    expect(invokeMock).toHaveBeenCalledWith(
+      'trial_translate',
+      expect.objectContaining({ model: 'deepseek-chat', provider: 'deepseek' }),
+    );
+    expect(invokeMock).toHaveBeenCalledWith('complete_setup');
+    await waitFor(() => {
+      expect(screen.getByTestId('onboarding-success')).toBeInTheDocument();
+    });
+  });
+
+  it('keeps setup incomplete when the trial translation fails', async () => {
+    invokeMock.mockImplementation((command: string) => {
+      switch (command) {
+        case 'get_config':
+          return Promise.resolve({ ...baseConfig, setup_completed: false });
+        case 'get_system_capabilities':
+          return Promise.resolve({ aura_mode: 'ready' });
+        case 'get_runtime_status':
+          return Promise.resolve(readyStatus);
+        case 'get_translation_history':
+          return Promise.resolve(baseHistoryEntries);
+        case 'get_translation_profiles':
+          return Promise.resolve(baseProfileStore);
+        case 'trial_translate':
+          return Promise.resolve({
+            ok: false,
+            message: 'API error (401): invalid key',
+            translated_text: null,
+          });
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+
+    renderPanel();
+    await fireEvent.click(await screen.findByTestId('onboarding-trial-button'));
+
+    expect(invokeMock).not.toHaveBeenCalledWith('complete_setup');
+    expect(await screen.findByTestId('onboarding-trial-message')).toHaveTextContent('401');
+    // The wizard stays open so the user can correct the credential and retry.
+    expect(screen.getByTestId('onboarding-steps')).toBeInTheDocument();
+    expect(screen.queryByTestId('onboarding-success')).toBeNull();
+  });
+
+  it('saves the background notification preference', async () => {
+    renderPanel();
+
+    const toggle = await screen.findByTestId('notifications-toggle');
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+
+    await fireEvent.click(toggle);
+    await fireEvent.click(screen.getByRole('button', { name: /保存设置/ }));
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      'save_config',
+      expect.objectContaining({
+        config: expect.objectContaining({ notifications_enabled: false }),
+      }),
+    );
+  });
+
+  it('marks the notification preference as unsaved until it is saved', async () => {
+    // Saving immediately after toggling hid the fact that the toggle was missing from the
+    // dirty-state snapshot, so the footer claimed the config was already synced and closing the
+    // window discarded the change.
+    renderPanel();
+
+    const toggle = await screen.findByTestId('notifications-toggle');
+    await waitFor(() => {
+      expect(screen.getByText('当前配置已同步')).toBeInTheDocument();
+    });
+
+    await fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByText('有未保存的更改')).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /保存设置/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText('设置已保存')).toBeInTheDocument();
+    });
   });
 });

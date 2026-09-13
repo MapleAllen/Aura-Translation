@@ -4,6 +4,7 @@
   import HistoryList from './HistoryList.svelte';
   import LanguageSelector from './LanguageSelector.svelte';
   import ProfileManager from './ProfileManager.svelte';
+  import SetupStatusCard from './SetupStatusCard.svelte';
   import type { AppConfig, Provider } from './appConfig';
   import { cloneAppConfig, createDefaultAppConfig } from './appConfig';
   import {
@@ -28,25 +29,23 @@
 
   type DesktopPlatform = 'windows' | 'macos' | 'linux' | 'unknown';
 
-  type SettingsSection = 'overview' | 'general' | 'provider' | 'behavior' | 'profiles' | 'history';
+  type SettingsSection = 'general' | 'provider' | 'profiles' | 'history';
 
   const SETTINGS_SECTIONS: Array<{ id: SettingsSection; label: string; hint: string }> = [
-    { id: 'overview', label: '概览', hint: '就绪状态与当前配置' },
-    { id: 'general', label: '翻译默认值', hint: '语言方向' },
-    { id: 'provider', label: '模型与密钥', hint: '服务商访问' },
-    { id: 'behavior', label: '触发方式', hint: '快捷键与窗口' },
+    { id: 'general', label: '通用', hint: '语言、快捷键与窗口' },
+    { id: 'provider', label: '翻译服务', hint: '服务商、模型与凭据' },
     { id: 'profiles', label: '配置方案', hint: '工作流切换' },
     { id: 'history', label: '历史记录', hint: '最近请求日志' },
   ];
 
+  // Three everyday sections, with the specialised ones grouped under an explicit advanced
+  // heading. Profiles, custom endpoints, and model lists are not part of a first run.
   const SETTINGS_GROUPS: Array<{
     label: string;
     sections: SettingsSection[];
   }> = [
-    { label: '常用', sections: ['overview', 'general'] },
-    { label: '连接', sections: ['provider'] },
-    { label: '工作流', sections: ['behavior', 'profiles'] },
-    { label: '数据', sections: ['history'] },
+    { label: '常用', sections: ['general', 'provider', 'history'] },
+    { label: '高级', sections: ['profiles'] },
   ];
 
   type Props = {
@@ -59,7 +58,7 @@
   let { visible, onclose, onsaved, hotkeyConflictMessage = '' }: Props = $props();
 
   let config: AppConfig = $state(createDefaultAppConfig());
-  let activeSection = $state<SettingsSection>('overview');
+  let activeSection = $state<SettingsSection>('general');
   let showApiKey = $state(false);
   let saving = $state(false);
   let testingProvider = $state(false);
@@ -78,12 +77,30 @@
   let probeResult = $state<ProviderProbeResult | null>(null);
   let savedConfigSnapshot = $state('');
 
+  // First-run onboarding. `showOnboardingPanel` lets the user reopen the wizard on demand; it is
+  // reset whenever the panel reloads so a completed setup does not resurface it uninvited.
+  let showOnboardingPanel = $state(false);
+  let onboardingTrialRunning = $state(false);
+  let onboardingTrialDone = $state(false);
+  let onboardingTrialMessage = $state('');
 
   const saveScale = new Spring(1, { stiffness: 0.4, damping: 0.5 });
 
   const activeSectionMeta = $derived(
     SETTINGS_SECTIONS.find((section) => section.id === activeSection) ?? SETTINGS_SECTIONS[0],
   );
+
+  /** Step 1 is satisfied once an endpoint and a model are present for the chosen service. */
+  const onboardingServiceChosen = $derived(
+    config.api_base_url.trim().length > 0 && config.model.trim().length > 0,
+  );
+
+  /** Step 2 is satisfied for Ollama by definition, and by a stored credential otherwise. */
+  const onboardingCredentialPresent = $derived(
+    config.provider === 'ollama' || config.api_key.trim().length > 0,
+  );
+
+  const showsOnboarding = $derived(!config.setup_completed || showOnboardingPanel);
 
   const activeProfileName = $derived(getActiveProfileName(profileStore) || 'Default');
 
@@ -116,6 +133,10 @@
     saveMessage = '';
     saveErrorMessage = '';
     probeResult = null;
+    // A reopened panel should follow the persisted setup state, not a previous manual reopen.
+    showOnboardingPanel = false;
+    onboardingTrialDone = false;
+    onboardingTrialMessage = '';
 
     try {
       const [loaded, nextCapabilities, nextRuntimeStatus, nextHistoryEntries, nextProfileStore] = await Promise.all([
@@ -182,6 +203,12 @@
     return next;
   }
 
+  /**
+   * Fields that count towards "unsaved changes".
+   *
+   * Every user-editable field must appear here. An omission makes the footer claim the
+   * configuration is already synced, so closing the window silently discards the edit.
+   */
   function snapshotConfig(value: AppConfig): string {
     return JSON.stringify({
       api_key: value.api_key,
@@ -197,6 +224,7 @@
       provider: value.provider,
       api_base_url: value.api_base_url,
       available_models: value.available_models,
+      notifications_enabled: value.notifications_enabled,
     });
   }
 
@@ -389,6 +417,62 @@
     testingProvider = false;
   }
 
+  type TrialTranslationResult = {
+    ok: boolean;
+    message: string;
+    translated_text: string | null;
+  };
+
+  /**
+   * Step 3: issue one real translation.
+   *
+   * Settings are persisted first so the trial exercises exactly what a normal hotkey press will
+   * use, and only a successful result marks setup complete. A failure leaves onboarding open with
+   * the message intact.
+   */
+  async function handleTrialTranslation() {
+    onboardingTrialRunning = true;
+    onboardingTrialMessage = '';
+    panelErrorMessage = '';
+
+    try {
+      const nextConfig = configForCurrentPlatform(config);
+      config = cloneAppConfig(nextConfig);
+      await invoke('save_config', { config: nextConfig });
+      savedConfigSnapshot = snapshotConfig(config);
+
+      const result = await invoke<TrialTranslationResult>('trial_translate', {
+        text: null,
+        sourceLang: config.source_lang,
+        targetLang: config.target_lang,
+        apiKey: config.api_key,
+        model: config.model,
+        apiBaseUrl: config.api_base_url,
+        provider: config.provider,
+      });
+
+      if (result.ok) {
+        onboardingTrialDone = true;
+        onboardingTrialMessage = result.translated_text
+          ? `试译成功：${result.translated_text}`
+          : result.message;
+        await invoke('complete_setup');
+        config.setup_completed = true;
+        showOnboardingPanel = false;
+        await refreshRuntimeStatus();
+      } else {
+        onboardingTrialDone = false;
+        onboardingTrialMessage = result.message;
+      }
+    } catch (e) {
+      onboardingTrialDone = false;
+      onboardingTrialMessage = '试译失败，请检查服务地址、模型和凭据后重试。';
+      console.error('Failed to run the trial translation:', { error: e });
+    }
+
+    onboardingTrialRunning = false;
+  }
+
   async function saveConfig() {
     saving = true;
     saveMessage = '';
@@ -429,7 +513,7 @@
     class="aura-glass-panel z-50 flex min-h-0 flex-col"
     style="animation: fade-in-up 0.25s ease-out both;"
   >
-    <div class="flex items-start justify-between border-b border-aura-border bg-white/75 px-5 py-3.5">
+    <div class="flex items-start justify-between border-b border-aura-border bg-aura-glass px-5 py-3.5">
       <div class="flex-1 pr-4" data-tauri-drag-region>
         <h2 class="text-base font-display font-semibold text-aura-text" data-tauri-drag-region>
           设置操作台
@@ -452,7 +536,7 @@
 
     <div class="min-h-0 flex-1 px-4 py-3.5">
       <div
-        class="flex h-full min-h-0 overflow-hidden border-y border-aura-border bg-white/72"
+        class="flex h-full min-h-0 overflow-hidden border-y border-aura-border bg-aura-glass"
         data-testid="settings-workspace"
       >
         <aside
@@ -462,7 +546,7 @@
           <div class="space-y-3">
             {#each SETTINGS_GROUPS as group}
               <div class="space-y-0.5">
-                <p class="px-2.5 pb-1 text-[10px] font-display font-semibold uppercase tracking-[0.12em] text-aura-text-muted">
+                <p class="px-2.5 pb-1 text-xs font-display font-semibold uppercase tracking-[0.12em] text-aura-text-muted">
                   {group.label}
                 </p>
                 {#each group.sections as sectionId}
@@ -470,8 +554,8 @@
                   <button
                     class={`flex w-full items-center gap-2 border-l-2 px-2.5 py-2 text-left text-[12px] font-medium leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:border-aura-border-accent focus-visible:shadow-[0_0_0_3px_var(--color-aura-focus-ring)] ${
                       activeSection === section.id
-                        ? 'border-l-aura-accent bg-white/82 text-aura-text'
-                        : 'border-l-transparent text-aura-text-dim hover:bg-white/60 hover:text-aura-text'
+                        ? 'border-l-aura-accent bg-aura-glass text-aura-text'
+                        : 'border-l-transparent text-aura-text-dim hover:bg-aura-glass-hover hover:text-aura-text'
                     }`}
                     type="button"
                     data-testid={`settings-nav-${section.id}`}
@@ -487,20 +571,13 @@
                       stroke="currentColor"
                       stroke-width="1.8"
                     >
-                      {#if section.id === 'overview'}
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 5.5A1.5 1.5 0 0 1 6 4h4.5A1.5 1.5 0 0 1 12 5.5v4A1.5 1.5 0 0 1 10.5 11H6a1.5 1.5 0 0 1-1.5-1.5v-4Z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M14 5.5A1.5 1.5 0 0 1 15.5 4H18a1.5 1.5 0 0 1 1.5 1.5V18a1.5 1.5 0 0 1-1.5 1.5h-2.5A1.5 1.5 0 0 1 14 18V5.5Z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 14.5A1.5 1.5 0 0 1 6 13h4.5a1.5 1.5 0 0 1 1.5 1.5V18a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18v-3.5Z" />
-                  {:else if section.id === 'general'}
+                      {#if section.id === 'general'}
                     <path stroke-linecap="round" stroke-linejoin="round" d="M10.4 4.4 11 3h2l.6 1.4a7.6 7.6 0 0 1 1.7.7l1.4-.6 1.4 1.4-.6 1.4c.3.5.5 1.1.7 1.7l1.4.6v2l-1.4.6a7.6 7.6 0 0 1-.7 1.7l.6 1.4-1.4 1.4-1.4-.6a7.6 7.6 0 0 1-1.7.7L13 21h-2l-.6-1.4a7.6 7.6 0 0 1-1.7-.7l-1.4.6-1.4-1.4.6-1.4a7.6 7.6 0 0 1-.7-1.7L4.4 14v-2l1.4-.6c.2-.6.4-1.2.7-1.7l-.6-1.4 1.4-1.4 1.4.6c.5-.3 1.1-.5 1.7-.7Z" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9.4 12a2.6 2.6 0 1 0 5.2 0 2.6 2.6 0 0 0-5.2 0Z" />
                   {:else if section.id === 'provider'}
                     <path stroke-linecap="round" stroke-linejoin="round" d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v3.5A1.5 1.5 0 0 1 19 12H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5Z" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14a1.5 1.5 0 0 1 1.5 1.5V17A1.5 1.5 0 0 1 19 18.5H5A1.5 1.5 0 0 1 3.5 17v-3.5A1.5 1.5 0 0 1 5 12Z" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.8h.01M7.5 15.3h.01" />
-                  {:else if section.id === 'behavior'}
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 7.5h13A1.5 1.5 0 0 1 20 9v6a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 15V9a1.5 1.5 0 0 1 1.5-1.5Z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 10.5h.01M10.5 10.5h.01M13.5 10.5h.01M16.5 10.5h.01M8.5 13.5h7" />
                   {:else if section.id === 'profiles'}
                     <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 6.5h4l1.8 2h7.2A1.5 1.5 0 0 1 20 10v6.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 16.5V8a1.5 1.5 0 0 1 1.5-1.5Z" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M8 13h8" />
@@ -526,144 +603,31 @@
 
           <div class="min-h-0 flex-1 overflow-y-auto px-6 py-6">
             {#if panelErrorMessage}
-              <div class="mb-5 rounded-lg border border-aura-error/25 bg-[#fff8f9] px-4 py-3 text-sm leading-relaxed text-aura-error">
+              <div class="mb-5 rounded-lg border border-aura-error/25 bg-aura-danger-surface px-4 py-3 text-sm leading-relaxed text-aura-error">
                 {panelErrorMessage}
               </div>
             {/if}
 
-            {#if activeSection === 'overview'}
-              <div class="space-y-5" data-testid="settings-overview">
-                <section class="rounded-lg border border-aura-border bg-white/70 px-4 py-4" data-testid="runtime-status-card">
-                  <div class="flex flex-wrap items-start justify-between gap-4">
-                    <div class="min-w-0">
-                      <p class="aura-section-title">就绪状态</p>
-                      <p class="mt-1 max-w-[620px] text-sm leading-6 text-aura-text">
-                        {runtimeStatus?.summary ?? '正在检查 Aura 是否已准备好翻译...'}
-                      </p>
-                    </div>
-
-                    <span class={`rounded-full border px-2.5 py-1 text-[11px] font-display font-semibold tracking-[0.06em] ${
-                      runtimeStatus?.level === 'ready'
-                        ? 'border-[#d9efe4] bg-[#f5fbf8] text-aura-success'
-                        : 'border-[#f4d4da] bg-[#fff8f9] text-aura-error'
-                    }`}>
-                      {runtimeStatus?.level === 'ready' ? '已就绪' : '需要配置'}
-                    </span>
-                  </div>
-
-                  {#if runtimeStatus}
-                    <div class="mt-3 grid gap-x-6 gap-y-1 text-xs text-aura-text-dim md:grid-cols-2">
-                      {#each runtimeStatus.checklist as item}
-                        <div class={`flex items-center gap-2 ${item.ok ? 'text-aura-text-dim' : 'text-aura-error/90'}`}>
-                          <span class={item.ok ? 'text-aura-success' : 'text-aura-error'}>
-                            {item.ok ? '✓' : '!'}
-                          </span>
-                          <span>{item.label}</span>
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-
-                  <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-aura-border bg-aura-surface-soft/70 px-3.5 py-3">
-                    <div class="min-w-0">
-                      <p class="text-sm font-medium text-aura-text">测试服务商连接</p>
-                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-                        使用当前设置发起一次轻量请求，保存前也可以测试。
-                      </p>
-                      {#if probeResult}
-                        <p
-                          class={`mt-2 text-xs leading-relaxed ${probeResult.ok ? 'text-aura-success' : 'text-aura-error'}`}
-                          data-testid="provider-probe-message"
-                        >
-                          {probeResult.message}
-                        </p>
-                      {/if}
-                    </div>
-
-                    <button
-                      class="aura-console-button rounded-md"
-                      onclick={handleProviderProbe}
-                      disabled={testingProvider}
-                      data-testid="probe-provider-button"
-                      type="button"
-                    >
-                      {testingProvider ? '测试中...' : '测试服务商'}
-                    </button>
-                  </div>
-                </section>
-
-                <section class="grid gap-3 md:grid-cols-2">
-                  <button
-                    class="group grid min-h-[92px] w-full gap-1 rounded-lg border border-aura-border bg-white/68 px-4 py-3.5 text-left transition-colors duration-150 hover:border-aura-border-accent hover:bg-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-aura-focus-ring)]"
-                    type="button"
-                    data-testid="overview-general-card"
-                    onclick={() => (activeSection = 'general')}
-                  >
-                    <p class="aura-section-title">翻译语言</p>
-                    <div>
-                      <p class="text-sm font-medium text-aura-text">{currentLanguageSummary}</p>
-                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">调整每次请求默认使用的语言方向。</p>
-                    </div>
-                  </button>
-
-                  <button
-                    class="group grid min-h-[92px] w-full gap-1 rounded-lg border border-aura-border bg-white/68 px-4 py-3.5 text-left transition-colors duration-150 hover:border-aura-border-accent hover:bg-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-aura-focus-ring)]"
-                    type="button"
-                    data-testid="overview-provider-card"
-                    onclick={() => (activeSection = 'provider')}
-                  >
-                    <p class="aura-section-title">模型与密钥</p>
-                    <div>
-                      <p class="truncate text-sm font-medium text-aura-text">
-                        {providerLabel(config.provider)} · {config.model}
-                      </p>
-                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">切换服务商、模型和 API Key 存储。</p>
-                    </div>
-                  </button>
-
-                  <button
-                    class="group grid min-h-[92px] w-full gap-1 rounded-lg border border-aura-border bg-white/68 px-4 py-3.5 text-left transition-colors duration-150 hover:border-aura-border-accent hover:bg-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-aura-focus-ring)]"
-                    type="button"
-                    data-testid="overview-behavior-card"
-                    onclick={() => (activeSection = 'behavior')}
-                  >
-                    <p class="aura-section-title">触发方式</p>
-                    <div>
-                      <p class="text-sm font-medium text-aura-text">
-                        {config.aura_mode_enabled ? 'Aura 模式' : '手动快捷键'} · {config.hotkey}
-                      </p>
-                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">管理自动翻译、剪贴板保护和固定窗口。</p>
-                    </div>
-                  </button>
-
-                  <button
-                    class="group grid min-h-[92px] w-full gap-1 rounded-lg border border-aura-border bg-white/68 px-4 py-3.5 text-left transition-colors duration-150 hover:border-aura-border-accent hover:bg-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-aura-focus-ring)]"
-                    type="button"
-                    data-testid="overview-profiles-card"
-                    onclick={() => (activeSection = 'profiles')}
-                  >
-                    <p class="aura-section-title">当前方案</p>
-                    <div>
-                      <p class="truncate text-sm font-medium text-aura-text">{activeProfileName}</p>
-                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">保存并切换常用翻译工作流。</p>
-                    </div>
-                  </button>
-
-                  <button
-                    class="group grid min-h-[92px] w-full gap-1 rounded-lg border border-aura-border bg-white/68 px-4 py-3.5 text-left transition-colors duration-150 hover:border-aura-border-accent hover:bg-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-aura-focus-ring)]"
-                    type="button"
-                    data-testid="overview-history-card"
-                    onclick={() => (activeSection = 'history')}
-                  >
-                    <p class="aura-section-title">最近历史</p>
-                    <div>
-                      <p class="text-sm font-medium text-aura-text">{historyEntries.length} 条记录</p>
-                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">复制、重试或清理最近的翻译请求。</p>
-                    </div>
-                  </button>
-                </section>
+            {#if showsOnboarding}
+              <div class="space-y-5" data-testid="settings-onboarding">
+                <SetupStatusCard
+                  status={runtimeStatus}
+                  testing={testingProvider}
+                  {probeResult}
+                  ontest={handleProviderProbe}
+                  onboarding={true}
+                  serviceChosen={onboardingServiceChosen}
+                  credentialPresent={onboardingCredentialPresent}
+                  trialDone={onboardingTrialDone}
+                  trialRunning={onboardingTrialRunning}
+                  trialMessage={onboardingTrialMessage}
+                  hotkeyLabel={config.hotkey}
+                  ontrial={handleTrialTranslation}
+                  ongoadvanced={() => (activeSection = 'provider')}
+                />
               </div>
-            {:else if activeSection === 'general'}
+            {/if}
+            {#if activeSection === 'general'}
               <div class="space-y-5">
                 <section class="space-y-4">
                   <div>
@@ -680,6 +644,199 @@
                       config.target_lang = target;
                     }}
                   />
+                </section>
+
+                <section class="space-y-3 rounded-lg border border-aura-border bg-aura-surface-soft/70 px-4 py-4">
+                  <div class="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+                    <div>
+                      <label class="aura-section-title" for="hotkey-capture">快捷键</label>
+                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
+                        使用快捷键手动翻译；同一段文本再按一次会收起或召回，不会重复请求。
+                      </p>
+                    </div>
+                    <div class="space-y-3">
+                      <div class="relative">
+                        <input
+                          id="hotkey-capture"
+                          type="text"
+                          value={config.hotkey}
+                          placeholder="按下快捷键组合"
+                          readonly
+                          onfocus={() => (isCapturingHotkey = true)}
+                          onblur={() => (isCapturingHotkey = false)}
+                          onkeydown={handleHotkeyKeydown}
+                          class={`aura-console-input cursor-pointer select-none pr-24 font-medium ${
+                            isCapturingHotkey ? 'border-aura-accent shadow-[0_0_0_3px_var(--color-aura-focus-ring)]' : ''
+                          }`}
+                        />
+                        <span class={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium ${
+                          isCapturingHotkey ? 'text-aura-accent' : 'text-aura-text-muted'
+                        }`}>
+                          {isCapturingHotkey ? '记录中...' : '点击编辑'}
+                        </span>
+                      </div>
+
+                      <p class="text-xs text-aura-text-muted">
+                        快捷键必须包含至少一个修饰键，并搭配一个字母或数字键。
+                      </p>
+
+                      {#if hotkeyInputMessage}
+                        <p class="text-xs text-aura-warning" data-testid="hotkey-input-message">
+                          {hotkeyInputMessage}
+                        </p>
+                      {/if}
+
+                      {#if hotkeyConflictMessage}
+                        <div
+                          class="rounded-lg border border-aura-warning-border bg-aura-warning-surface px-4 py-3 text-xs leading-relaxed text-aura-warning"
+                          data-testid="hotkey-conflict-inline"
+                        >
+                          {hotkeyConflictMessage}
+                        </div>
+                      {/if}
+                    </div>
+                  </div>
+                </section>
+
+                {#if !showsOnboarding}
+                  <section class="space-y-4">
+                    <div
+                      class="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-aura-border bg-aura-surface-soft px-4 py-3.5"
+                      data-testid="runtime-status-card"
+                    >
+                      <div class="min-w-0">
+                        <p class="text-sm font-medium text-aura-text">
+                          {runtimeStatus?.level === 'ready' ? '已就绪' : '需要完成配置'}
+                        </p>
+                        <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
+                          {runtimeStatus?.summary ?? '正在检查 Aura 是否已准备好翻译...'}
+                        </p>
+                      </div>
+                      <button
+                        class="aura-console-button rounded-md"
+                        type="button"
+                        data-testid="restart-onboarding-button"
+                        onclick={() => (showOnboardingPanel = true)}
+                      >
+                        查看设置向导
+                      </button>
+                    </div>
+                  </section>
+                {/if}
+                <section class="space-y-2">
+                  <div class="grid gap-3 rounded-lg border border-aura-border bg-aura-glass-hover px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                    <div>
+                      <p class="text-sm font-medium text-aura-text">Aura 模式</p>
+                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
+                        剪贴板文本变化后自动发起翻译。
+                      </p>
+                    </div>
+                    <button
+                      class={`aura-console-switch ${config.aura_mode_enabled ? 'is-on' : ''}`}
+                      role="switch"
+                      aria-checked={config.aura_mode_enabled}
+                      aria-label="Aura 模式"
+                      type="button"
+                      disabled={capabilities.aura_mode !== 'ready'}
+                      title={capabilities.aura_mode === 'ready' ? 'Aura 模式' : '当前平台不支持自动剪贴板翻译。'}
+                      onclick={() => {
+                        if (capabilities.aura_mode === 'ready') {
+                          config.aura_mode_enabled = !config.aura_mode_enabled;
+                        }
+                      }}
+                    >
+                      <span class="aura-console-switch-thumb"></span>
+                    </button>
+                  </div>
+                  {#if capabilities.aura_mode !== 'ready'}
+                    <p
+                      class="text-xs leading-relaxed text-aura-text-dim"
+                      data-testid="aura-mode-platform-note"
+                    >
+                      当前平台不支持自动剪贴板翻译；请复制文本后使用快捷键手动触发。
+                    </p>
+                  {/if}
+                  <p class="text-xs leading-relaxed text-aura-text-dim">
+                    关闭 Aura 模式后，仍可继续使用“复制文本后按快捷键”的手动流程。
+                  </p>
+                </section>
+
+                <section class="space-y-2">
+                  <div class="grid gap-3 rounded-lg border border-aura-border bg-aura-glass-hover px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                    <div>
+                      <p class="text-sm font-medium text-aura-text">敏感剪贴板保护</p>
+                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
+                        Aura 模式发送内容前，会跳过疑似密码、令牌和长凭据字符串。
+                      </p>
+                    </div>
+                    <button
+                      class={`aura-console-switch ${config.aura_guard_enabled ? 'is-on' : ''}`}
+                      role="switch"
+                      aria-checked={config.aura_guard_enabled}
+                      aria-label="敏感剪贴板保护"
+                      type="button"
+                      onclick={() => (config.aura_guard_enabled = !config.aura_guard_enabled)}
+                    >
+                      <span class="aura-console-switch-thumb"></span>
+                    </button>
+                  </div>
+                  <p class="text-xs leading-relaxed text-aura-text-dim">
+                    这项保护只影响 Aura 模式的自动剪贴板翻译；手动快捷键翻译仍会使用你主动触发的文本。
+                  </p>
+                </section>
+
+                <section class="space-y-2">
+                  <div class="grid gap-3 rounded-lg border border-aura-border bg-aura-glass-hover px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                    <div>
+                      <p class="text-sm font-medium text-aura-text">固定窗口</p>
+                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
+                        需要翻译窗保持可见、可移动并置顶时，可以固定它。
+                      </p>
+                    </div>
+                    <button
+                      class={`aura-console-switch ${config.window_pinned ? 'is-on' : ''}`}
+                      role="switch"
+                      aria-checked={config.window_pinned}
+                      aria-label="固定窗口"
+                      type="button"
+                      onclick={() => (config.window_pinned = !config.window_pinned)}
+                    >
+                      <span class="aura-console-switch-thumb"></span>
+                    </button>
+                  </div>
+                  <div class="grid gap-2 text-xs text-aura-text-dim sm:grid-cols-2">
+                    <div class="rounded-md border border-aura-border bg-aura-surface-soft px-3 py-3">
+                      未固定：在光标附近唤起，失焦后自动隐藏。
+                    </div>
+                    <div class="rounded-md border border-aura-border bg-aura-surface-soft px-3 py-3">
+                      已固定：记住上次拖动后的位置和大小。
+                    </div>
+                  </div>
+                </section>
+
+                <section class="space-y-2">
+                  <div class="grid gap-3 rounded-lg border border-aura-border bg-aura-glass-hover px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                    <div>
+                      <p class="text-sm font-medium text-aura-text">后台翻译通知</p>
+                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
+                        翻译窗隐藏时，用系统通知提示完成、重试和失败。
+                      </p>
+                    </div>
+                    <button
+                      class={`aura-console-switch ${config.notifications_enabled ? 'is-on' : ''}`}
+                      role="switch"
+                      aria-checked={config.notifications_enabled}
+                      aria-label="后台翻译通知"
+                      data-testid="notifications-toggle"
+                      type="button"
+                      onclick={() => (config.notifications_enabled = !config.notifications_enabled)}
+                    >
+                      <span class="aura-console-switch-thumb"></span>
+                    </button>
+                  </div>
+                  <p class="text-xs leading-relaxed text-aura-text-dim">
+                    关闭后，读文章时不会被后台翻译打断；配置读取失败等关键问题仍会提示。
+                  </p>
                 </section>
               </div>
             {:else if activeSection === 'provider'}
@@ -711,7 +868,7 @@
                   </button>
                 </section>
 
-                <section class="space-y-5 rounded-lg border border-aura-border bg-white/68 px-4 py-4">
+                <section class="space-y-5 rounded-lg border border-aura-border bg-aura-glass-hover px-4 py-4">
                   <div>
                     <p class="aura-section-title">连接配置</p>
                     <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
@@ -758,7 +915,7 @@
 
                         {#if shouldShowPlaintextApiKeyWarning(config.provider, config.api_key_storage)}
                           <div
-                            class="rounded-lg border border-[#e6c683] bg-[#fff7e4] px-4 py-3 text-xs leading-relaxed text-[#8a6226]"
+                            class="rounded-lg border border-aura-warning-border bg-aura-warning-surface px-4 py-3 text-xs leading-relaxed text-aura-warning"
                             data-testid="plaintext-api-key-warning"
                           >
                             明文备用模式会把 API Key 写入本机 Aura 配置。尽量使用试用或低权限密钥。
@@ -831,151 +988,7 @@
                   </div>
                 </section>
               </div>
-            {:else if activeSection === 'behavior'}
-              <div class="space-y-5">
-                <section class="space-y-2">
-                  <div class="grid gap-3 rounded-lg border border-aura-border bg-white/68 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                    <div>
-                      <p class="text-sm font-medium text-aura-text">Aura 模式</p>
-                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-                        剪贴板文本变化后自动发起翻译。
-                      </p>
-                    </div>
-                    <button
-                      class={`aura-console-switch ${config.aura_mode_enabled ? 'is-on' : ''}`}
-                      role="switch"
-                      aria-checked={config.aura_mode_enabled}
-                      aria-label="Aura 模式"
-                      type="button"
-                      disabled={capabilities.aura_mode !== 'ready'}
-                      title={capabilities.aura_mode === 'ready' ? 'Aura 模式' : '当前平台不支持自动剪贴板翻译。'}
-                      onclick={() => {
-                        if (capabilities.aura_mode === 'ready') {
-                          config.aura_mode_enabled = !config.aura_mode_enabled;
-                        }
-                      }}
-                    >
-                      <span class="aura-console-switch-thumb"></span>
-                    </button>
-                  </div>
-                  {#if capabilities.aura_mode !== 'ready'}
-                    <p
-                      class="text-xs leading-relaxed text-aura-text-dim"
-                      data-testid="aura-mode-platform-note"
-                    >
-                      当前平台不支持自动剪贴板翻译；请复制文本后使用快捷键手动触发。
-                    </p>
-                  {/if}
-                  <p class="text-xs leading-relaxed text-aura-text-dim">
-                    关闭 Aura 模式后，仍可继续使用“复制文本后按快捷键”的手动流程。
-                  </p>
-                </section>
 
-                <section class="space-y-2">
-                  <div class="grid gap-3 rounded-lg border border-aura-border bg-white/68 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                    <div>
-                      <p class="text-sm font-medium text-aura-text">敏感剪贴板保护</p>
-                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-                        Aura 模式发送内容前，会跳过疑似密码、令牌和长凭据字符串。
-                      </p>
-                    </div>
-                    <button
-                      class={`aura-console-switch ${config.aura_guard_enabled ? 'is-on' : ''}`}
-                      role="switch"
-                      aria-checked={config.aura_guard_enabled}
-                      aria-label="敏感剪贴板保护"
-                      type="button"
-                      onclick={() => (config.aura_guard_enabled = !config.aura_guard_enabled)}
-                    >
-                      <span class="aura-console-switch-thumb"></span>
-                    </button>
-                  </div>
-                  <p class="text-xs leading-relaxed text-aura-text-dim">
-                    这项保护只影响 Aura 模式的自动剪贴板翻译；手动快捷键翻译仍会使用你主动触发的文本。
-                  </p>
-                </section>
-
-                <section class="space-y-2">
-                  <div class="grid gap-3 rounded-lg border border-aura-border bg-white/68 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                    <div>
-                      <p class="text-sm font-medium text-aura-text">固定窗口</p>
-                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-                        需要翻译窗保持可见、可移动并置顶时，可以固定它。
-                      </p>
-                    </div>
-                    <button
-                      class={`aura-console-switch ${config.window_pinned ? 'is-on' : ''}`}
-                      role="switch"
-                      aria-checked={config.window_pinned}
-                      aria-label="固定窗口"
-                      type="button"
-                      onclick={() => (config.window_pinned = !config.window_pinned)}
-                    >
-                      <span class="aura-console-switch-thumb"></span>
-                    </button>
-                  </div>
-                  <div class="grid gap-2 text-xs text-aura-text-dim sm:grid-cols-2">
-                    <div class="rounded-md border border-aura-border bg-aura-surface-soft px-3 py-3">
-                      未固定：在光标附近唤起，失焦后自动隐藏。
-                    </div>
-                    <div class="rounded-md border border-aura-border bg-aura-surface-soft px-3 py-3">
-                      已固定：记住上次拖动后的位置和大小。
-                    </div>
-                  </div>
-                </section>
-
-                <section class="space-y-3 rounded-lg border border-aura-border bg-white/68 px-4 py-4">
-                  <div class="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
-                    <div>
-                      <label class="aura-section-title" for="hotkey-capture">快捷键</label>
-                      <p class="mt-1 text-xs leading-relaxed text-aura-text-dim">
-                        使用快捷键手动翻译，也可唤起或隐藏悬浮翻译窗。
-                      </p>
-                    </div>
-                    <div class="space-y-3">
-                      <div class="relative">
-                        <input
-                          id="hotkey-capture"
-                          type="text"
-                          value={config.hotkey}
-                          placeholder="按下快捷键组合"
-                          readonly
-                          onfocus={() => (isCapturingHotkey = true)}
-                          onblur={() => (isCapturingHotkey = false)}
-                          onkeydown={handleHotkeyKeydown}
-                          class={`aura-console-input cursor-pointer select-none pr-24 font-medium ${
-                            isCapturingHotkey ? 'border-aura-accent shadow-[0_0_0_3px_var(--color-aura-focus-ring)]' : ''
-                          }`}
-                        />
-                        <span class={`absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium ${
-                          isCapturingHotkey ? 'text-aura-accent' : 'text-aura-text-muted'
-                        }`}>
-                          {isCapturingHotkey ? '记录中...' : '点击编辑'}
-                        </span>
-                      </div>
-
-                      <p class="text-xs text-aura-text-muted">
-                        快捷键必须包含至少一个修饰键，并搭配一个字母或数字键。
-                      </p>
-
-                      {#if hotkeyInputMessage}
-                        <p class="text-xs text-[#8a6226]" data-testid="hotkey-input-message">
-                          {hotkeyInputMessage}
-                        </p>
-                      {/if}
-
-                      {#if hotkeyConflictMessage}
-                        <div
-                          class="rounded-lg border border-[#e6c683] bg-[#fff7e4] px-4 py-3 text-xs leading-relaxed text-[#8a6226]"
-                          data-testid="hotkey-conflict-inline"
-                        >
-                          {hotkeyConflictMessage}
-                        </div>
-                      {/if}
-                    </div>
-                  </div>
-                </section>
-              </div>
             {:else if activeSection === 'profiles'}
               <ProfileManager
                 store={profileStore}
@@ -1002,7 +1015,7 @@
       </div>
     </div>
 
-    <div class="border-t border-aura-border bg-white/78 px-4 py-3">
+    <div class="border-t border-aura-border bg-aura-glass px-4 py-3">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex min-h-[1.25rem] items-center gap-2 text-sm">
           <span class={`h-2 w-2 rounded-full ${
@@ -1010,7 +1023,7 @@
               ? 'bg-aura-error'
               : saveMessage || !hasUnsavedChanges
                 ? 'bg-aura-success'
-                : 'bg-[#f59e0b]'
+                : 'bg-aura-warning'
           }`}></span>
           <p
             class={`${
@@ -1018,7 +1031,7 @@
                 ? 'text-aura-error'
                 : saveMessage || !hasUnsavedChanges
                   ? 'text-aura-success'
-                  : 'text-[#8a6226]'
+                  : 'text-aura-warning'
             }`}
             data-testid={saveErrorMessage ? 'save-error-message' : undefined}
           >

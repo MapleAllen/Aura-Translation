@@ -25,6 +25,8 @@ export type AppConfig = {
   available_models: string[];
   settings_window_placement: WindowPlacement | null;
   pinned_translation_placement: WindowPlacement | null;
+  setup_completed: boolean;
+  notifications_enabled: boolean;
 };
 
 export function createDefaultAppConfig(): AppConfig {
@@ -44,6 +46,8 @@ export function createDefaultAppConfig(): AppConfig {
     available_models: ['deepseek-chat', 'deepseek-reasoner'],
     settings_window_placement: null,
     pinned_translation_placement: null,
+    setup_completed: false,
+    notifications_enabled: true,
   };
 }
 

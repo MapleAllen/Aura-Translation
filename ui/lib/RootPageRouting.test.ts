@@ -59,6 +59,8 @@ const baseConfig = {
   available_models: ['deepseek-chat', 'deepseek-reasoner'],
   settings_window_placement: null,
   pinned_translation_placement: null,
+  setup_completed: true,
+  notifications_enabled: true,
 };
 
 const readyStatus = {
@@ -112,6 +114,8 @@ describe('root page window routing', () => {
       switch (command) {
         case 'get_config':
           return Promise.resolve(baseConfig);
+        case 'get_system_capabilities':
+          return Promise.resolve({ aura_mode: 'ready' });
         case 'get_runtime_status':
           return Promise.resolve(readyStatus);
         case 'get_translation_history':
@@ -121,7 +125,9 @@ describe('root page window routing', () => {
         case 'mark_ui_ready':
           return Promise.resolve(undefined);
         default:
-          return Promise.resolve(undefined);
+          // Returning undefined here let a missing mock surface only as an unhandled rejection,
+          // which does not fail any assertion but does fail the run.
+          return Promise.reject(new Error(`unmocked command in test: ${command}`));
       }
     });
   });
