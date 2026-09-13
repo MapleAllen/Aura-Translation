@@ -7,17 +7,17 @@ The app is designed for desktop reading and writing workflows: copy text, transl
 ## Features
 
 - **Aura mode**: Optional clipboard watcher translates fresh copied text automatically on supported Windows and macOS builds.
-- **Hotkey recall**: Configurable global hotkey translates the current clipboard text and toggles the latest result.
+- **Predictable hotkey**: A configurable global hotkey translates new clipboard text; pressing it again on the same text collapses or recalls the result without re-issuing a request.
 - **Streaming output**: Token-by-token translation through DeepSeek, OpenRouter, Ollama, or another OpenAI-compatible endpoint.
 - **Bidirectional language pairs**: 11 languages with one-click source/target swap.
 - **Floating translation bubble**: Minimal result window appears near the cursor and auto-sizes to translated text.
 - **Pinned comparison mode**: Keep the bubble visible, draggable, and position-persistent while you compare source and output.
-- **Pinned draft composer**: In pinned mode, revise the source text inline and press `Cmd/Ctrl+Enter` to translate again.
+- **Inline draft composer**: Revise the source text inline and press `Cmd/Ctrl+Enter` to translate again. Available whether or not the window is pinned.
 - **Separate settings window**: Provider, language pair, hotkey, Aura mode, pin behavior, profiles, and history live outside the translation bubble.
 - **Named translation profiles**: Save multiple provider/language setups and switch from Settings or the tray menu.
-- **Token usage visibility**: Show prompt, completion, and total token counts when the provider streams usage metadata.
+- **Translation-first bubble**: The translation and its copy action are the visual subject; language, model, and token usage live behind a details toggle.
 - **Recent translation history**: Keep the latest 50 local results with copy, retry, delete, and clear actions.
-- **System tray daemon**: Runs quietly in the background with tray recall and native notifications.
+- **Menu-bar controls**: Open the translator, toggle automatic translation, open settings, or quit straight from the tray menu. Esc collapses the bubble.
 - **Aura Guard**: Optionally skips clipboard text that looks like credentials before an Aura-mode request is sent.
 
 Source-app paste-back was intentionally removed from the supported product scope. Result actions now rely on explicit copy.
@@ -26,7 +26,7 @@ Source-app paste-back was intentionally removed from the supported product scope
 
 | Platform | Status | Notes |
 |---|---|---|
-| macOS | Supported for current development | Aura mode uses native pasteboard polling; API keys use Keychain when system storage is selected. |
+| macOS | Supported for current development | Aura mode polls the native pasteboard only while automatic translation is on; API keys use Keychain when system storage is selected. |
 | Windows | Supported by project workflows | Aura mode, hotkey translation, credential storage, and installer checks are covered by Windows workflow scripts. |
 | Linux | Not supported yet | Tauri may build in parts, but credential storage and desktop behavior are not productized. |
 
@@ -47,6 +47,8 @@ Aura-Translation/
 |   |-- app.css                 # Tailwind + design tokens
 |   |-- app.html                # HTML shell
 |   |-- lib/                    # Svelte components and UI helpers
+|   |                           #   theme.ts: light/dark tokens, system fonts
+|   |                           #   windowBehavior.ts: pure window decisions
 |   `-- routes/                 # SvelteKit route entry
 |-- src-tauri/                  # Rust backend and Tauri app shell
 |   |-- src/
@@ -55,6 +57,7 @@ Aura-Translation/
 |   |   |-- config.rs           # Preferences and provider defaults
 |   |   |-- history.rs          # Local translation history
 |   |   |-- hotkey.rs           # Configurable hotkey parser
+|   |   |-- interaction.rs      # Pure hotkey/recall/clipboard decision rules
 |   |   |-- profiles.rs         # Named translation profiles
 |   |   |-- readiness.rs        # Setup checklist and provider probe
 |   |   |-- secrets.rs          # OS credential-store integration
@@ -65,7 +68,7 @@ Aura-Translation/
 |   `-- tauri.conf.json
 |-- docs/                       # Current module docs and release checklists
 |-- plan/                       # Planning records and completed work archives
-|-- scripts/release/            # Windows release-gate helper scripts
+|-- scripts/release/            # Windows (.ps1) and macOS (.sh) release helpers
 |-- .github/workflows/          # macOS and Windows CI workflows
 `-- static/
     `-- favicon.png
@@ -100,8 +103,14 @@ npm run tauri dev
 2. If Aura mode is enabled, fresh clipboard text is translated automatically when supported.
 3. If Aura mode is disabled, press the configured hotkey to translate the current clipboard text.
 4. Copy the translated result from the bubble when you want to use it elsewhere.
-5. Press the hotkey again to recall or hide the latest bubble, or left-click the tray icon to reopen the latest result.
-6. Pin the bubble to keep it visible while reading other pages, or revise the source draft inline and re-translate with `Cmd/Ctrl+Enter`.
+5. Press the hotkey again on the same text to collapse or recall the bubble. Repeating a hotkey on
+   unchanged text never re-issues a request, in either mode.
+6. Press `Esc` to collapse the bubble, or click the menu-bar icon for open, automatic-translation,
+   settings, and quit.
+7. Pin the bubble to keep it visible while reading other pages, or revise the source draft inline
+   and re-translate with `Cmd/Ctrl+Enter`. The draft works whether or not the window is pinned.
+8. Turn automatic translation off from the menu bar to stop clipboard monitoring entirely; text
+   copied while it is off is not translated when it is turned back on.
 
 ## Privacy and Security
 
@@ -130,11 +139,25 @@ npm run release:measure-resources
 npm run release:smoke-providers
 ```
 
+macOS acceptance helpers run directly on a Mac host and write JSON evidence under
+`artifacts/macos-trial/`:
+
+```bash
+scripts/release/mock-translate-server.py --port 8787     # request-counting stub provider
+scripts/release/accept-interaction-macos.sh              # same-text recall must not re-request
+scripts/release/measure-resources-macos.sh               # CPU/memory plus a clipboard-frame check
+scripts/release/measure-startup-macos.sh                 # cold start and warm recall percentiles
+```
+
+`measure-startup-macos.sh` relies on `AURA_TRACE=1`, which makes the app emit timestamped
+`[aura][trace]` records to stderr. Tracing is off and costs nothing otherwise.
+
 Use [docs/Windows-Trial-Checklist.md](docs/Windows-Trial-Checklist.md) for Windows trial release sign-off and [docs/macOS-Adaptation-Checklist.md](docs/macOS-Adaptation-Checklist.md) for macOS behavior checks.
 
 ## Documentation
 
 - [docs/README.md](docs/README.md) lists the current module descriptions, plans, and release checklists.
+- [docs/Interaction-Contract](docs/Interaction-Contract/Interaction-Contract-Description.md) explains the rules behind the hotkey, recall, and clipboard decisions.
 - [plan/README.md](plan/README.md) explains the planning archive used during cross-platform development.
 - GitHub Releases contain user-facing builds and release notes.
 

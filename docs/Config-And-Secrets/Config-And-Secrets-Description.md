@@ -25,7 +25,8 @@ Saves are atomic: the config is serialised to `config.json.tmp` then renamed int
 
 **Data model**
 - `Provider` enum: `DeepSeek | OpenRouter | Ollama` with provider-aware `default_base_url()`, `default_models()`, `requires_api_key()`, and `secret_account_name()` methods
-- `AppConfig` fields: `api_key`, `api_key_storage`, `active_profile_id`, `model`, `source_lang`, `target_lang`, `hotkey`, `aura_mode_enabled`, `aura_guard_enabled`, `window_pinned`, `provider`, `api_base_url`, `available_models`, `settings_window_placement`, `pinned_translation_placement`
+- `AppConfig` fields: `api_key`, `api_key_storage`, `active_profile_id`, `model`, `source_lang`, `target_lang`, `hotkey`, `aura_mode_enabled`, `aura_guard_enabled`, `window_pinned`, `provider`, `api_base_url`, `available_models`, `settings_window_placement`, `pinned_translation_placement`, `setup_completed`, `notifications_enabled`
+- `Provider::as_str()` returns the stable lowercase identifier used for diagnostics and for request-identity comparison
 - `WindowPlacement` struct capturing `x`, `y`, `width`, `height`, `monitor` for both the settings window and the pinned translation window
 
 **Loading and defaults**
@@ -34,10 +35,13 @@ Saves are atomic: the config is serialised to `config.json.tmp` then renamed int
 - Default provider is DeepSeek; default hotkey is platform-dependent (`Cmd+Shift+J` on macOS, `CmdOrCtrl+T` on other platforms)
 - Default `source_lang` is `"auto"`, default `target_lang` is `"Chinese"`, default `aura_guard_enabled` is `true`, default `aura_mode_enabled` is `false`
 - Applies `hotkey::normalize_persisted_hotkey` on load to migrate macOS users off the legacy `CmdOrCtrl+T` and `Alt+Shift+T` defaults
+- `setup_completed` (M1) is an explicit onboarding flag. When it is absent from an older file it is inferred as "translation is ready, or a settings placement was saved", so an existing configured install is never re-onboarded. When present it always wins, in both directions.
+- `notifications_enabled` (M1) defaults to `true` so existing behaviour is unchanged. It gates background translation notifications only; startup configuration-corruption notifications are unconditional.
 
 **Persistence**
 - `AppConfig::save()` serialises through `PersistedConfig` (a separate struct); `api_key` is omitted when `api_key_storage` is `System`
 - Atomic write-then-rename via `config.json.tmp`
+- `setup_completed` and `notifications_enabled` are written through the same `PersistedConfig` struct, so older files simply lack them and fall back to the inference rules above
 
 **Secret store (secrets.rs)**
 - `hydrate_api_key()`: populates `config.api_key` from the keychain after load when storage is `System`
@@ -47,6 +51,10 @@ Saves are atomic: the config is serialised to `config.json.tmp` then renamed int
 - `system_storage_supported()`: returns `true` on Windows and macOS; used to gate feature availability before attempting keychain operations
 - Keychain operations use the `keyring` crate with `SERVICE_NAME = "Aura Translation"` and profile-scoped account names for new writes
 - Test builds substitute a thread-local `HashMap`-backed mock store so unit tests do not touch the real OS keychain
+
+**Onboarding completion**
+- `complete_setup()` is the only command that sets `setup_completed`, and the frontend calls it only after a successful trial translation
+- Persisting unrelated settings through `save_config` never marks setup as finished
 
 **Frontend mirror**
 - `ui/lib/appConfig.ts` mirrors `AppConfig` as TypeScript types (`AppConfig`, `Provider`, `ApiKeyStorage`, `WindowPlacement`)

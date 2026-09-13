@@ -25,15 +25,26 @@ Tauri creates the hidden translation window during startup and lazily creates th
 ### Translation window behavior
 
 - New translations are triggered by:
-  - the global hotkey when Aura mode is off
-  - Windows clipboard changes when Aura mode is on
-  - the global hotkey as a fallback when Aura mode is on and the clipboard text is new
-- Hotkey press in Aura mode hides the visible bubble, or recalls the last result when no new text is available.
+  - the global hotkey, in both automatic and manual modes
+  - clipboard changes while automatic translation is on
+- The hotkey outcome is decided once, in `interaction::decide_hotkey()`, for both modes: new text
+  translates, the same text collapses a visible window or recalls a hidden one, an empty clipboard
+  opens an editable empty state, and an incomplete configuration routes to Settings. Collapsing and
+  recalling never issue a request.
+- Reuse is keyed on the full request identity (text, language direction, provider, model, base URL,
+  profile), so changing any translation setting makes the next press a new request.
+- `Esc` collapses the window, un-pinning first if pinned, and is ignored while an IME composition is
+  active.
 - The bubble stays hidden between uses, but its last result remains mounted in memory until the next translation starts.
 - The window auto-sizes to loading, streaming, result, and error states while unpinned.
 - When unpinned, the backend repositions the bubble above the cursor and clamps it to the current monitor work area.
 - When pinned, the bubble stops auto-hiding on blur and persists its dragged size and position.
-- When pinned, the source preview becomes a lightweight draft composer so the user can edit source text in place and re-translate with `Cmd/Ctrl+Enter`.
+- The source is editable whether or not the window is pinned; pinning only controls whether the
+  window survives losing focus. Edits re-translate with `Cmd/Ctrl+Enter`.
+- After the user drags the window to a size they chose, auto-fitting stops until new text arrives,
+  so content does not keep re-claiming the height.
+- The translation and its copy action are the visual subject. Language direction, provider, model,
+  and token usage sit behind a `详情` toggle, and the source text behind `查看原文`.
 - Result actions rely on explicit copy; source-app paste-back is no longer part of the UI shell.
 
 ### Settings window behavior
@@ -42,6 +53,9 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - First open defaults to the bottom-right of the current work area.
 - Later opens restore the last saved position and size, clamped back into a visible monitor region if display layout changes.
 - Settings are loaded on open and saved through `save_config`.
+- When `setup_completed` is false, the General section presents a three-step wizard: choose a
+  service, enter and verify a credential, then run one real trial translation. Only a successful
+  trial calls `complete_setup`, which is what persists the flag.
 - Settings also calls `get_system_capabilities` so features can be disabled or configured based on system/permission capabilities before the user saves preferences.
 - On platforms where Aura mode is unsupported (e.g. Linux), the Aura mode switch is disabled, the config is normalized back to `aura_mode_enabled: false` before save, and the Settings copy explains the manual-hotkey workflow.
 
@@ -62,13 +76,39 @@ Tauri creates the hidden translation window during startup and lazily creates th
   - hides the settings window on close or `Esc`
 
 - `ui/lib/TranslationPopup.svelte`
-  - renders the minimal floating translation bubble
+  - renders the floating translation bubble, with the translation and copy action as the primary
+    content and context/source behind toggles
   - exposes pin, retry, copy, cancel, close, pinned-mode draft editing controls, and token usage badges when available
+
+- `ui/lib/theme.ts`
+  - semantic light/dark palettes, system-first font stacks, `prefersReducedMotion()`, and the mapping
+    that replaces hardcoded light surfaces with semantic tokens
+  - `theme.test.ts` asserts both appearances declare the same token set, that no dark token reuses
+    its light value, and that no component still carries a literal white surface
+
+- `ui/lib/windowBehavior.ts`
+  - pure window decisions: blur dismissal, Escape dismissal, user-resize recording, auto-fit
+
+- `ui/app.css`
+  - declares the light palette in `@theme` and re-declares the same custom properties on `:root`
+    inside `@media (prefers-color-scheme: dark)`
+  - honours `prefers-reduced-motion` by removing looping and entrance animations
 
 - `ui/lib/SettingsPanel.svelte`
   - renders the dedicated settings form
-  - now includes named translation profiles, default language pair, Aura mode configuration, provider settings, API key storage, hotkey, pin behavior, and recent translation history actions
+  - navigation is three everyday sections (General, Translation service, History) plus an advanced
+    group holding named translation profiles; the previous six-tab layout was collapsed in M1
+  - General holds the language pair, the hotkey capture, Aura mode, Aura Guard, window pinning, and
+    the background-notification toggle
+  - translation service holds the provider, model, base URL, API key storage, and the connection probe
   - calls `get_system_capabilities`, disables Aura mode on platforms where it is unsupported, and saves a platform-normalized config
+  - while `setup_completed` is false it renders the three-step first-run wizard instead of the
+    readiness dashboard, and can be reopened on demand
+
+- `ui/lib/SetupStatusCard.svelte`
+  - renders the first-run wizard: choose a service, verify a credential, run a trial translation
+  - each step reports its own state, and the success panel names the real hotkey and the menu-bar entry
+  - also renders the readiness checklist and the connection probe outside onboarding
 
 - `ui/lib/ProfileManager.svelte`
   - renders profile create, rename, activate, and delete controls inside Settings
@@ -131,6 +171,8 @@ Tauri creates the hidden translation window during startup and lazily creates th
 - Aura mode is unsupported on Linux; Linux users still rely on the manual hotkey flow.
 - Settings prevents users on unsupported platforms from enabling Aura mode, and normalizes their config accordingly.
 - Clipboard auto-trigger intentionally ignores repeated copies of identical text until a different text arrives or the user uses the hotkey fallback.
+- Dark appearance follows the system setting; there is no per-app override.
+- The window radius, spacing, and focus rings are tuned for macOS and are not yet a per-platform design token set.
 - The cursor-near bubble uses cursor position rather than exact cross-application text selection bounds.
 - Translation history is currently managed from Settings only; the tray still does not expose recent entries directly.
 - Translation profiles intentionally scope only translation provider and language defaults; hotkey and window placement stay global.

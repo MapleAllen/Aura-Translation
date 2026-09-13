@@ -20,6 +20,18 @@ A separate `cancel_translate` Tauri command accepts a `request_id`, looks up the
 
 Transient network errors (connection failures, timeouts, HTTP 5xx) are retried with exponential back-off: 1 initial request plus up to 3 retries with delays of 200 ms, 600 ms, and 1800 ms. A `translation-retry { request_id, attempt }` event is emitted before each retry so the UI can indicate activity. HTTP 4xx errors (auth failure, bad request) are surfaced immediately without retry.
 
+### Timeouts
+
+The shared client is built by `build_http_client()` with an explicit `connect_timeout` (10 s) and `timeout` (45 s). `reqwest::Client::new()`, used previously, applied no timeout at all, so a provider that accepted a request and then went silent left the UI waiting indefinitely.
+
+For a streaming body the `timeout` behaves as an idle budget per read rather than a cap on total duration, so a healthy stream of any length keeps running while a dropped connection surfaces as an error. `is_retryable_transport_error()` already classifies timeouts as retryable, so a stalled provider follows the existing retry path.
+
+Transport failures are rendered by `describe_transport_error()`, which appends the underlying cause chain. `reqwest::Error`'s own `Display` stops at "error sending request for url (...)", which hid whether the request timed out, the connection was refused, or DNS failed.
+
+### First-run trial translation
+
+`trial_translate` runs one real translation for onboarding and returns the text to the caller instead of streaming it through the translation-window events, which are not mounted while Settings is in front. It uses a `CollectingSink` that reuses the same streaming engine rather than a second request path. Inputs are validated by `validate_trial_inputs()` before any network call, and nothing from the trial is persisted.
+
 Language directionality is controlled by a system prompt: when `source_lang == "auto"`, the prompt asks the model to auto-detect and translate; otherwise it explicitly names both languages.
 
 ### Capabilities

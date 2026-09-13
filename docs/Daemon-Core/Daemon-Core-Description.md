@@ -18,9 +18,11 @@ The entry point is `src-tauri/src/lib.rs::run()`, called from `main.rs`. At star
 - a `HistoryState`
 - a `ProfilesState`
 - a `UiReadyState`
-- a `RuntimeState`
+- a `RuntimeState` (clipboard watcher state, translation runtime state)
+- an `Arc<tokio::sync::Notify>` used to wake the clipboard monitor when configuration changes
+- a `ProcessStart` marker used by opt-in `AURA_TRACE` timing output
 
-The Tauri builder registers the clipboard manager plugin and, on desktop targets, the global shortcut plugin with a builder-level handler. That handler reads clipboard text on shortcut press and ignores blank content. Instead of assuming the main window already exists, the daemon calls `show_translation_window()` or `show_settings_window()`, both of which ensure the `main` webview exists, apply current window preferences, show and focus the window, wait up to 5 seconds for the frontend to call `mark_ui_ready`, and only then emit the corresponding frontend event.
+The Tauri builder registers the clipboard manager plugin and, on desktop targets, the global shortcut plugin with a builder-level handler. That handler delegates to `handle_hotkey_pressed()`, which asks `interaction::decide_hotkey()` what the press means and then dispatches. Both automatic and manual modes share this one path, so the documented "press again to recall or hide" behaviour holds in both. Instead of assuming the window already exists, the daemon calls `trigger_translation()`, `show_existing_translation_window()`, `show_empty_translation_window()`, or `show_settings_window()`. Each ensures the webview exists, applies current window preferences, shows and focuses the window, waits up to 5 seconds for the frontend to call `mark_ui_ready`, and only then emits the corresponding frontend event.
 
 Window creation is lazy because `tauri.conf.json` sets `"create": false` for the `main` window. `ensure_main_window()` uses `WebviewWindowBuilder::from_config()` to instantiate the configured window when first needed, then attaches a `Focused(false)` listener that re-emits `window-blur` to the frontend.
 
@@ -32,8 +34,53 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 - Reads the configured accelerator from `AppConfig.hotkey`
 - Registers the startup hotkey via `hotkey::parse_hotkey`
 - On trigger, reads the clipboard through `tauri_plugin_clipboard_manager`
-- Ignores empty or whitespace-only clipboard content
 - Falls back to `CmdOrCtrl+T` if parsing or registration fails at startup
+
+**Interaction contract (`interaction.rs`)**
+
+`handle_hotkey_pressed()` builds an `interaction::HotkeyContext` and dispatches on
+`interaction::decide_hotkey()`:
+
+| Context | Outcome |
+|---|---|
+| Configuration incomplete | `Unavailable` -> open Settings |
+| Clipboard empty | `ShowEmptyState` -> open an editable empty state |
+| Same request identity, window visible | `Collapse` -> hide, leaving in-flight work running |
+| Same request identity, window hidden | `Recall` -> show the existing result |
+| New text | `TranslateNew` -> `trigger_translation()` |
+
+`Collapse` and `Recall` never reach `trigger_translation()`, which is what prevents a repeated
+hotkey from issuing a second paid request.
+
+**Clipboard resume baseline**
+
+`ClipboardResumeState::tick()` gates the monitor loop. While automatic translation is off it
+returns `Paused` and the loop performs no pasteboard work. The first enabled tick after a pause
+returns `ResumeBaseline`: the loop records the current sequence and translates nothing, so text
+copied during the pause is never sent when automatic mode returns. Only the tick after that runs
+normally.
+
+A request identity (`interaction::RequestIdentity`) covers text, source language, target language,
+provider, model, base URL, and profile id. Changing any of them makes the next press a new request
+instead of reusing a stale result.
+
+The identity is written by `record_request_identity()` from `translate::translate_text()`, the one
+boundary every request passes through — hotkey, clipboard monitor, in-window draft re-translation,
+and history replay. Recording it at the hotkey or monitor entry instead described a request that
+had not been dispatched yet, so a draft re-translation or a history replay through another profile
+could leave the stored identity stale and make a later hotkey press collapse the wrong result.
+
+**Automatic translation toggle**
+- The tray menu exposes an `自动翻译` check item backed by `AppConfig.aura_mode_enabled`
+- Toggling it routes through `toggle_aura_mode_from_tray()` -> `persist_config_and_sync()`, the
+  same persistence path `save_config` uses, so the menu, Settings, and the monitor cannot drift
+- The item is disabled on platforms where `get_system_capabilities().aura_mode` is not `Ready`
+
+**Runtime tracing (opt-in)**
+- With `AURA_TRACE=1` (or `true`/`yes`), `trace_ui_event()` writes `[aura][trace] {"event":...,"t_ms":...}`
+  records to stderr at `setup-start`, `tray-ready`, each window show, and `ui-ready:<label>`
+- With the variable unset there is no output and no cost, so the milestone latency thresholds can be
+  measured without shipping instrumentation noise
 
 **Lazy window lifecycle**
 - Main window is configured with `create: false` and is built only when first needed
@@ -48,14 +95,16 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 - Positions the window inside the monitor work area using the actual window size and a roughly 18 px right/bottom inset
 - Supports a resizable frameless window defined in `tauri.conf.json` (`640x460`, min `560x380`)
 
-**System tray**
-- Builds a tray icon from the default bundled app icon
-- Tooltip: `Aura Translation`
-- Left click: recalls the latest translation bubble, or opens Settings when Aura still needs setup
+**System tray / menu bar**
+- Builds a tray icon from the default bundled app icon; the tooltip carries the readiness summary
+- Left click opens the action menu, which is the always-available control surface
 - Menu actions:
+  - `打开翻译`: recalls the latest result, or opens Settings when Aura still needs setup
+  - `自动翻译`: check item reflecting and toggling `aura_mode_enabled` (disabled when unsupported)
   - `Profiles`: checked submenu for switching the active translation profile
   - `Settings`: opens the dedicated settings window
   - `Quit`: calls `app.exit(0)`
+- Right click keeps the previous one-click recall behaviour
 
 **Focus-loss propagation**
 - Re-emits `WindowEvent::Focused(false)` as `window-blur`
@@ -67,10 +116,14 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 - Platform-specific implementations are gated behind `#[cfg(windows)]` and `#[cfg(target_os = "macos")]`
 
 **Config persistence**
-- `AppConfig` fields: `api_key`, `api_key_storage`, `active_profile_id`, `model`, `source_lang`, `target_lang`, `hotkey`, `window_pinned`, `provider`, `api_base_url`, `available_models`
+- `AppConfig` fields: `api_key`, `api_key_storage`, `active_profile_id`, `model`, `source_lang`, `target_lang`, `hotkey`, `aura_mode_enabled`, `aura_guard_enabled`, `window_pinned`, `provider`, `api_base_url`, `available_models`, `settings_window_placement`, `pinned_translation_placement`, `setup_completed`, `notifications_enabled`
 - Config path: `{config_dir}/aura-translation/config.json`
 - Provider API keys default to the system credential store on supported desktop builds; `config.json` keeps an explicit plaintext fallback mode only when the user selects it
 - Defaults are provider-aware through custom `Deserialize`
+- `setup_completed` is an explicit onboarding flag. When absent from an older file it is inferred
+  from translation readiness or a saved settings placement, so upgrading users are not re-onboarded
+- `notifications_enabled` defaults to `true` and gates background translation notifications only;
+  startup configuration failures are always reported
 - Saves are atomic from the filesystem perspective: write to `config.json.tmp`, then rename into place
 - Named translation profiles are stored separately in `{config_dir}/aura-translation/profiles.json`
 
@@ -102,7 +155,9 @@ Window creation is lazy because `tauri.conf.json` sets `"create": false` for the
 - `delete_translation_profile(profile_id) -> Result<TranslationProfilesStore, String>`
 - `mark_ui_ready()`
 - `save_config(config: AppConfig) -> Result<(), String>`
+- `complete_setup() -> Result<(), String>`
 - `translate_text(...)`
+- `trial_translate(...) -> Result<TrialTranslationResult, String>`
 - `cancel_translate(request_id)`
 
 ## Architecture
@@ -137,6 +192,10 @@ Single Tauri application bootstrap in `lib.rs` with companion modules for config
 
 - `hotkey.rs`
   - `parse_hotkey()`: parses Electron-style accelerator strings requiring at least one modifier plus an alphanumeric key
+
+- `interaction.rs`
+  - Pure interaction decisions with no Tauri types, so they are assertable in CI:
+    `RequestIdentity`, `decide_hotkey()`, `decide_clipboard_tick()`, `is_ready()`
 
 - `translate.rs`
   - Request streaming and cancellation backend used by the UI shell
@@ -178,7 +237,7 @@ Single Tauri application bootstrap in `lib.rs` with companion modules for config
 ## Current Limitations
 
 - **Monitor targeting is still window-centric**: positioning uses the current or primary monitor, not cursor location or tray-edge detection.
-- **Config parse/read failures still fall back with `eprintln!`**: startup config load does not yet route those failures through `daemon-error`.
+- **Automatic mode still polls while enabled**: macOS has no general-purpose pasteboard change notification, so a 275 ms `changeCount()` poll runs while automatic translation is on. While it is off, the loop performs no pasteboard call at all and idles at a 1 s configuration check.
 - **No lifecycle log file**: daemon events surface to the UI but are not persisted to rotating logs.
 - **UI-ready wait uses polling**: readiness is checked every 25 ms rather than through a one-shot event or condition variable.
 - **Linux is unsupported for Aura Mode**: Linux builds expose Aura mode as unsupported.
@@ -188,7 +247,7 @@ Single Tauri application bootstrap in `lib.rs` with companion modules for config
 - Add cursor-aware multi-monitor positioning and taskbar-edge detection.
 - Emit config load failures through the same structured daemon event pathway used elsewhere.
 - Add support for Linux clipboard monitoring.
-- Add richer tray status/actions beyond the current recall, setup, and profile switching shortcuts.
+- Add richer tray status/actions beyond the current open, automatic-translation, settings, profile, and quit entries.
 - Add history access directly into the tray alongside profile switching.
 - Add rotating daemon logs in the app data directory.
 - Make window offsets user-configurable in `AppConfig`.

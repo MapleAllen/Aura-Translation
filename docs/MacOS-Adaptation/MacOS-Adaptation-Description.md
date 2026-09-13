@@ -34,11 +34,13 @@ macOS also overrides the legacy default hotkey. New configs now use `Cmd+Shift+J
 
 **macOS native features**
 - macOS Aura mode uses `NSPasteboard::generalPasteboard().changeCount()` polling inside `spawn_clipboard_monitor` to detect clipboard changes.
+- Polling runs only while automatic translation is enabled. When it is off, the loop reads the configuration first and never calls into `NSPasteboard`, then clears the clipboard baseline so text copied while paused is not translated on resume.
+- While disabled the loop idles at a 1 s configuration check, and an `Arc<tokio::sync::Notify>` notified by `persist_config_and_sync` makes a toggle take effect immediately rather than after the next period.
 
 **Frontend capability consumption**
 - `ui/lib/SettingsPanel.svelte` calls `get_system_capabilities` and disables Aura mode only when `capabilities.aura_mode` is `unsupported`.
 - `ui/lib/TranslationPopup.svelte` result actions only expose copying the translated text.
-- macOS startup still auto-opens the Settings window on first launch or whenever the runtime still needs setup.
+- macOS startup auto-opens the Settings window while `setup_completed` is false. The flag is set by `complete_setup` only after a successful trial translation, so a configured user is not re-onboarded and a user who quit mid-setup is.
 
 **Verification tracking**
 - `docs/macOS-Adaptation-Checklist.md` defines the manual runtime checklist including Aura mode clipboard monitoring and all original Phase 1 checks.
@@ -62,7 +64,7 @@ The module is a cross-cutting platform gate layered over the existing Daemon Cor
 - `src-tauri/src/lib.rs`
   - `spawn_clipboard_monitor()`: macOS uses `NSPasteboard` change-count polling; Windows uses clipboard sequence number polling.
   - Startup and fallback hotkey registration use the platform default hotkey.
-  - macOS setup auto-opens Settings on first launch or incomplete setup through `should_show_settings_on_startup()`.
+  - macOS setup auto-opens Settings while `setup_completed` is false, through `should_show_settings_on_startup()`.
 
 - `src-tauri/Cargo.toml`
   - `tauri-plugin-global-shortcut` remains a desktop dependency.
@@ -110,15 +112,25 @@ The module is a cross-cutting platform gate layered over the existing Daemon Cor
 - `docs/macOS-Adaptation-Checklist.md`
   - Tracks manual checks that cannot be validated from a Windows development environment.
 
+**M1 acceptance tooling (`scripts/release/`)**
+- `mock-translate-server.py`: request-counting OpenAI-compatible stub with proper HTTP/1.1 chunked SSE framing.
+- `accept-interaction-macos.sh`: starts the stub, writes an isolated config, and prints the counter-based interaction table. It writes to `~/Library/Application Support/aura-translation/`, because `dirs::config_dir()` does not resolve to `~/.config` on macOS; writing to the wrong path leaves the app on its defaults and invalidates the run.
+- `measure-resources-macos.sh`: reports CPU, memory, and whether any `NSPasteboard` frame appears in a `sample` capture. The gate is the frame count rather than a CPU threshold, because a CPU number cannot distinguish a fixed build from a broken one.
+- `measure-startup-macos.sh`: parses `AURA_TRACE=1` records to report cold start and warm-recall percentiles.
+- All four are POSIX shell or Python and are verified against the bash 3.2 that ships with macOS; the Windows helpers remain PowerShell.
+
 ## Current Limitations
 
 - The adaptation build stops at `.app` packaging on macOS; DMG generation is deferred until a later distribution-focused phase.
 - Manual runtime behavior still requires a real macOS desktop for full validation of tray/menu bar, global hotkey, Keychain, notifications, transparent windows, and always-on-top behavior.
+- The M1 acceptance scripts have been exercised for startup and config handling (see `docs/macOS-Adaptation-Checklist.md`), but the interaction, resource, and latency rows still require a target-host run.
 - Aura mode is unsupported on Linux.
+- Intel Macs and the minimum supported macOS version remain unverified; both must be settled before any public distribution.
 
 ## Future Directions
 
-- Replace `NSPasteboard` change-count polling with a native clipboard listener if lower-latency Aura mode behavior becomes necessary.
+- Replace `NSPasteboard` change-count polling with a native clipboard listener if lower-latency Aura mode behavior becomes necessary. macOS exposes no general-purpose pasteboard change notification today, which is why the enabled path still polls.
+- Consider a per-platform design token set; the current radius, spacing, and focus rings are tuned for macOS only.
 - Support macOS-specific hotkey and notification diagnostics if Tauri permission behavior differs from Windows.
 - Add a macOS trial release checklist once CI and manual runtime checks are proven.
 - Add artifact upload to the macOS workflow when the build becomes a trial release gate.

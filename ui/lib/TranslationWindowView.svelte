@@ -6,7 +6,6 @@
   import { onMount, tick } from 'svelte';
   import type { AppConfig } from './appConfig';
   import { cloneAppConfig, createDefaultAppConfig } from './appConfig';
-  import { prefersReducedMotion } from './motion';
   import { LANGUAGES } from './languages';
   import NotificationCenter from './NotificationCenter.svelte';
   import TranslationPopup from './TranslationPopup.svelte';
@@ -20,6 +19,7 @@
     type AuraGuardBlockedPayload,
     type DaemonErrorPayload,
   } from './notifications';
+  import { prefersReducedMotion } from './motion';
   import {
     RESIZE_HANDLES,
     shouldAutoFit,
@@ -54,7 +54,7 @@
   const popupOpacity = new Spring(0, { stiffness: 0.18, damping: 0.82 });
 
   /**
-   * Applies a spring target, or settles it immediately when the user has asked macOS to reduce
+   * Applies a spring target, or jumps straight to it when the user has asked macOS to reduce
    * motion. The window still appears and disappears; it just stops animating.
    */
   function setSpringTarget(spring: Spring<number>, value: number) {

@@ -12,7 +12,14 @@ Runtime Readiness evaluates whether Aura has enough configuration to translate a
 
 `readiness.rs` exposes a set of pure functions that inspect `AppConfig` fields without any async I/O (except `probe_provider`, which is async). The module itself still has no managed state of its own, but `lib.rs` now wraps provider probing with a `ReadinessState` cache so repeated probe requests can reuse a recent result for 30 seconds when the provider, base URL, model, and hydrated API key have not changed.
 
-`is_translation_ready(config)` returns `true` when `api_base_url` is non-empty, `model` is non-empty, and the provider's API key requirement is satisfied (`api_key` is non-empty or the provider is Ollama). `should_prompt_for_setup(config)` is its inverse and is checked at startup to decide whether to open Settings automatically.
+`is_translation_ready(config)` returns `true` when `api_base_url` is non-empty, `model` is non-empty, and the provider's API key requirement is satisfied (`api_key` is non-empty or the provider is Ollama). `should_prompt_for_setup(config)` is its inverse.
+
+`is_translation_ready` has two consumers:
+
+- `handle_tray_primary_action()` routes a menu-bar "open translation" action to Settings when Aura still needs setup, instead of opening an empty translation window.
+- `interaction::is_ready()` wraps it as the hotkey readiness gate, so an incomplete configuration routes to setup rather than failing a request.
+
+Automatic startup opening of Settings is no longer driven by readiness. It keys on the explicit `setup_completed` flag, because readiness alone could not distinguish "never configured" from "configured then deliberately cleared the key", and window placement could not distinguish "finished setup" from "moved the window and quit".
 
 `build_runtime_status(config)` constructs a `RuntimeStatus` value containing:
 - `level`: `Ready` or `NeedsSetup`
@@ -30,6 +37,13 @@ Runtime Readiness evaluates whether Aura has enough configuration to translate a
 - `build_runtime_status(config)`: full structured status with checklist for the Settings UI
   - Checklist codes: `"provider"`, `"base_url"`, `"model"`, `"api_key"`
   - Checklist labels are in Chinese and reflect the active provider's name and the Ollama no-key exception
+
+**Consumers in the M1 interaction contract**
+- `interaction::is_ready()` exposes `is_translation_ready` as the hotkey readiness gate
+- `complete_setup` persists the onboarding flag but does not itself check readiness; the trial
+  translation is what proves the configuration works
+- The first-run wizard reuses `probe_provider` for credential verification rather than adding a
+  second connectivity check
 
 **Provider probe (async)**
 - `probe_provider(client, config)`: sends a minimal non-streaming completion request
